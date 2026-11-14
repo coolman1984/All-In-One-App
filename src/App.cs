@@ -166,12 +166,16 @@ namespace StickyPro
                     return;
                 }
                 string saved = null;
-                if (Store.Settings.SnipAutoSave)
+                if (Shot.NeedsSavedFile(Store.Settings))
                 {
                     try { saved = Path.Combine(Shot.SnipFolder, Shot.NewName(".png")); pic.Save(saved, System.Drawing.Imaging.ImageFormat.Png); }
                     catch (Exception ex) { saved = null; Log("Snip save: " + ex.Message); }
                 }
-                if (Store.Settings.SnipAutoCopy) { try { Clipboard.SetImage(pic); } catch { } }
+                if (Store.Settings.SnipAutoCopy)
+                {
+                    try { Clipboard.SetDataObject(Shot.SnipData(pic, saved, Store.Settings.SnipCopyMode), true, 10, 60); }
+                    catch (Exception ex) { Log("Snip copy: " + ex.Message); Balloon("Snip was not copied", ex.Message); }
+                }
                 SnipPanel.RaiseChanged();
                 var ed = new SnipEditor(pic, saved);
                 ed.Show();

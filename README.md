@@ -46,6 +46,8 @@ a card can hold several features as tabs. Cards can stay on top, change opacity,
 (double-click the top bar or the - button; click the pin to open again).
 
 ## Snip & record (Ctrl+Alt+X snip, Ctrl+Alt+O text from screen, Ctrl+Alt+R record)
+- Snips open with the Box tool selected. Copy path (Ctrl+Shift+C) saves an unsaved snip first; recent snips support multi-select Copy as path.
+- Settings > After a snip, copy: Image, File path, or Both. File path and Both save the snip even when auto-save is off. Both supplies image, text path, and file formats to receiving apps.
 - Modes: rectangle, window, full screen, free-form; delay 3/5/10 s. Snips auto-save to Pictures\Screenshots and auto-copy.
 - Editor: pen, highlighter, eraser, box, arrow, text, hide (pixelate), crop, colors, thickness, undo/redo, zoom,
   copy, save / save as (PNG, JPG, BMP, GIF), pin on screen, Text extract (Windows OCR: English, Arabic, Korean...).

@@ -61,6 +61,23 @@ namespace StickyPro
 
         public static string NewName(string ext) { return "Snip " + DateTime.Now.ToString("yyyy-MM-dd HHmmssfff") + " " + Guid.NewGuid().ToString("N").Substring(0, 8) + ext; }
 
+        public static string CopyMode(string mode) { return mode == "path" || mode == "both" ? mode : "image"; }
+        public static bool NeedsSavedFile(Settings settings) { return settings.SnipAutoSave || CopyMode(settings.SnipCopyMode) != "image"; }
+        public static DataObject SnipData(Image image, string path, string mode)
+        {
+            mode = CopyMode(mode);
+            var data = new DataObject();
+            if (mode == "image" || mode == "both") data.SetData(DataFormats.Bitmap, true, image);
+            if (mode != "image")
+            {
+                if (string.IsNullOrEmpty(path)) throw new InvalidOperationException("Save the snip before copying its path.");
+                path = Path.GetFullPath(path);
+                data.SetData(DataFormats.UnicodeText, path);
+                if (mode == "both") data.SetFileDropList(new System.Collections.Specialized.StringCollection { path });
+            }
+            return data;
+        }
+
         public static string SnipFolder
         {
             get
@@ -404,7 +421,7 @@ $stream.Dispose()
         readonly TextBox ocrText;
         readonly ComboBox ocrLang;
         readonly Label ocrStatus, info;
-        string tool = "pen";
+        string tool = "rect";
         Color color = Color.FromArgb(230, 40, 40);
         float width = 4;
         float zoom = 1; bool fit = true;
@@ -501,13 +518,14 @@ $stream.Dispose()
             tools.Items.Add(new ToolStripSeparator());
             tools.Items.Add(new ToolStripButton("Text extract", null, delegate { ShowOcr(); }) { ToolTipText = "Read the text in the picture (Ctrl+T)" });
             tools.Items.Add(new ToolStripButton("Copy", null, delegate { CopyImage(); }) { ToolTipText = "Ctrl+C" });
+            tools.Items.Add(new ToolStripButton("Copy path", null, delegate { CopyPath(); }) { ToolTipText = "Ctrl+Shift+C (save first if needed)" });
             tools.Items.Add(new ToolStripButton("Save", null, delegate { Save(false); }) { ToolTipText = "Ctrl+S" });
             tools.Items.Add(new ToolStripButton("Save as", null, delegate { Save(true); }) { ToolTipText = "Ctrl+Shift+S" });
             tools.Items.Add(new ToolStripButton("Pin", null, delegate { new PinnedImage(Render()).Show(); }) { ToolTipText = "Keep this picture on top of the screen (Ctrl+P)" });
             tools.Items.Add(new ToolStripButton("Folder", null, delegate { OpenFolder(); }));
             foreach (ToolStripItem i in tools.Items) i.ForeColor = Ui.Text;
             Controls.Add(tools);
-            SelectTool("pen");
+            SelectTool("rect");
             Rerender();
             Ui.Theme(this);
         }
@@ -702,7 +720,7 @@ $stream.Dispose()
             var n = ops.ToList();
             n.Add(op);
             Push(n);
-            if (op.Kind == "crop") SelectTool("pen");
+            if (op.Kind == "crop") SelectTool("rect");
         }
 
         void Erase(Point p)
@@ -734,7 +752,7 @@ $stream.Dispose()
             }
         }
 
-        void Save(bool asNew)
+        public bool Save(bool asNew)
         {
             string path = filePath;
             if (asNew || path == null)
@@ -744,7 +762,7 @@ $stream.Dispose()
                     d.Filter = "PNG picture|*.png|JPEG picture|*.jpg|Bitmap|*.bmp|GIF|*.gif";
                     d.InitialDirectory = Shot.SnipFolder;
                     d.FileName = path != null ? Path.GetFileName(path) : Shot.NewName(".png");
-                    if (d.ShowDialog(this) != DialogResult.OK) return;
+                    if (d.ShowDialog(this) != DialogResult.OK) return false;
                     path = d.FileName;
                 }
             }
@@ -760,8 +778,15 @@ $stream.Dispose()
                 Text = "Snip - " + Path.GetFileName(path);
                 info.Text = "Saved: " + path;
                 SnipPanel.RaiseChanged();
+                return true;
             }
-            catch (Exception ex) { MessageBox.Show(this, "Could not save: " + ex.Message, App.Name); }
+            catch (Exception ex) { MessageBox.Show(this, "Could not save: " + ex.Message, App.Name); return false; }
+        }
+
+        void CopyPath()
+        {
+            if ((string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
+            if (App.I.CopyText(Path.GetFullPath(filePath))) info.Text = "File path copied.";
         }
 
         void OpenFolder()
@@ -821,6 +846,7 @@ $stream.Dispose()
                 case Keys.Control | Keys.Z: Undo(); return true;
                 case Keys.Control | Keys.Y: Redo(); return true;
                 case Keys.Control | Keys.C: CopyImage(); return true;
+                case Keys.Control | Keys.Shift | Keys.C: CopyPath(); return true;
                 case Keys.Control | Keys.S: Save(false); return true;
                 case Keys.Control | Keys.Shift | Keys.S: Save(true); return true;
                 case Keys.Control | Keys.T: ShowOcr(); return true;
@@ -1230,6 +1256,7 @@ $stream.Dispose()
             Dock = DockStyle.Fill;
 
             list = new CardList { Dock = DockStyle.Fill };
+            list.SelectionMode = SelectionMode.MultiExtended;
             list.ItemHeight = Math.Min(255, Ui.S(64));
             list.Info = o =>
             {
@@ -1243,6 +1270,7 @@ $stream.Dispose()
             var m = Ui.Menu();
             m.Items.Add("Open / edit", null, delegate { OpenSel(); });
             m.Items.Add("Copy", null, delegate { CopySel(); });
+            m.Items.Add("Copy as path", null, delegate { var selected = list.Selected<FileInfo>(); if (selected.Count > 0 && App.I.CopyText(string.Join("\r\n", selected.Select(f => f.FullName)))) this.status("File path(s) copied."); });
             m.Items.Add("Text extract (OCR)", null, delegate { var f = list.SelectedItem as FileInfo; if (f != null && IsImage(f.FullName)) { var ed = OpenEditor(f.FullName); if (ed != null) ed.ShowOcr(); } });
             m.Items.Add("Pin on screen", null, delegate { var f = list.SelectedItem as FileInfo; if (f != null && IsImage(f.FullName)) { var img = Load(f.FullName); if (img != null) new PinnedImage(img).Show(); } });
             m.Items.Add("Show in folder", null, delegate { var f = list.SelectedItem as FileInfo; if (f != null) try { Process.Start("explorer.exe", "/select,\"" + f.FullName + "\""); } catch { } });

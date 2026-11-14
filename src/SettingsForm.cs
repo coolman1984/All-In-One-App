@@ -8,7 +8,7 @@ namespace StickyPro
 {
     class SettingsForm : Form
     {
-        readonly ComboBox theme, fontName;
+        readonly ComboBox theme, fontName, copyMode;
         readonly NumericUpDown fontSize, maxClips;
         readonly CheckBox snippets, startup, autoSave, autoCopy, activity;
         readonly TextBox snipFolder;
@@ -68,6 +68,10 @@ namespace StickyPro
             Row(t, "Auto-save", autoSave);
             autoCopy = new CheckBox { Text = "Copy every snip to the clipboard", AutoSize = true, Checked = Store.Settings.SnipAutoCopy };
             Row(t, "Auto-copy", autoCopy);
+            copyMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            copyMode.Items.AddRange(new object[] { "Image", "File path", "Both" });
+            copyMode.SelectedIndex = Shot.CopyMode(Store.Settings.SnipCopyMode) == "path" ? 1 : Shot.CopyMode(Store.Settings.SnipCopyMode) == "both" ? 2 : 0;
+            Row(t, "After a snip, copy", copyMode);
             fps = new NumericUpDown { Minimum = 5, Maximum = 60, Value = Math.Max(5, Math.Min(60, Store.Settings.RecordFps)) };
             Row(t, "Recording frames per second", fps);
             activity = new CheckBox { Text = "Log the files I open and close", AutoSize = true, Checked = Store.Settings.ActivityOn };
@@ -143,6 +147,7 @@ namespace StickyPro
             s.SnipFolder = snipFolder.Text.Trim();
             s.SnipAutoSave = autoSave.Checked;
             s.SnipAutoCopy = autoCopy.Checked;
+            s.SnipCopyMode = copyMode.SelectedIndex == 1 ? "path" : copyMode.SelectedIndex == 2 ? "both" : "image";
             s.RecordFps = (int)fps.Value;
             if (s.ActivityOn != activity.Checked)
             {

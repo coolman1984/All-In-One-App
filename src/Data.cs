@@ -119,6 +119,7 @@ namespace StickyPro
         public string SnipFolder = "";
         public bool SnipAutoSave = true;
         public bool SnipAutoCopy = true;
+        public string SnipCopyMode = "image";
         public string OcrLang = "";
         public bool RecordMic;
         public int RecordFps = 30;
