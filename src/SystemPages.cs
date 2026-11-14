@@ -78,25 +78,29 @@ namespace StickyPro
             try { BeginInvoke(new Action(FillLastColumn)); } catch { }
         }
 
-        // The last column stretches to fill the free width (never narrower than its designed width).
+        // One column (the last by default, or FillIndex) stretches to fill the free width (never narrower than its designed width).
+        public int FillIndex = -1;
         bool filling; ColumnHeader minFor; int minWidth;
+        int FillTarget { get { return FillIndex >= 0 && FillIndex < Columns.Count ? FillIndex : Columns.Count - 1; } }
         void FillLastColumn()
         {
             if (filling || Columns.Count == 0 || !IsHandleCreated || View != View.Details) return;
             filling = true;
             try
             {
-                var last = Columns[Columns.Count - 1];
-                if (!ReferenceEquals(last, minFor)) { minFor = last; minWidth = last.Width; }
+                int ti = FillTarget;
+                var col = Columns[ti];
+                if (!ReferenceEquals(col, minFor)) { minFor = col; minWidth = col.Width; }
                 int used = 0;
-                for (int i = 0; i < Columns.Count - 1; i++) used += Columns[i].Width;
+                for (int i = 0; i < Columns.Count; i++) if (i != ti) used += Columns[i].Width;
                 int w = Math.Max(minWidth, ClientSize.Width - used - 1);
-                if (last.Width != w) last.Width = w;
+                if (col.Width != w) col.Width = w;
             }
             finally { filling = false; }
         }
-        protected override void OnResize(EventArgs e) { base.OnResize(e); FillLastColumn(); }
-        protected override void OnColumnWidthChanged(ColumnWidthChangedEventArgs e) { base.OnColumnWidthChanged(e); if (e.ColumnIndex < Columns.Count - 1) FillLastColumn(); }
+        int lastFillW = -1;
+        protected override void OnResize(EventArgs e) { base.OnResize(e); if (ClientSize.Width != lastFillW) { lastFillW = ClientSize.Width; FillLastColumn(); } }
+        protected override void OnColumnWidthChanged(ColumnWidthChangedEventArgs e) { base.OnColumnWidthChanged(e); if (!filling && e.ColumnIndex != FillTarget) FillLastColumn(); }
         protected override void OnHandleDestroyed(EventArgs e) { header.ReleaseHandle(); base.OnHandleDestroyed(e); }
 
         // Native headers leave their unused trailing area white in dark mode.
@@ -212,7 +216,7 @@ namespace StickyPro
                 if (e.KeyCode == Keys.Delete) { EndSelected(); e.SuppressKeyPress = true; }
                 else if (e.Control && e.KeyCode == Keys.F) { search.Focus(); e.SuppressKeyPress = true; }
             };
-            lv.Resize += delegate { FitColumns(); };
+            lv.FillIndex = 0;
             var m = Ui.Menu();
             m.Items.Add("End task\tDel", null, delegate { EndSelected(); });
             m.Items.Add("Open file location", null, delegate
@@ -256,14 +260,6 @@ namespace StickyPro
         {
             if (disposing) ProcessSampler.Updated -= onUpdate;
             base.Dispose(disposing);
-        }
-
-        void FitColumns()
-        {
-            int others = 0;
-            for (int i = 1; i < lv.Columns.Count; i++) others += lv.Columns[i].Width;
-            int w = lv.ClientSize.Width - others - 4;
-            if (w > Ui.S(120)) lv.Columns[0].Width = w;
         }
 
         void Rebuild()
@@ -310,7 +306,6 @@ namespace StickyPro
             if (focused != null) { int fi = rows.FindIndex(r => r.Key == focused); if (fi >= 0) try { lv.Items[fi].Focused = true; } catch { } }
             if (top > 0 && top < rows.Count) try { lv.TopItem = lv.Items[top]; } catch { }
             lv.Invalidate();
-            FitColumns();
 
             double used = ProcessSampler.MemTotal - ProcessSampler.MemAvail;
             summary.Text = "CPU " + ProcessSampler.CpuTotal.ToString("0") + "%    RAM " + ProcessSampler.MemLoad + "%  (" + Fmt.Bytes((long)used) + " of " + Fmt.Bytes((long)ProcessSampler.MemTotal) + ")    " + src.Count + " processes";
