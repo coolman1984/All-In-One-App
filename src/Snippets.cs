@@ -161,8 +161,11 @@ namespace StickyPro
                     case "win": mods |= Native.MOD_WIN; break;
                     default:
                         Keys k;
+                        if (key != Keys.None) return false;
                         if (part.Length == 1 && char.IsDigit(part[0])) key = Keys.D0 + (part[0] - '0');
-                        else if (Enum.TryParse(part, true, out k)) key = k;
+                        else if (Enum.TryParse(part, true, out k) && Enum.IsDefined(typeof(Keys), k) && (k & Keys.KeyCode) == k && (int)k > 0 && (int)k <= 254) key = k;
+                        else return false;
+                        if (key == Keys.ControlKey || key == Keys.ShiftKey || key == Keys.Menu || key == Keys.LControlKey || key == Keys.RControlKey || key == Keys.LShiftKey || key == Keys.RShiftKey || key == Keys.LMenu || key == Keys.RMenu || key == Keys.LWin || key == Keys.RWin) return false;
                         break;
                 }
             }

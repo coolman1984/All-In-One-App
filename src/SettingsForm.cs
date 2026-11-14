@@ -123,12 +123,13 @@ namespace StickyPro
                     return;
                 }
                 string other;
-                if (seen.TryGetValue(k, out other))
+                string identity = mods + ":" + (int)key;
+                if (seen.TryGetValue(identity, out other))
                 {
                     MessageBox.Show(this, k + " is used twice: \"" + other + "\" and \"" + a[1] + "\".", App.Name);
                     return;
                 }
-                seen[k] = a[1];
+                seen[identity] = a[1];
             }
             var s = Store.Settings;
             s.Dark = theme.SelectedIndex == 1;

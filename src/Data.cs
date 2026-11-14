@@ -192,13 +192,13 @@ namespace StickyPro
             if (Settings.MaxClips < 50) Settings.MaxClips = 1000;
             Notes.RemoveAll(n => n == null);
             Prompts.RemoveAll(p => p == null);
-            Clips.RemoveAll(c => c == null || (c.Kind == "image" && (c.Image == null || !File.Exists(Path.Combine(ImgDir, c.Image)))));
-            foreach (var n in Notes) { if (n.Id == null) n.Id = NewId(); if (n.Rtf == null) n.Rtf = ""; if (n.Text == null) n.Text = ""; if (n.Zoom <= 0) n.Zoom = 1f; if (n.Tags == null) n.Tags = ""; }
-            foreach (var p in Prompts) { if (p.Id == null) p.Id = NewId(); if (p.Title == null) p.Title = ""; if (p.Body == null) p.Body = ""; if (p.Category == null) p.Category = ""; if (p.Tags == null) p.Tags = ""; if (p.Trigger == null) p.Trigger = ""; if (p.Versions == null) p.Versions = new List<PromptVersion>(); }
+            Clips.RemoveAll(c => c == null || (c.Kind == "image" && (!ValidImageName(c.Image) || !File.Exists(ImagePath(c)))));
+            foreach (var n in Notes) { if (n.Id == null) n.Id = NewId(); if (n.Rtf == null) n.Rtf = ""; if (n.Text == null) n.Text = ""; if (float.IsNaN(n.Zoom) || float.IsInfinity(n.Zoom) || n.Zoom < 0.5f || n.Zoom > 4f) n.Zoom = 1f; if (n.Tags == null) n.Tags = ""; if (n.RemindAt < 0 || n.RemindAt > DateTime.MaxValue.Ticks) n.RemindAt = 0; }
+            foreach (var p in Prompts) { NormalizePrompt(p); }
             foreach (var c in Clips) { if (c.Id == null) c.Id = NewId(); if (c.Text == null) c.Text = ""; if (c.Source == null) c.Source = ""; if (c.Folder == null) c.Folder = ""; if (c.Label == null) c.Label = ""; }
             if (Settings.Hotkeys == null) Settings.Hotkeys = new Dictionary<string, string>();
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
-            if (Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
+            if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
 
             saveTimer = new System.Windows.Forms.Timer();
             saveTimer.Interval = 700;
@@ -249,20 +249,31 @@ namespace StickyPro
 
         public static void SaveNow()
         {
-            if (notesDirty) { notesDirty = false; Safe("notes.json", Notes.ToList()); }
-            if (promptsDirty) { promptsDirty = false; Safe("prompts.json", Prompts.ToList()); }
-            if (clipsDirty) { clipsDirty = false; Safe("clips.json", Clips.ToList()); }
-            if (settingsDirty) { settingsDirty = false; Safe("settings.json", Settings); }
-            if (cardsDirty) { cardsDirty = false; Safe("cards.json", Cards.ToList()); }
-            if (historyDirty) { historyDirty = false; Safe("history.json", History); }
-            if (activityDirty) { activityDirty = false; Safe("activity.json", Activity.ToList()); }
-            if (taggedDirty) { taggedDirty = false; Safe("tagged.json", Tagged.ToList()); Safe("tagcats.json", TagCats.ToList()); }
+            if (notesDirty) notesDirty = !Safe("notes.json", Notes.ToList());
+            if (promptsDirty) promptsDirty = !Safe("prompts.json", Prompts.ToList());
+            if (clipsDirty) clipsDirty = !Safe("clips.json", Clips.ToList());
+            if (settingsDirty) settingsDirty = !Safe("settings.json", Settings);
+            if (cardsDirty) cardsDirty = !Safe("cards.json", Cards.ToList());
+            if (historyDirty) historyDirty = !Safe("history.json", History);
+            if (activityDirty) activityDirty = !Safe("activity.json", Activity.ToList());
+            if (taggedDirty)
+            {
+                bool filesOk = Safe("tagged.json", Tagged.ToList());
+                bool catsOk = Safe("tagcats.json", TagCats.ToList());
+                taggedDirty = !filesOk || !catsOk;
+            }
+            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty))
+            {
+                saveTimer.Interval = 5000;
+                saveTimer.Start();
+            }
+            else if (saveTimer != null) saveTimer.Interval = 700;
         }
 
-        static void Safe(string name, object o)
+        static bool Safe(string name, object o)
         {
-            try { Write(name, o); }
-            catch (Exception ex) { App.Log("Save failed " + name + ": " + ex.Message); }
+            try { Write(name, o); return true; }
+            catch (Exception ex) { App.Log("Save failed " + name + ": " + ex.Message); return false; }
         }
 
         // ---------- Clipboard history ----------
@@ -290,7 +301,8 @@ namespace StickyPro
         {
             c.Uses++;
             c.Time = Now();
-            Clips.Remove(c);
+            // A paste queue can still hold an item explicitly removed from history.
+            if (!Clips.Remove(c)) return;
             Clips.Insert(0, c);
             MarkClips();
             RaiseClips();
@@ -337,7 +349,7 @@ namespace StickyPro
 
         static void DeleteImageFile(string name)
         {
-            if (string.IsNullOrEmpty(name)) return;
+            if (!ValidImageName(name)) return;
             try { File.Delete(Path.Combine(ImgDir, name)); } catch { }
         }
 
@@ -384,7 +396,12 @@ namespace StickyPro
             return (tags ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()).Where(t => t.Length > 0);
         }
 
-        public static string ImagePath(Clip c) { return Path.Combine(ImgDir, c.Image ?? ""); }
+        static bool ValidImageName(string name)
+        {
+            return !string.IsNullOrEmpty(name) && name != "." && name != ".." && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && Path.GetFileName(name) == name;
+        }
+
+        public static string ImagePath(Clip c) { return ValidImageName(c.Image) ? Path.Combine(ImgDir, c.Image) : ""; }
 
         public static Image LoadImage(Clip c)
         {
@@ -435,12 +452,7 @@ namespace StickyPro
                 if (p == null) continue;
                 if (Prompts.Any(x => x.Title == p.Title && x.Body == p.Body)) continue;
                 p.Id = NewId();
-                if (p.Title == null) p.Title = "";
-                if (p.Body == null) p.Body = "";
-                if (p.Category == null) p.Category = "";
-                if (p.Tags == null) p.Tags = "";
-                if (p.Trigger == null) p.Trigger = "";
-                if (p.Versions == null) p.Versions = new List<PromptVersion>();
+                NormalizePrompt(p);
                 if (p.Created == 0) p.Created = Now();
                 if (p.Modified == 0) p.Modified = Now();
                 Prompts.Add(p);
@@ -449,6 +461,19 @@ namespace StickyPro
             MarkPrompts();
             RaisePrompts();
             return added;
+        }
+
+        static void NormalizePrompt(Prompt p)
+        {
+            if (p.Id == null) p.Id = NewId();
+            if (p.Title == null) p.Title = "";
+            if (p.Body == null) p.Body = "";
+            if (p.Category == null) p.Category = "";
+            if (p.Tags == null) p.Tags = "";
+            if (p.Trigger == null) p.Trigger = "";
+            if (p.Versions == null) p.Versions = new List<PromptVersion>();
+            p.Versions.RemoveAll(v => v == null);
+            foreach (var v in p.Versions) { if (v.Title == null) v.Title = ""; if (v.Body == null) v.Body = ""; }
         }
     }
 

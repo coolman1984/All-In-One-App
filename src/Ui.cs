@@ -216,6 +216,7 @@ namespace StickyPro
         public static GraphicsPath Round(Rectangle r, int rad)
         {
             var p = new GraphicsPath();
+            if (r.Width <= 0 || r.Height <= 0) return p;
             int d = Math.Max(1, rad * 2);
             if (d > r.Width) d = r.Width;
             if (d > r.Height) d = r.Height;
@@ -229,7 +230,7 @@ namespace StickyPro
 
         public static string Ago(long ticks)
         {
-            if (ticks <= 0) return "";
+            if (ticks <= 0 || ticks > DateTime.MaxValue.Ticks) return "";
             var t = new DateTime(ticks);
             var now = DateTime.Now;
             if (t.Date == now.Date) return t.ToString("HH:mm");
