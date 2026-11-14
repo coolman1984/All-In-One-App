@@ -34,17 +34,27 @@ namespace StickyPro
             {
                 if (i < steps.Count) { phase = steps[i].Key; try { steps[i].Value(); } catch (Exception ex) { App.Log("perf step: " + ex.Message); } i++; return; }
                 timer.Stop(); timer.Dispose();
-                Resize(() => { running = false; Ui.Later(200, Write); });
+                ResizePages(new List<string> { "dashboard", "prompts", "system:procs" }, 0);
             };
             timer.Start();
         }
 
+        // Resizes the window on each page in turn, then writes the report.
+        static void ResizePages(List<string> pages, int index)
+        {
+            if (index >= pages.Count) { running = false; Ui.Later(200, Write); return; }
+            string page = pages[index];
+            try { App.I.ShowMain(page); } catch (Exception ex) { App.Log("perf page: " + ex.Message); }
+            phase = "settle " + page;
+            Ui.Later(800, () => Resize("resize " + page, () => ResizePages(pages, index + 1)));
+        }
+
         // Live window resize from 700 to 1600 px wide and back, one step per 16 ms.
-        static void Resize(Action done)
+        static void Resize(string label, Action done)
         {
             var f = Application.OpenForms.OfType<MainForm>().FirstOrDefault();
             if (f == null) { done(); return; }
-            phase = "resize";
+            phase = label;
             var widths = new List<int>();
             for (int w = 700; w <= 1600; w += 20) widths.Add(Ui.S(w));
             for (int w = 1600; w >= 700; w -= 20) widths.Add(Ui.S(w));
