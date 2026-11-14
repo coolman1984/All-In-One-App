@@ -39,6 +39,10 @@ namespace StickyPro
         static long prevStamp, prevIdle, prevKernel, prevUser;
         static readonly HashSet<object> watchers = new HashSet<object>();
         static System.Windows.Forms.Timer timer;
+        static readonly object sampleLock = new object();
+        static bool sampling;              // UI thread only
+
+        class SampleResult { public List<ProcInfo> List; public double Cpu; public int MemLoad; public ulong MemTotal, MemAvail; public bool Ok; }
 
         public static List<ProcInfo> Last = new List<ProcInfo>();
         public static readonly Queue<double> CpuHistory = new Queue<double>();
@@ -59,19 +63,42 @@ namespace StickyPro
                 timer.Tick += delegate { Sample(); };
             }
             if (watchers.Count > 0 && !timer.Enabled) { Sample(); timer.Start(); }
-            else if (watchers.Count == 0 && timer.Enabled) { timer.Stop(); prev.Clear(); prevStamp = 0; }
+            else if (watchers.Count == 0 && timer.Enabled) { timer.Stop(); lock (sampleLock) { prev.Clear(); prevStamp = 0; } }
         }
 
         public static void Sample()
         {
-            try { SampleCore(); } catch (Exception ex) { App.Log("Process sample failed: " + ex.Message); }
+            if (sampling) return;              // one sample at a time
+            sampling = true;
+            // ProcMeta owns an ImageList: create it on the UI thread, not on the worker.
+            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(ProcMeta).TypeHandle);
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                SampleResult r = null;
+                try { r = SampleCore(); } catch (Exception ex) { App.Log("Process sample failed: " + ex.Message); }
+                try { App.I.Sync.BeginInvoke(new Action(() => Publish(r))); }
+                catch { sampling = false; }
+            });
+        }
+
+        static void Publish(SampleResult r)
+        {
+            sampling = false;
+            if (r != null && r.Ok)
+            {
+                Last = r.List; CpuTotal = r.Cpu; MemLoad = r.MemLoad; MemTotal = r.MemTotal; MemAvail = r.MemAvail;
+            }
             PushHistory(CpuHistory, CpuTotal); PushHistory(RamHistory, MemLoad);
             var h = Updated; if (h != null) h();
         }
 
-        static void SampleCore()
+        static SampleResult SampleCore()
         {
-            if (IntPtr.Size != 8) return;
+            lock (sampleLock)
+            {
+            var r = new SampleResult();
+            r.Cpu = CpuTotal; r.MemLoad = MemLoad; r.MemTotal = MemTotal; r.MemAvail = MemAvail;
+            if (IntPtr.Size != 8) return r;
             if (bufLen == 0) { bufLen = 1024 * 1024; buf = Marshal.AllocHGlobal(bufLen); }
             int ret, status;
             while ((status = NtQuerySystemInformation(5, buf, bufLen, out ret)) == unchecked((int)0xC0000004))
@@ -80,7 +107,7 @@ namespace StickyPro
                 bufLen = Math.Max(ret + 128 * 1024, bufLen * 2);
                 buf = Marshal.AllocHGlobal(bufLen);
             }
-            if (status != 0) return;
+            if (status != 0) return r;
 
             long now = Stopwatch.GetTimestamp();
             double secs = prevStamp == 0 ? 0 : (now - prevStamp) / (double)Stopwatch.Frequency;
@@ -125,14 +152,16 @@ namespace StickyPro
             if (GetSystemTimes(out idle, out kernel, out user))
             {
                 long dIdle = idle - prevIdle, dTotal = (kernel - prevKernel) + (user - prevUser);
-                if (prevKernel != 0 && dTotal > 0) CpuTotal = Math.Max(0, Math.Min(100, (1.0 - (double)dIdle / dTotal) * 100));
+                if (prevKernel != 0 && dTotal > 0) r.Cpu = Math.Max(0, Math.Min(100, (1.0 - (double)dIdle / dTotal) * 100));
                 prevIdle = idle; prevKernel = kernel; prevUser = user;
             }
             var ms = new MEMSTATUS();
-            if (GlobalMemoryStatusEx(ms)) { MemLoad = (int)ms.dwMemoryLoad; MemTotal = ms.ullTotalPhys; MemAvail = ms.ullAvailPhys; }
+            if (GlobalMemoryStatusEx(ms)) { r.MemLoad = (int)ms.dwMemoryLoad; r.MemTotal = ms.ullTotalPhys; r.MemAvail = ms.ullAvailPhys; }
 
             ProcMeta.Fill(list);
-            Last = list;
+            r.List = list; r.Ok = true;
+            return r;
+            }
         }
 
         // ---------- Ending tasks ----------
