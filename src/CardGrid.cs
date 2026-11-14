@@ -17,6 +17,7 @@ namespace StickyPro
         readonly HashSet<object> selected = new HashSet<object>();
         readonly VScrollBar scroll;
         int itemHeight, minColumnWidth, maxColumns = 6;
+        bool scrollOn;
         int cols = 1, cellW = 100, contentH;
         int focus = -1, anchor = -1;
         int updating;
@@ -136,7 +137,7 @@ namespace StickyPro
 
         public int IndexFromPoint(Point p)
         {
-            int usable = scroll.Visible ? ClientSize.Width - scroll.Width : ClientSize.Width;
+            int usable = scrollOn ? ClientSize.Width - scroll.Width : ClientSize.Width;
             if (p.X < 0 || p.Y < 0 || p.X >= usable || cellW <= 0) return -1;
             int col = p.X / cellW;
             if (col >= cols) return -1;
@@ -146,7 +147,7 @@ namespace StickyPro
 
         // ---------- Layout and scrolling ----------
 
-        int Offset { get { return scroll.Visible ? Math.Max(0, Math.Min(scroll.Value, contentH - ClientSize.Height)) : 0; } }
+        int Offset { get { return scrollOn ? Math.Max(0, Math.Min(scroll.Value, contentH - ClientSize.Height)) : 0; } }
 
         int Columns(int width) { return Math.Max(1, Math.Min(maxColumns, width / Math.Max(1, minColumnWidth))); }
 
@@ -168,7 +169,8 @@ namespace StickyPro
             cols = c;
             int usable = need ? w - scroll.Width : w;
             cellW = Math.Max(1, usable / cols);
-            if (scroll.Visible != need) scroll.Visible = need;
+            scrollOn = need;
+            scroll.Visible = need;
             if (need)
             {
                 scroll.Minimum = 0;
@@ -183,7 +185,7 @@ namespace StickyPro
 
         void SetOffset(int value)
         {
-            if (!scroll.Visible) return;
+            if (!scrollOn) return;
             int max = Math.Max(0, contentH - ClientSize.Height);
             value = Math.Max(0, Math.Min(max, value));
             if (value != scroll.Value) scroll.Value = value;
@@ -191,7 +193,7 @@ namespace StickyPro
 
         void ScrollIntoView(int index)
         {
-            if (index < 0 || !scroll.Visible) return;
+            if (index < 0 || !scrollOn) return;
             int y = (index / cols) * itemHeight, off = Offset, h = ClientSize.Height;
             if (y < off) SetOffset(y);
             else if (y + itemHeight > off + h) SetOffset(y + itemHeight - h);
@@ -281,7 +283,7 @@ namespace StickyPro
 
         protected override void OnMouseWheel(MouseEventArgs e)
         {
-            if (scroll.Visible) SetOffset(Offset - e.Delta * 3 * itemHeight / 120);
+            if (scrollOn) SetOffset(Offset - e.Delta * 3 * itemHeight / 120);
             base.OnMouseWheel(e);
         }
 
