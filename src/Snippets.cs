@@ -15,6 +15,8 @@ namespace StickyPro
         static Native.HookProc proc;
         static IntPtr hook = IntPtr.Zero;
         static readonly StringBuilder buf = new StringBuilder();
+        static IntPtr lastWindow;
+        static int generation;
         static List<KeyValuePair<string, Prompt>> triggers = new List<KeyValuePair<string, Prompt>>();
         static readonly uint myPid = (uint)Process.GetCurrentProcess().Id;
 
@@ -41,6 +43,8 @@ namespace StickyPro
         {
             if (hook != IntPtr.Zero) { Native.UnhookWindowsHookEx(hook); hook = IntPtr.Zero; }
             buf.Clear();
+            generation++;
+            lastWindow = IntPtr.Zero;
         }
 
         static IntPtr Proc(int code, IntPtr wParam, IntPtr lParam)
@@ -58,13 +62,16 @@ namespace StickyPro
         {
             var k = (Native.KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(Native.KBDLLHOOKSTRUCT));
             if ((k.flags & 0x10) != 0) return;                       // injected by software (also our own typing)
+            int currentGeneration = ++generation;
+            IntPtr foreground = Native.GetForegroundWindow();
+            if (foreground != lastWindow) { buf.Clear(); lastWindow = foreground; }
             uint vk = k.vkCode;
             if (vk == 0x10 || vk == 0xA0 || vk == 0xA1 || vk == 0x14) return; // Shift / CapsLock alone
             if (Native.Down(0x11) || Native.Down(0x12) || Native.Down(0x5B) || Native.Down(0x5C)) { buf.Clear(); return; }
             if (vk == 0x08) { if (buf.Length > 0) buf.Length--; return; }
 
             uint pid;
-            uint tid = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out pid);
+            uint tid = Native.GetWindowThreadProcessId(foreground, out pid);
             if (pid == myPid) { buf.Clear(); return; }               // never expand inside this app (e.g. while editing codes)
 
             var state = new byte[256];
@@ -86,26 +93,27 @@ namespace StickyPro
                     buf.Clear();
                     var p = t.Value;
                     int len = t.Key.Length;
-                    App.I.Sync.BeginInvoke(new Action(() => Ui.Later(40, () => Expand(p, len))));
+                    App.I.Sync.BeginInvoke(new Action(() => Ui.Later(40, () =>
+                    {
+                        if (generation == currentGeneration && Native.IsWindow(foreground) && Native.GetForegroundWindow() == foreground) Expand(p, len, foreground);
+                    })));
                     return;
                 }
             }
         }
 
-        static void Expand(Prompt p, int len)
+        static void Expand(Prompt p, int len, IntPtr target)
         {
             try
             {
-                IntPtr target = Native.GetForegroundWindow();
                 string text = p.Body ?? "";
                 if (Ui.HasVariables(text))
                 {
                     text = Ui.FillVariables(text, null);
                     if (text == null) return;
                     Native.SetForegroundWindow(target);
-                    Application.DoEvents();
-                    System.Threading.Thread.Sleep(80);
                 }
+                if (!Native.IsWindow(target) || Native.GetForegroundWindow() != target) return;
                 SendKeys.SendWait("{BACKSPACE " + len + "}");
                 App.I.PasteKeepingClipboard(text);
                 p.Uses++;

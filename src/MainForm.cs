@@ -841,8 +841,9 @@ namespace StickyPro
         void Duplicate()
         {
             if (cur == null) return;
-            var p = Store.NewPrompt(cur.Title + " (copy)", cur.Body, cur.Category);
-            p.Tags = cur.Tags;
+            var original = cur; // NewPrompt raises a refresh that temporarily clears cur.
+            var p = Store.NewPrompt(original.Title + " (copy)", original.Body, original.Category);
+            p.Tags = original.Tags;
             RefreshAll();
             list.SelectedItem = p;
         }

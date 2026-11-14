@@ -310,7 +310,7 @@ namespace StickyPro
             BuildTabs();
             int w = d.W > 0 ? d.W : Ui.S(380), h = d.H > 0 ? d.H : Ui.S(460);
             var rect = new Rectangle(d.X, d.Y, w, h);
-            if (d.X < 0 && d.Y < 0) { var c = Cursor.Position; rect.X = c.X - Ui.S(60); rect.Y = c.Y - Ui.S(20); }
+            if (d.X == -1 && d.Y == -1) { var c = Cursor.Position; rect.X = c.X - Ui.S(60); rect.Y = c.Y - Ui.S(20); }
             Bounds = Fit(rect);
             UpdateTop();
             ShowFeature(D.Active != null && D.Features.Contains(D.Active) ? D.Active : D.Features[0]);
@@ -436,13 +436,17 @@ namespace StickyPro
         public void Expand()
         {
             if (!D.Collapsed) return;
+            int savedW = D.W, savedH = D.H;
+            loading = true;
             D.Collapsed = false;
             chip.Visible = false;
             Padding = new Padding(1);
             header.Visible = true; body.Visible = true; statusLabel.Visible = true;
             MinimumSize = Ui.S(240, 160);
             TopMost = D.Top;
-            Bounds = Fit(new Rectangle(Left, Top, D.W > 0 ? D.W : Ui.S(380), D.H > 0 ? D.H : Ui.S(460)));
+            Bounds = Fit(new Rectangle(Left, Top, savedW > 0 ? savedW : Ui.S(380), savedH > 0 ? savedH : Ui.S(460)));
+            loading = false;
+            SaveBounds();
             Activate();
             Store.MarkCards();
             Store.RaiseCards();

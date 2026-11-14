@@ -110,7 +110,7 @@ namespace StickyPro
 
             int w = n.W > 0 ? n.W : Ui.S(320), h = n.H > 0 ? n.H : Ui.S(320);
             var rect = new Rectangle(n.X, n.Y, w, h);
-            if (n.X < 0 && n.Y < 0) { var c = Cursor.Position; rect.X = c.X - Ui.S(40); rect.Y = c.Y - Ui.S(20); }
+            if (n.X == -1 && n.Y == -1) { var c = Cursor.Position; rect.X = c.X - Ui.S(40); rect.Y = c.Y - Ui.S(20); }
             Bounds = FitOnScreen(rect);
             ApplyColor();
             UpdatePin();
@@ -360,7 +360,7 @@ namespace StickyPro
         void ToggleStyle(FontStyle s)
         {
             var f = rtb.SelectionFont ?? rtb.Font;
-            try { rtb.SelectionFont = new Font(f, f.Style ^ s); } catch { }
+            try { using (var styled = new Font(f, f.Style ^ s)) rtb.SelectionFont = styled; } catch { }
             rtb.Focus();
         }
 
@@ -413,6 +413,7 @@ namespace StickyPro
                     else if (oldImg != null) Clipboard.SetDataObject(new DataObject(DataFormats.Bitmap, oldImg), true, 10, 60);
                 }
                 catch { }
+                if (oldImg != null) oldImg.Dispose();
             }
         }
 

@@ -135,6 +135,7 @@ namespace StickyPro
         public void StartSnip(string mode, int delaySec, bool ocrOnly)
         {
             if (snipping) return;
+            snipping = true; // Reserve the overlay during the delay as well.
             bool restoreMain = main != null && !main.IsDisposed && main.Visible && main.WindowState != FormWindowState.Minimized && Form.ActiveForm == main;
             if (restoreMain) main.Hide();
             Action go = () =>
@@ -157,10 +158,10 @@ namespace StickyPro
                     Balloon("Reading text...", "One moment.");
                     Ocr.Run(pic, Store.Settings.OcrLang, Sync, (text, err) =>
                     {
-                        pic.Dispose();
                         if (err != null) Balloon("No text found", err);
                         else { CopyText(text); Balloon("Text copied", Ui.OneLine(text, 150)); }
                     });
+                    pic.Dispose(); // OCR has already saved its independent temporary image.
                     return;
                 }
                 string saved = null;
@@ -183,6 +184,7 @@ namespace StickyPro
         {
             if (Recorder.Active) { Recorder.Stop(true); return; }
             if (snipping) return;
+            snipping = true;
             bool restoreMain = main != null && !main.IsDisposed && main.Visible && Form.ActiveForm == main;
             if (restoreMain) main.Hide();
             Ui.Later(restoreMain ? 300 : 120, () =>
@@ -562,7 +564,7 @@ namespace StickyPro
                 bool ok = false;
                 if (c.Kind == "image")
                 {
-                    var img = Store.LoadImage(c);
+                    using (var img = Store.LoadImage(c))
                     if (img != null)
                     {
                         Suppress();
@@ -592,26 +594,41 @@ namespace StickyPro
 
         public void PasteTo(IntPtr hwnd)
         {
-            if (hwnd != IntPtr.Zero && Native.IsWindow(hwnd)) Native.SetForegroundWindow(hwnd);
+            if (hwnd == IntPtr.Zero || !Native.IsWindow(hwnd)) return;
+            Native.SetForegroundWindow(hwnd);
             Ui.Later(90, () =>
             {
-                WaitForModifiersUp();
-                try { SendKeys.SendWait("^v"); } catch { }
+                AfterModifiers(() =>
+                {
+                    if (!Native.IsWindow(hwnd) || Native.GetForegroundWindow() != hwnd) return;
+                    try { SendKeys.SendWait("^v"); } catch { }
+                }, 40);
             });
         }
 
         // Pastes text into the active app, then puts the previous clipboard text back.
         public void PasteKeepingClipboard(string text)
         {
+            IntPtr target = Native.GetForegroundWindow();
             string old = null;
             try { if (Clipboard.ContainsText()) old = Clipboard.GetText(); } catch { }
             if (!CopyText(text)) return;
+            uint ownSequence = Native.GetClipboardSequenceNumber();
             Ui.Later(40, () =>
             {
-                WaitForModifiersUp();
-                try { SendKeys.SendWait("^v"); } catch { }
-                Ui.Later(500, () => { if (old != null) CopyText(old); });
+                AfterModifiers(() =>
+                {
+                    if (Native.GetClipboardSequenceNumber() != ownSequence || !Native.IsWindow(target) || Native.GetForegroundWindow() != target) return;
+                    try { SendKeys.SendWait("^v"); } catch { }
+                    Ui.Later(500, () => { if (old != null && Native.GetClipboardSequenceNumber() == ownSequence) CopyText(old); });
+                }, 40);
             });
+        }
+
+        static void AfterModifiers(Action action, int tries)
+        {
+            if (!Native.Down(0x11) && !Native.Down(0x12) && !Native.Down(0x10) && !Native.Down(0x5B) && !Native.Down(0x5C)) { action(); return; }
+            if (tries > 0) Ui.Later(25, () => AfterModifiers(action, tries - 1));
         }
 
         static void WaitForModifiersUp()
@@ -663,8 +680,9 @@ namespace StickyPro
             if (queue.Count == 0) { Balloon("Paste queue is empty", "Press " + Hotkeys.Get("queue") + " and copy some items first."); return; }
             IntPtr target = Native.GetForegroundWindow();
             var c = queue[0];
+            if (!CopyClip(c)) { Balloon("Could not copy queue item", "The item is still in the queue. Try again."); return; }
             queue.RemoveAt(0);
-            if (CopyClip(c)) PasteTo(target);
+            PasteTo(target);
             if (queue.Count == 0)
             {
                 queueOn = false;
