@@ -73,6 +73,7 @@ namespace StickyPro
     {
         readonly int minimum, tileHeight, maximumColumns;
         bool sizing;
+        int lastTileWidth = -1, lastTileCount;
         public TileGrid(int minimum, int height, int columns)
         { this.minimum = minimum; tileHeight = height; maximumColumns = columns; Dock = DockStyle.Top; AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink; WrapContents = true; Margin = new Padding(0); }
         public override Size GetPreferredSize(Size proposedSize)
@@ -89,7 +90,11 @@ namespace StickyPro
                 sizing = true;
                 int columns = Math.Max(1, Math.Min(maximumColumns, Math.Max(1, ClientSize.Width) / Math.Max(1, minimum)));
                 int width = Math.Max(80, ClientSize.Width / columns - Ui.S(12));
-                foreach (Control child in Controls) child.Size = new Size(width, tileHeight);
+                if (width != lastTileWidth || Controls.Count != lastTileCount)
+                {
+                    lastTileWidth = width; lastTileCount = Controls.Count;
+                    foreach (Control child in Controls) child.Size = new Size(width, tileHeight);
+                }
                 sizing = false;
             }
             base.OnLayout(e);
@@ -211,8 +216,10 @@ namespace StickyPro
             g.Clear(Parent != null ? Parent.BackColor : Ui.Bg);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
-            TextRenderer.DrawText(g, "Pick a task...", TitleFont, new Rectangle(0, 0, Width, Ui.S(50)), Ui.Text, flags);
-            if (welcome.Width > 0)
+            var clip = e.ClipRectangle;
+            var titleRect = new Rectangle(0, 0, Width, Ui.S(50));
+            if (titleRect.IntersectsWith(clip)) TextRenderer.DrawText(g, "Pick a task...", TitleFont, titleRect, Ui.Text, flags);
+            if (welcome.Width > 0 && welcome.IntersectsWith(clip))
             {
                 using (var path = Ui.Round(welcome, Ui.S(8))) { using (var b = new SolidBrush(Ui.SelBg)) g.FillPath(b, path); }
                 string text = "Welcome! Main shortcuts work in any app:  " + Key("clips") + " clipboard  ·  " + Key("prompts") + " prompts  ·  " + Key("note") + " new note  ·  " + Key("snip") + " snip  ·  " + Key("main") + " this window";
@@ -223,11 +230,15 @@ namespace StickyPro
             if (divider.Width > 0) using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, divider);
             foreach (var s in sections)
             {
-                TextRenderer.DrawText(g, s.Title, HeaderFont, s.Header, Ui.Header, flags);
-                using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, s.Header.X, s.Header.Bottom - 1, s.Header.Width, 1);
+                if (s.Header.IntersectsWith(clip))
+                {
+                    TextRenderer.DrawText(g, s.Title, HeaderFont, s.Header, Ui.Header, flags);
+                    using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, s.Header.X, s.Header.Bottom - 1, s.Header.Width, 1);
+                }
                 foreach (var t in s.Tasks)
                 {
                     var r = t.Bounds;
+                    if (!r.IntersectsWith(clip)) continue;
                     bool focused = Focused && focus >= 0 && all[focus] == t;
                     if (t == hover || focused)
                         using (var path = Ui.Round(new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1), Ui.S(6)))
@@ -281,7 +292,8 @@ namespace StickyPro
         readonly TaskHome tasks;
         readonly Label liveHead;
         readonly TileGrid grid;
-        bool laying;
+        bool laying, lastWelcome;
+        int lastTaskWidth = -1, lastTaskHeight;
         public DashboardPanel()
         {
             Dock = DockStyle.Fill; AutoScroll = true; BackColor = Ui.Bg;
@@ -307,9 +319,22 @@ namespace StickyPro
                 int pad = Ui.S(20), w = Math.Max(Ui.S(240), ClientSize.Width - pad * 2);
                 int y = AutoScrollPosition.Y + Ui.S(12);
                 // Live data first so it is always in view, then the PicPick-style task list.
-                liveHead.SetBounds(pad, y, w, Ui.S(36)); y += Ui.S(42);
-                int gh = grid.GetPreferredSize(new Size(w, 0)).Height; grid.SetBounds(pad, y, w, gh); y += gh + Ui.S(8);
-                int th = tasks.Measure(w); tasks.SetBounds(pad, y, w, th); tasks.Invalidate(); y += th + pad;
+                var headBounds = new Rectangle(pad, y, w, Ui.S(36));
+                if (liveHead.Bounds != headBounds) liveHead.Bounds = headBounds;
+                y += Ui.S(42);
+                int gh = grid.GetPreferredSize(new Size(w, 0)).Height;
+                var gridBounds = new Rectangle(pad, y, w, gh);
+                if (grid.Bounds != gridBounds) grid.Bounds = gridBounds;
+                y += gh + Ui.S(8);
+                bool welcomeShown = !Store.Settings.WelcomeHidden;
+                if (w != lastTaskWidth || welcomeShown != lastWelcome)
+                {
+                    lastTaskWidth = w; lastWelcome = welcomeShown;
+                    lastTaskHeight = tasks.Measure(w);
+                    tasks.SetBounds(pad, y, w, lastTaskHeight); tasks.Invalidate();
+                }
+                else if (tasks.Top != y || tasks.Left != pad) tasks.Location = new Point(pad, y);
+                y += lastTaskHeight + pad;
                 var min = new Size(0, y - AutoScrollPosition.Y);
                 if (AutoScrollMinSize != min) AutoScrollMinSize = min;
             }
