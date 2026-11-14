@@ -92,7 +92,7 @@ namespace StickyPro
             bar.Controls.Add(countLabel);
             Controls.Add(bar);
 
-            var hint = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, Text = "Drag files or folders here, or select them in Explorer and press " + Hotkeys.Get("tagfile") + ". Tick items, then Move to a category." };
+            var hint = new WrapLabel { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, Text = "Drag files or folders here, or select them in Explorer and press " + Hotkeys.Get("tagfile") + ". Tick items, then Move to a category." };
             Controls.Add(hint);
 
             onChange = () => { if (Live) { RefreshCategories(); Fill(); } else stale = true; };

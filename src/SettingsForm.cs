@@ -15,7 +15,7 @@ namespace StickyPro
         readonly NumericUpDown fps;
         readonly Dictionary<string, HotkeyBox> boxes = new Dictionary<string, HotkeyBox>();
 
-        public SettingsForm()
+        public SettingsForm(bool inspectStartup = true)
         {
             AutoScaleMode = AutoScaleMode.None;
             Text = "Settings - " + App.Name;
@@ -23,7 +23,7 @@ namespace StickyPro
             Font = Ui.Base;
             BackColor = Ui.Card;
             ForeColor = Ui.Text;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
@@ -35,8 +35,8 @@ namespace StickyPro
             t.Dock = DockStyle.Fill;
             t.Padding = new Padding(Ui.S(18), Ui.S(12), Ui.S(18), Ui.S(8));
             t.ColumnCount = 2;
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(250)));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56));
             t.AutoScroll = true;
 
             Section(t, "Look");
@@ -58,7 +58,7 @@ namespace StickyPro
             Row(t, "Clipboard history size (items)", maxClips);
             snippets = new CheckBox(); snippets.Text = "Expand snippet codes while I type"; snippets.AutoSize = true; snippets.Checked = Store.Settings.Snippets;
             Row(t, "Snippets", snippets);
-            startup = new CheckBox(); startup.Text = "Start with Windows"; startup.AutoSize = true; startup.Checked = App.IsStartup();
+            startup = new CheckBox(); startup.Text = "Start with Windows"; startup.AutoSize = true; startup.Checked = inspectStartup && App.IsStartup();
             Row(t, "Startup", startup);
 
             Section(t, "Snip, record and file activity");
@@ -86,7 +86,7 @@ namespace StickyPro
                 Row(t, a[1], hb);
             }
 
-            var bar = new FlowLayoutPanel(); bar.Dock = DockStyle.Bottom; bar.Height = Ui.S(50); bar.FlowDirection = FlowDirection.RightToLeft; bar.Padding = new Padding(Ui.S(12), Ui.S(8), Ui.S(12), 0);
+            var bar = LayoutKit.Actions(DockStyle.Bottom);
             var ok = Ui.Btn("Save", delegate { Save(); }, true);
             var cancel = Ui.Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
             var reset = Ui.Btn("Default shortcuts", delegate { foreach (var a in Hotkeys.Actions) boxes[a[0]].Text = a[2]; });
@@ -94,6 +94,11 @@ namespace StickyPro
             Controls.Add(t);
             Controls.Add(bar);
             CancelButton = cancel;
+            t.Resize += delegate
+            {
+                int fieldWidth = Math.Max(80, (t.ClientSize.Width - t.Padding.Horizontal) * 56 / 100 - Ui.S(8));
+                foreach (Control child in t.Controls) if (child is CheckBox) child.MaximumSize = new Size(fieldWidth, 0);
+            };
             Ui.Theme(this);
         }
 
@@ -108,7 +113,7 @@ namespace StickyPro
         {
             var l = new Label(); l.Text = label; l.AutoSize = true; l.Margin = new Padding(0, Ui.S(6), Ui.S(8), Ui.S(4));
             c.Margin = new Padding(0, Ui.S(2), 0, Ui.S(4));
-            if (!(c is CheckBox)) c.Width = Ui.S(250);
+            c.Dock = DockStyle.Fill;
             t.Controls.Add(l);
             t.Controls.Add(c);
         }

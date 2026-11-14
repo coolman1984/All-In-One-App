@@ -620,7 +620,7 @@ namespace StickyPro
             list.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { ShowSel(); e.SuppressKeyPress = true; } else if (e.KeyCode == Keys.Delete) { DeleteSel(); e.SuppressKeyPress = true; } };
             Controls.Add(list);
 
-            var help = new Label
+            var help = new WrapLabel
             {
                 Dock = DockStyle.Top, Height = Ui.S(62), ForeColor = Ui.Muted, Font = Ui.Small,
                 Text = "Floating cards stay on top of any app. Put one feature in a card, or several features as tabs in one master card.\n" +
@@ -673,14 +673,17 @@ namespace StickyPro
         {
             using (var f = Ui.Dialog(d == null ? "New floating card" : "Edit card", 380, 360))
             {
-                var l1 = new Label { Text = "Card name:", AutoSize = true, Location = new Point(Ui.S(14), Ui.S(12)) };
-                var name = new FluentTextBox { Text = d != null ? d.Title : "My card", Width = Ui.S(350), Location = new Point(Ui.S(14), Ui.S(34)) };
-                var l2 = new Label { Text = "Features inside this card (each one becomes a tab):", AutoSize = true, Location = new Point(Ui.S(14), Ui.S(70)) };
-                var cl = new CheckedListBox { Location = new Point(Ui.S(14), Ui.S(94)), Size = Ui.S(350, 190), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle };
+                var fields = LayoutKit.Fields();
+                var name = new FluentTextBox { Text = d != null ? d.Title : "My card" };
+                var cl = new CheckedListBox { CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle };
                 foreach (var ft in Features.All) cl.Items.Add(ft[1], d != null ? d.Features.Contains(ft[0]) : ft[0] == "clips");
-                var ok = Ui.Btn(d == null ? "Create card" : "Save", null, true); ok.DialogResult = DialogResult.OK; ok.Location = new Point(Ui.S(190), Ui.S(304));
-                var cancel = Ui.Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel; cancel.Location = new Point(Ui.S(290), Ui.S(304));
-                f.Controls.AddRange(new Control[] { l1, name, l2, cl, ok, cancel });
+                LayoutKit.Add(fields, new WrapLabel { Text = "Card name:" }, false);
+                LayoutKit.Add(fields, name, false);
+                LayoutKit.Add(fields, new WrapLabel { Text = "Features inside this card (each becomes a tab):" }, false);
+                LayoutKit.Add(fields, cl, true);
+                var ok = Ui.Btn(d == null ? "Create card" : "Save", null, true); ok.DialogResult = DialogResult.OK;
+                var cancel = Ui.Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
+                f.Controls.Add(fields); f.Controls.Add(LayoutKit.Actions(DockStyle.Bottom, ok, cancel));
                 f.AcceptButton = ok; f.CancelButton = cancel;
                 Ui.Theme(f);
                 if (f.ShowDialog(owner) != DialogResult.OK) return;

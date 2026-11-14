@@ -522,13 +522,13 @@ namespace StickyPro
                 var table = new TableLayoutPanel();
                 table.Dock = DockStyle.Fill;
                 table.Padding = new Padding(S(14));
-                table.ColumnCount = 1;
+                table.ColumnCount = 1; table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
                 table.AutoScroll = true;
                 var boxes = new List<TextBox>();
                 foreach (var n in names)
                 {
                     var l = new Label(); l.Text = n; l.AutoSize = true; l.Font = Bold; l.Margin = new Padding(0, S(6), 0, S(2));
-                    var t = new FluentTextBox(); t.Width = S(420); t.Font = Base;
+                    var t = new FluentTextBox(); t.Dock = DockStyle.Fill; t.Font = Base;
                     string v; if (lastValues.TryGetValue(n, out v)) t.Text = v;
                     t.Multiline = true; t.Height = S(48); t.ScrollBars = ScrollBars.Vertical; t.AcceptsReturn = false;
                     table.Controls.Add(l); table.Controls.Add(t); boxes.Add(t);
@@ -559,11 +559,13 @@ namespace StickyPro
         {
             using (var f = Dialog(title, 390, 124))
             {
-                var l = new Label(); l.Text = label; l.AutoSize = true; l.Location = new Point(S(14), S(14));
-                var t = new FluentTextBox(); t.Text = value ?? ""; t.Width = S(360); t.Location = new Point(S(14), S(40));
-                var ok = Btn("OK", null, true); ok.DialogResult = DialogResult.OK; ok.Location = new Point(S(220), S(80));
-                var cancel = Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel; cancel.Location = new Point(S(300), S(80));
-                f.Controls.Add(l); f.Controls.Add(t); f.Controls.Add(ok); f.Controls.Add(cancel);
+                var fields = LayoutKit.Fields();
+                var t = new FluentTextBox { Text = value ?? "" };
+                var ok = Btn("OK", null, true); ok.DialogResult = DialogResult.OK;
+                var cancel = Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
+                LayoutKit.Add(fields, new WrapLabel { Text = label }, false); LayoutKit.Add(fields, t, false);
+                f.Controls.Add(fields); f.Controls.Add(LayoutKit.Actions(DockStyle.Bottom, ok, cancel));
+                f.Height = Math.Max(f.Height, S(190));
                 f.AcceptButton = ok; f.CancelButton = cancel;
                 Theme(f);
                 return f.ShowDialog(owner) == DialogResult.OK ? t.Text : null;
@@ -575,25 +577,23 @@ namespace StickyPro
         {
             using (var f = Dialog("Remind me", 420, 190))
             {
-                var l = new Label(); l.Text = "When should this note pop up?"; l.AutoSize = true; l.Location = new Point(S(14), S(14));
-                var dt = new DateTimePicker();
-                dt.Format = DateTimePickerFormat.Custom;
-                dt.CustomFormat = "ddd d MMM yyyy   HH:mm";
-                dt.Width = S(390); dt.Location = new Point(S(14), S(42));
-                dt.Value = current > DateTime.Now.Ticks ? new DateTime(current) : DateTime.Now.AddHours(1);
+                var fields = LayoutKit.Fields();
+                var dt = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "ddd d MMM yyyy   HH:mm" };
+                DateTime next = current > DateTime.Now.Ticks && current <= DateTime.MaxValue.Ticks ? new DateTime(current) : DateTime.Now.AddHours(1);
+                dt.Value = next > dt.MaxDate ? dt.MaxDate : next;
                 long result = -1;
-                var quick = new FlowLayoutPanel(); quick.Location = new Point(S(14), S(82)); quick.Size = new Size(S(400), S(36));
+                var quick = LayoutKit.Actions(DockStyle.Fill);
                 Action<DateTime> pick = d => { result = d.Ticks; f.DialogResult = DialogResult.OK; };
                 quick.Controls.Add(Btn("In 15 min", delegate { pick(DateTime.Now.AddMinutes(15)); }));
                 quick.Controls.Add(Btn("In 1 hour", delegate { pick(DateTime.Now.AddHours(1)); }));
                 quick.Controls.Add(Btn("Tomorrow 9:00", delegate { pick(DateTime.Today.AddDays(1).AddHours(9)); }));
-                var bar = new FlowLayoutPanel(); bar.FlowDirection = FlowDirection.RightToLeft; bar.Location = new Point(S(14), S(138)); bar.Size = new Size(S(392), S(40));
+                LayoutKit.Add(fields, new WrapLabel { Text = "When should this note pop up?" }, false);
+                LayoutKit.Add(fields, dt, false); LayoutKit.Add(fields, quick, false);
                 var ok = Btn("Set reminder", delegate { result = dt.Value.Ticks; f.DialogResult = DialogResult.OK; }, true);
                 var cancel = Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
-                bar.Controls.Add(ok); bar.Controls.Add(cancel);
+                var bar = LayoutKit.Actions(DockStyle.Bottom, ok, cancel);
                 if (current > 0) bar.Controls.Add(Btn("Remove", delegate { result = 0; f.DialogResult = DialogResult.OK; }));
-                f.Controls.Add(l); f.Controls.Add(dt); f.Controls.Add(quick); f.Controls.Add(bar);
-                f.CancelButton = cancel;
+                f.Controls.Add(fields); f.Controls.Add(bar); f.ClientSize = S(440, 260); f.CancelButton = cancel;
                 Theme(f);
                 return f.ShowDialog(owner) == DialogResult.OK ? result : -1;
             }
@@ -957,6 +957,7 @@ namespace StickyPro
                 if (selected) using (var b = new SolidBrush(Ui.Accent)) g.FillRectangle(b, r.X, r.Y + Ui.S(10), Ui.S(3), r.Height - Ui.S(20));
             }
             TextRenderer.DrawText(g, Glyph, Ui.Icon(12f), new Rectangle(r.X + Ui.S(8), r.Y, Ui.S(28), r.Height), Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            if (Width < Ui.S(100)) return;
             TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(r.X + Ui.S(44), r.Y, r.Width - Ui.S(44), r.Height), Ui.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
     }

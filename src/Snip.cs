@@ -457,7 +457,7 @@ $stream.Dispose()
 
             ocrPanel = new Panel { Dock = DockStyle.Right, Width = Ui.S(320), Visible = false, Padding = new Padding(Ui.S(8)), BackColor = Ui.Card };
             ocrText = new FluentTextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = Ui.Base };
-            var ocrBar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = Ui.S(40), WrapContents = false };
+            var ocrBar = LayoutKit.Actions(DockStyle.Bottom);
             ocrBar.Controls.Add(Ui.Btn("Copy all text", delegate { if (App.I.CopyText(ocrText.Text)) ocrStatus.Text = "Copied."; }, true));
             ocrBar.Controls.Add(Ui.Btn("Close", delegate { ocrPanel.Visible = false; }));
             ocrLang = new ComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -525,6 +525,8 @@ $stream.Dispose()
             tools.Items.Add(new ToolStripButton("Folder", null, delegate { OpenFolder(); }));
             foreach (ToolStripItem i in tools.Items) i.ForeColor = Ui.Text;
             Controls.Add(tools);
+            LayoutKit.FlowTools(tools, this);
+            Resize += delegate { ocrPanel.Dock = ClientSize.Width < Ui.S(1000) ? DockStyle.Bottom : DockStyle.Right; if (ocrPanel.Dock == DockStyle.Bottom) ocrPanel.Height = Math.Max(Ui.S(100), ClientSize.Height / 3); };
             SelectTool("rect");
             Rerender();
             Ui.Theme(this);
@@ -1186,7 +1188,7 @@ $stream.Dispose()
             var y = area.Top - Height - Ui.S(6);
             var wa = Screen.FromRectangle(area).Bounds;
             if (y < wa.Top) y = area.Top + Ui.S(6);
-            Location = new Point(Math.Max(wa.Left, area.Left + (area.Width - Width) / 2), y);
+            Location = new Point(Math.Max(wa.Left, Math.Min(wa.Right - Width, area.Left + (area.Width - Width) / 2)), Math.Max(wa.Top, Math.Min(wa.Bottom - Height, y)));
             t.Interval = 500;
             t.Tick += delegate { var e = Recorder.Elapsed; time.Text = ((int)e.TotalMinutes).ToString("00") + ":" + e.Seconds.ToString("00"); };
             t.Start();
@@ -1301,7 +1303,7 @@ $stream.Dispose()
             bar.Controls.Add(Ui.Btn("Folder", delegate { try { Process.Start("explorer.exe", "\"" + Shot.SnipFolder + "\""); } catch { } }));
             Controls.Add(bar);
 
-            var hint = new Label
+            var hint = new WrapLabel
             {
                 Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted,
                 Text = Hotkeys.Get("snip") + " snip  ·  " + Hotkeys.Get("ocr") + " copy text from screen  ·  " + Hotkeys.Get("record") + " start / stop recording  ·  Recent snips and recordings:"

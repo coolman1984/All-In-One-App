@@ -37,6 +37,7 @@ namespace StickyPro
         }
         readonly Label status, keys;
         readonly Timer statusTimer = new Timer();
+        readonly ToolTip navigationTips = new ToolTip();
         string page = "notes";
         public string Page { get { return page; } }
 
@@ -50,7 +51,7 @@ namespace StickyPro
             ForeColor = Ui.Text;
             var work = Screen.FromPoint(Cursor.Position).WorkingArea;
             Size = new Size(Math.Min(Ui.S(1120), work.Width), Math.Min(Ui.S(700), work.Height));
-            MinimumSize = new Size(Math.Min(Ui.S(800), work.Width), Math.Min(Ui.S(480), work.Height));
+            MinimumSize = new Size(Math.Min(Ui.S(640), work.Width), Math.Min(Ui.S(400), work.Height));
             StartPosition = FormStartPosition.Manual;
             Location = new Point(work.Left + (work.Width - Width) / 2, work.Top + (work.Height - Height) / 2);
             KeyPreview = true;
@@ -150,8 +151,12 @@ namespace StickyPro
             title.Padding = new Padding(Ui.S(14), 0, 0, 0);
             nav.Controls.Add(title);
             Controls.Add(nav);
+            EventHandler adaptNav = delegate { bool compact = Width < Ui.S(900); nav.Width = Ui.S(compact ? 64 : 224); title.Text = compact ? "" : "        " + App.Name; };
+            Resize += adaptNav; adaptNav(this, EventArgs.Empty);
 
             Ui.Theme(this);
+            foreach (var item in navigation.Controls.OfType<NavItem>()) navigationTips.SetToolTip(item, item.Text);
+            navigationTips.SetToolTip(navSettings, "Settings"); navigationTips.SetToolTip(navKeys, "Shortcuts");
             Store.NotesChanged += OnNotes;
             Store.PromptsChanged += OnPrompts;
             Store.ClipsChanged += OnClips;
@@ -174,6 +179,7 @@ namespace StickyPro
             if (disposing)
             {
                 statusTimer.Dispose();
+                navigationTips.Dispose();
                 Store.NotesChanged -= OnNotes; Store.PromptsChanged -= OnPrompts; Store.ClipsChanged -= OnClips;
             }
             base.Dispose(disposing);
@@ -576,7 +582,7 @@ namespace StickyPro
                 else if (e.KeyCode == Keys.Delete) { DeleteCurrent(); e.SuppressKeyPress = true; }
             };
             mid.Controls.Add(list);
-            var midBar = new FlowLayoutPanel(); midBar.Dock = DockStyle.Top; midBar.Height = Ui.S(38); midBar.WrapContents = false;
+            var midBar = MainForm.Bar();
             midBar.Controls.Add(Ui.Btn("+  New prompt", delegate { NewPrompt(); }, true));
             sort = MainForm.Combo(130, "Recent", "Most used", "A to Z");
             sort.Margin = new Padding(0, Ui.S(3), 0, 0);
@@ -612,7 +618,7 @@ namespace StickyPro
             cats.ContextMenuStrip = catMenu;
             cats.MouseDown += (s, e) => { int i = cats.IndexFromPoint(e.Location); if (i >= 0 && e.Button == MouseButtons.Right) cats.SelectedIndex = i; };
             left.Controls.Add(cats);
-            var io = new FlowLayoutPanel(); io.Dock = DockStyle.Bottom; io.Height = Ui.S(36); io.WrapContents = false;
+            var io = LayoutKit.Actions(DockStyle.Bottom);
             io.Controls.Add(Ui.Btn("Import", delegate { Import(); }));
             io.Controls.Add(Ui.Btn("Export", delegate { Export(); }));
             mid.Controls.Add(io);
@@ -625,6 +631,9 @@ namespace StickyPro
                 bool compact = Width < Ui.S(850);
                 left.Visible = !compact;
                 compactCats.Visible = compact;
+                bool stacked = Width < Ui.S(600);
+                mid.Dock = stacked ? DockStyle.Top : DockStyle.Left;
+                if (stacked) mid.Height = Ui.S(190);
                 mid.Width = compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Ui.S(340);
             };
             Resize += layout;
@@ -1003,7 +1012,7 @@ namespace StickyPro
             right.Controls.Add(preview);
             right.Controls.Add(picture);
             right.Controls.Add(previewMeta);
-            Controls.Add(right);
+            Controls.Add(new ResponsivePane(list, right, Ui.S(340), Ui.S(780), Ui.S(210)));
 
             var bar2 = MainForm.Bar();
             bar2.Controls.Add(Ui.Btn("Copy", delegate { CopySelected(0); }, true));
