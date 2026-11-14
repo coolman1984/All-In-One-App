@@ -278,8 +278,10 @@ namespace StickyPro
         {
             var bar = new FlowLayoutPanel();
             bar.Dock = DockStyle.Top;
-            bar.Height = Ui.S(40);
-            bar.WrapContents = false;
+            bar.AutoSize = true;
+            bar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            bar.MinimumSize = Ui.S(0, 40);
+            bar.WrapContents = true;
             bar.Padding = new Padding(0, Ui.S(2), 0, Ui.S(4));
             return bar;
         }

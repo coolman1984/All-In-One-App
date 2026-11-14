@@ -39,8 +39,10 @@ namespace StickyPro
 
     class FastList : ListView
     {
+        readonly HeaderWindow header;
         public FastList()
         {
+            header = new HeaderWindow(this);
             DoubleBuffered = true;
             View = View.Details;
             FullRowSelect = true;
@@ -50,6 +52,44 @@ namespace StickyPro
             BackColor = Ui.Card;
             ForeColor = Ui.Text;
             if (Ui.Dark) Ui.DarkScroll(this);
+            OwnerDraw = true;
+            DrawColumnHeader += (s, e) =>
+            {
+                using (var b = new SolidBrush(Ui.Nav)) e.Graphics.FillRectangle(b, e.Bounds);
+                using (var p = new Pen(Ui.Line)) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+                var r = e.Bounds; r.Inflate(-Ui.S(Ui.Space), 0);
+                var align = e.Header.TextAlign == HorizontalAlignment.Right ? TextFormatFlags.Right : e.Header.TextAlign == HorizontalAlignment.Center ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
+                TextRenderer.DrawText(e.Graphics, e.Header.Text, Ui.Bold, r, Ui.Text, align | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            };
+            DrawItem += (s, e) => { e.DrawDefault = true; };
+            DrawSubItem += (s, e) => { e.DrawDefault = true; };
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            IntPtr hwnd = Native.SendMessage(Handle, 0x101F /* LVM_GETHEADER */, IntPtr.Zero, IntPtr.Zero);
+            if (hwnd != IntPtr.Zero) header.AssignHandle(hwnd);
+        }
+        protected override void OnHandleDestroyed(EventArgs e) { header.ReleaseHandle(); base.OnHandleDestroyed(e); }
+
+        // Native headers leave their unused trailing area white in dark mode.
+        class HeaderWindow : NativeWindow
+        {
+            readonly FastList owner;
+            public HeaderWindow(FastList owner) { this.owner = owner; }
+            protected override void WndProc(ref Message m)
+            {
+                base.WndProc(ref m);
+                if (m.Msg != 0xF && m.Msg != 0x318) return;
+                using (var g = m.Msg == 0x318 ? Graphics.FromHdc(m.WParam) : Graphics.FromHwnd(Handle))
+                using (var b = new SolidBrush(Ui.Nav))
+                {
+                    int right = owner.Columns.Cast<ColumnHeader>().Sum(c => c.Width) - Native.GetScrollPos(owner.Handle, 0);
+                    var bounds = Rectangle.Ceiling(g.VisibleClipBounds);
+                    if (right < bounds.Right) g.FillRectangle(b, Math.Max(0, right), 0, bounds.Right - Math.Max(0, right), bounds.Height);
+                }
+            }
         }
     }
 

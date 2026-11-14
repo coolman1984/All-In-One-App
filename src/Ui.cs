@@ -24,10 +24,12 @@ namespace StickyPro
         public static int S(int v) { return (int)Math.Round(v * Scale); }
         public static Size S(int w, int h) { return new Size(S(w), S(h)); }
 
-        public static readonly Font Base = new Font("Segoe UI", 10f);
-        public static readonly Font Bold = new Font("Segoe UI Semibold", 10f);
-        public static readonly Font Small = new Font("Segoe UI", 8.5f);
-        public static readonly Font Big = new Font("Segoe UI Semibold", 14f);
+        public const int SpaceSmall = 4, Space = 8, SpaceLarge = 16, Radius = 8, ControlHeight = 32;
+        public static readonly string FontName = ChooseFont();
+        public static readonly Font Base = new Font(FontName, 10f);
+        public static readonly Font Bold = new Font(FontName, 10f, FontStyle.Bold);
+        public static readonly Font Small = new Font(FontName, 8.5f);
+        public static readonly Font Big = new Font(FontName, 14f, FontStyle.Bold);
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
@@ -45,6 +47,19 @@ namespace StickyPro
         public static Color Muted { get { return Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
         public static Color SelBg { get { return Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
         public static Color HoverBg { get { return Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
+        public static Color PressBg { get { return Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
+        public static Color AccentHover { get { return Color.FromArgb(0, 90, 170); } }
+        public static Color AccentPressed { get { return Color.FromArgb(0, 77, 148); } }
+        public static Color Success { get { return Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
+        public static Color Danger { get { return Dark ? Color.FromArgb(255, 143, 143) : Color.FromArgb(196, 43, 48); } }
+        public static Color Warning { get { return Dark ? Color.FromArgb(249, 202, 101) : Color.FromArgb(151, 98, 0); } }
+        public static Color Track { get { return Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
+        public static Color Canvas { get { return Dark ? Color.FromArgb(28, 28, 28) : Color.FromArgb(225, 225, 225); } }
+        public static Color Overlay { get { return Color.FromArgb(36, 36, 36); } }
+        public static Color OverlayField { get { return Color.FromArgb(60, 60, 60); } }
+        public static Color OverlayLine { get { return Color.FromArgb(90, 90, 90); } }
+        public static Color NoteMuted { get { return Color.FromArgb(105, 105, 105); } }
+        public static Color NoteMutedDark { get { return Color.FromArgb(200, 200, 200); } }
         public static Color PinBack { get { return Dark ? Color.FromArgb(66, 58, 30) : Color.FromArgb(255, 250, 225); } }
         public static readonly Color PinStrip = Color.FromArgb(255, 200, 0);
 
@@ -80,6 +95,16 @@ namespace StickyPro
         {
             foreach (var c in Colors) if (c.Name == name) return c;
             return Colors[0];
+        }
+
+        static string ChooseFont()
+        {
+            string name = "Segoe UI";
+            foreach (var family in FontFamily.Families)
+            {
+                using (family) if (family.Name == "Segoe UI Variable Text") name = family.Name;
+            }
+            return name;
         }
 
         public static void SetNoteFont(string name, float size)
@@ -123,8 +148,11 @@ namespace StickyPro
                 iconFamily = "Segoe UI Symbol";
                 foreach (var f in FontFamily.Families)
                 {
-                    if (f.Name == "Segoe Fluent Icons") { iconFamily = f.Name; break; }
-                    if (f.Name == "Segoe MDL2 Assets") iconFamily = f.Name;
+                    using (f)
+                    {
+                        if (f.Name == "Segoe Fluent Icons") iconFamily = f.Name;
+                        else if (f.Name == "Segoe MDL2 Assets" && iconFamily != "Segoe Fluent Icons") iconFamily = f.Name;
+                    }
                 }
             }
             Font font;
@@ -154,22 +182,47 @@ namespace StickyPro
                     c.BackColor = c is ListBox ? Bg : Field;
                     c.ForeColor = Text;
                     var cb = c as ComboBox;
-                    if (cb != null) cb.FlatStyle = Dark ? FlatStyle.Flat : FlatStyle.Standard;
+                    if (cb != null)
+                    {
+                        cb.FlatStyle = FlatStyle.Flat;
+                        cb.DrawMode = DrawMode.OwnerDrawFixed;
+                        cb.ItemHeight = cb.Font.Height + S(SpaceSmall);
+                        cb.DrawItem -= DrawCombo; cb.DrawItem += DrawCombo;
+                    }
                 }
-                if (Dark && (c is TextBox || c is ListBox || c is RichTextBox || c is ComboBox)) DarkScroll(c);
+                var check = c as CheckBox;
+                if (check != null) { check.FlatStyle = FlatStyle.Flat; check.ForeColor = Text; check.FlatAppearance.BorderColor = Line; check.FlatAppearance.CheckedBackColor = SelBg; }
+                var date = c as DateTimePicker;
+                if (date != null) { date.CalendarMonthBackground = Field; date.CalendarForeColor = Text; }
+                if (c is TextBox || c is ListBox || c is RichTextBox || c is ComboBox || c is ListView || c is NumericUpDown) DarkScroll(c);
                 if (c.HasChildren) Theme(c);
             }
         }
 
         public static void DarkScroll(Control c)
         {
-            EventHandler set = delegate { try { Native.SetWindowTheme(c.Handle, Dark ? "DarkMode_Explorer" : "Explorer", null); } catch { } };
-            if (c.IsHandleCreated) set(c, EventArgs.Empty); else c.HandleCreated += set;
+            c.HandleCreated -= ApplyScrollTheme;
+            c.HandleCreated += ApplyScrollTheme;
+            if (c.IsHandleCreated) ApplyScrollTheme(c, EventArgs.Empty);
+        }
+
+        static void ApplyScrollTheme(object sender, EventArgs e) { var c = (Control)sender; try { Native.SetWindowTheme(c.Handle, Dark ? "DarkMode_Explorer" : "Explorer", null); } catch { } }
+
+        static void DrawCombo(object sender, DrawItemEventArgs e)
+        {
+            var combo = (ComboBox)sender;
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            using (var b = new SolidBrush(selected ? SelBg : Field)) e.Graphics.FillRectangle(b, e.Bounds);
+            string text = e.Index >= 0 ? combo.GetItemText(combo.Items[e.Index]) : combo.Text;
+            var r = e.Bounds; r.Inflate(-S(SpaceSmall), 0);
+            var dir = IsRtl(text) ? TextFormatFlags.RightToLeft | TextFormatFlags.Right : TextFormatFlags.Left;
+            TextRenderer.DrawText(e.Graphics, text, combo.Font, r, combo.Enabled ? Text : Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | dir);
+            if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
         }
 
         public static void DarkTitle(Form f)
         {
-            EventHandler set = delegate { try { int v = Dark ? 1 : 0; Native.DwmSetWindowAttribute(f.Handle, 20, ref v, 4); } catch { } };
+            EventHandler set = delegate { try { int v = Dark ? 1 : 0; Native.DwmSetWindowAttribute(f.Handle, 20, ref v, 4); v = 2; Native.DwmSetWindowAttribute(f.Handle, 33, ref v, 4); } catch { } };
             if (f.IsHandleCreated) set(f, EventArgs.Empty); else f.HandleCreated += set;
         }
 
@@ -228,18 +281,19 @@ namespace StickyPro
 
         public static Button Btn(string text, EventHandler click, bool primary = false)
         {
-            var b = new Button();
+            var b = new FluentButton { Primary = primary };
             b.Text = text;
             b.FlatStyle = FlatStyle.Flat;
             b.FlatAppearance.BorderColor = primary ? AccentFill : Line;
-            b.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(0, 90, 170) : HoverBg;
+            b.FlatAppearance.MouseOverBackColor = primary ? AccentHover : HoverBg;
             b.BackColor = primary ? AccentFill : Card;
             b.ForeColor = primary ? Color.White : Text;
             b.Font = Base;
             b.AutoSize = true;
             b.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            b.Padding = new Padding(S(6), S(1), S(6), S(1));
-            b.Margin = new Padding(0, 0, S(6), 0);
+            b.Padding = new Padding(S(Space), S(SpaceSmall), S(Space), S(SpaceSmall));
+            b.Margin = new Padding(0, 0, S(SpaceSmall), S(SpaceSmall));
+            b.MinimumSize = S(0, ControlHeight);
             b.Cursor = Cursors.Hand;
             b.UseVisualStyleBackColor = false;
             if (click != null) b.Click += click;
@@ -248,7 +302,7 @@ namespace StickyPro
 
         public static TextBox Search(string cue)
         {
-            var t = new TextBox();
+            var t = new FluentTextBox();
             t.Font = Base;
             t.BorderStyle = BorderStyle.FixedSingle;
             Cue(t, cue);
@@ -484,6 +538,98 @@ namespace StickyPro
                 f.CancelButton = cancel;
                 Theme(f);
                 return f.ShowDialog(owner) == DialogResult.OK ? result : -1;
+            }
+        }
+    }
+
+    // Paint only on input/state changes; no animation timer or extra window per button.
+    class FluentButton : Button
+    {
+        public bool Primary;
+        bool hover, pressed, defaultButton;
+        public FluentButton()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+        public override void NotifyDefault(bool value) { defaultButton = value; base.NotifyDefault(value); Invalidate(); }
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space) pressed = true; Invalidate(); base.OnKeyDown(e); }
+        protected override void OnKeyUp(KeyEventArgs e) { pressed = false; Invalidate(); base.OnKeyUp(e); }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { pressed = false; base.OnLostFocus(e); Invalidate(); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Parent == null ? Ui.Bg : Parent.BackColor);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fill = !Enabled ? Ui.Bg : Primary ? (pressed ? Ui.AccentPressed : hover ? Ui.AccentHover : Ui.AccentFill) : pressed ? Ui.PressBg : hover ? Ui.HoverBg : BackColor;
+            var r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var path = Ui.Round(r, Ui.S(Ui.Radius)))
+            {
+                using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+                using (var p = new Pen((Focused || defaultButton) && Enabled ? Ui.Accent : Primary ? fill : Ui.Line)) g.DrawPath(p, path);
+            }
+            var textRect = Rectangle.Inflate(ClientRectangle, -Ui.S(Ui.Space), -Ui.S(2));
+            var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+            if (!UseMnemonic) flags |= TextFormatFlags.NoPrefix; else if (!ShowKeyboardCues) flags |= TextFormatFlags.HidePrefix;
+            TextRenderer.DrawText(g, Text, Font, textRect, !Enabled ? Ui.Muted : Primary ? Color.White : ForeColor, flags);
+            if (Focused && ShowFocusCues)
+            {
+                var focus = Rectangle.Inflate(r, -Ui.S(3), -Ui.S(3));
+                using (var path = Ui.Round(focus, Ui.S(Ui.SpaceSmall)))
+                using (var pen = new Pen(Primary ? Color.White : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(pen, path);
+            }
+        }
+    }
+
+    // Keep the native edit control (including IME, RTL, accessibility and selection).
+    class FluentTextBox : TextBox
+    {
+        public FluentTextBox() { BorderStyle = BorderStyle.FixedSingle; BackColor = Ui.Field; ForeColor = Ui.Text; }
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            Native.SendMessage(Handle, 0xD3 /* EM_SETMARGINS */, (IntPtr)3, (IntPtr)((Ui.S(5) << 16) | Ui.S(5)));
+        }
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (Width <= 0 || Height <= 0) return;
+            using (var path = Ui.Round(new Rectangle(0, 0, Width, Height), Ui.S(Ui.SpaceSmall)))
+            {
+                var previous = Region;
+                Region = new Region(path);
+                if (previous != null) previous.Dispose();
+            }
+        }
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (BorderStyle == BorderStyle.None || !IsHandleCreated) return;
+            bool printing = m.Msg == 0x317 || m.Msg == 0x318;
+            if (printing || m.Msg == 0x85 || m.Msg == 0xF || m.Msg == 0x7 || m.Msg == 0x8)
+            {
+                IntPtr dc = printing ? m.WParam : Native.GetWindowDC(Handle);
+                if (dc == IntPtr.Zero) return;
+                try
+                {
+                    using (var g = Graphics.FromHdc(dc))
+                    using (var path = Ui.Round(new Rectangle(0, 0, Width - 1, Height - 1), Ui.S(Ui.SpaceSmall)))
+                    using (var pen = new Pen(Focused ? Ui.Accent : Ui.Line))
+                    {
+                        int corner = Ui.S(Ui.SpaceSmall);
+                        using (var b = new SolidBrush(Parent == null ? Ui.Bg : Parent.BackColor))
+                        {
+                            g.FillRectangle(b, 0, 0, corner, corner); g.FillRectangle(b, Width - corner, 0, corner, corner);
+                            g.FillRectangle(b, 0, Height - corner, corner, corner); g.FillRectangle(b, Width - corner, Height - corner, corner, corner);
+                        }
+                        g.SmoothingMode = SmoothingMode.AntiAlias; g.DrawPath(pen, path);
+                    }
+                }
+                finally { if (!printing) Native.ReleaseDC(Handle, dc); }
             }
         }
     }
