@@ -1349,10 +1349,11 @@ $stream.Dispose()
 
         readonly ComboBox delay;
         readonly CheckBox micBox;
-        readonly CardList list;
+        readonly CardGrid list;
         readonly Action<string> status;
         readonly Action onChanged;
         readonly Dictionary<string, Image> thumbs = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
+        readonly HashSet<string> loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool stale = true;
 
         public SnipPanel(Action<string> status)
@@ -1360,9 +1361,10 @@ $stream.Dispose()
             this.status = status ?? (s => { });
             Dock = DockStyle.Fill;
 
-            list = new CardList { Dock = DockStyle.Fill };
+            list = new CardGrid { Dock = DockStyle.Fill };
             list.SelectionMode = SelectionMode.MultiExtended;
-            list.ItemHeight = Math.Min(255, Ui.S(64));
+            list.ItemHeight = Ui.S(96);
+            list.MinColumnWidth = Ui.S(300);
             list.Info = o =>
             {
                 var f = (FileInfo)o;
@@ -1445,21 +1447,49 @@ $stream.Dispose()
             catch { return null; }
         }
 
+        // Returns the cached thumbnail, or null at once and loads it on a worker thread (UI thread only).
         Image Thumb(string path)
         {
             Image t;
             if (thumbs.TryGetValue(path, out t)) return t;
-            t = null;
-            var img = Load(path);
-            if (img != null)
+            if (loading.Add(path))
             {
-                int h = list.ItemHeight - Ui.S(18);
-                int w = Math.Max(1, Math.Min(Ui.S(90), img.Width * h / Math.Max(1, img.Height)));
-                t = new Bitmap(img, w, Math.Max(1, h));
-                img.Dispose();
+                int h = list.ItemHeight - Ui.S(18), maxW = Ui.S(90);
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    Image made = MakeThumb(path, h, maxW);
+                    try
+                    {
+                        if (!IsHandleCreated) { if (made != null) made.Dispose(); return; }
+                        BeginInvoke(new Action(() => ThumbReady(path, made)));
+                    }
+                    catch { if (made != null) made.Dispose(); }
+                });
             }
+            return null;
+        }
+
+        // Worker-thread safe: only reads the file and works on its own bitmaps.
+        static Image MakeThumb(string path, int h, int maxW)
+        {
+            var img = Load(path);
+            if (img == null) return null;
+            try
+            {
+                int w = Math.Max(1, Math.Min(maxW, img.Width * h / Math.Max(1, img.Height)));
+                return new Bitmap(img, w, Math.Max(1, h));
+            }
+            finally { img.Dispose(); }
+        }
+
+        void ThumbReady(string path, Image t)
+        {
+            if (IsDisposed) { if (t != null) t.Dispose(); return; }
+            loading.Remove(path);
+            Image old;
+            if (thumbs.TryGetValue(path, out old) && old != null) old.Dispose();
             thumbs[path] = t;
-            return t;
+            list.Invalidate();
         }
 
         void Fill()
@@ -1468,6 +1498,7 @@ $stream.Dispose()
             var selected = list.SelectedItem as FileInfo;
             foreach (var thumb in thumbs.Values) if (thumb != null) thumb.Dispose();
             thumbs.Clear();
+            loading.Clear();
             var files = new List<FileInfo>();
             foreach (var dir in new[] { Shot.SnipFolder, Shot.VideoFolder })
             {
