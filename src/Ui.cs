@@ -25,12 +25,31 @@ namespace StickyPro
         public static Size S(int w, int h) { return new Size(S(w), S(h)); }
 
         public const int SpaceSmall = 4, Space = 8, SpaceLarge = 16, Radius = 8, ControlHeight = 32;
-        public static readonly string FontName = ChooseFont();
-        public static readonly Font Base = new Font(FontName, 10f);
-        public static readonly Font Bold = new Font(FontName, 10f, FontStyle.Bold);
-        public static readonly Font Small = new Font(FontName, 8.5f);
-        public static readonly Font Big = new Font(FontName, 14f, FontStyle.Bold);
-        public static readonly Font Metric = new Font(FontName, 24f, FontStyle.Bold);
+        public static string FontName = ChooseFont();
+        public static Font Base = new Font(FontName, 10f);
+        public static Font Bold = new Font(FontName, 10f, FontStyle.Bold);
+        public static Font Small = new Font(FontName, 8.5f);
+        public static Font Big = new Font(FontName, 14f, FontStyle.Bold);
+        public static Font Metric = new Font(FontName, 24f, FontStyle.Bold);
+        // Interface font and size from Settings. Old fonts are not disposed (open windows may still use them).
+        public static void InitFonts(string name, float size)
+        {
+            if (size < 8 || size > 16) size = 10f;
+            string family = string.IsNullOrEmpty(name) ? ChooseFont() : name;
+            try { using (var test = new Font(family, size)) if (!string.Equals(test.Name, family, StringComparison.OrdinalIgnoreCase)) family = ChooseFont(); } catch { family = ChooseFont(); }
+            float k = size / 10f;
+            FontName = family;
+            Base = new Font(family, size); Bold = new Font(family, size, FontStyle.Bold); Small = new Font(family, 8.5f * k);
+            Big = new Font(family, 14f * k, FontStyle.Bold); Metric = new Font(family, 24f * k, FontStyle.Bold);
+        }
+
+        // Six colour themes: the sidebar / top bar colour and the accent follow the theme.
+        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose" };
+        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94) };
+        public static int ThemeIndex;
+        public static Color ThemeColor(int i) { return themeBase[Math.Max(0, Math.Min(5, i))]; }
+        public static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
+        static Color TB { get { return ThemeColor(ThemeIndex); } }
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
@@ -38,25 +57,25 @@ namespace StickyPro
 
         // ---------- Theme ----------
         public static bool Dark;
-        public static Color Accent { get { return Dark ? Color.FromArgb(96, 170, 255) : Color.FromArgb(0, 103, 192); } }
-        public static Color AccentFill { get { return Color.FromArgb(0, 103, 192); } }
+        public static Color Accent { get { return Dark ? Mix(TB, Color.White, 0.45) : Mix(TB, Color.Black, 0.08); } }
+        public static Color AccentFill { get { return Mix(TB, Color.Black, 0.08); } }
         public static Color Bg { get { return Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
         public static Color Card { get { return Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
         public static Color Field { get { return Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
         public static Color Nav { get { return Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
         // PicPick-style solid blue sidebar with white text.
-        public static Color Sidebar { get { return Dark ? Color.FromArgb(22, 58, 102) : Color.FromArgb(26, 110, 194); } }
-        public static Color SidebarSel { get { return Dark ? Color.FromArgb(12, 36, 68) : Color.FromArgb(14, 78, 148); } }
-        public static Color SidebarHover { get { return Dark ? Color.FromArgb(33, 74, 124) : Color.FromArgb(46, 128, 210); } }
-        public static Color Header { get { return Dark ? Color.FromArgb(110, 180, 255) : Color.FromArgb(26, 110, 194); } }
+        public static Color Sidebar { get { return Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
+        public static Color SidebarSel { get { return Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
+        public static Color SidebarHover { get { return Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
+        public static Color Header { get { return Dark ? Mix(TB, Color.White, 0.5) : TB; } }
         public static Color Line { get { return Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
         public static Color Text { get { return Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
         public static Color Muted { get { return Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
         public static Color SelBg { get { return Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
         public static Color HoverBg { get { return Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
         public static Color PressBg { get { return Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
-        public static Color AccentHover { get { return Color.FromArgb(0, 90, 170); } }
-        public static Color AccentPressed { get { return Color.FromArgb(0, 77, 148); } }
+        public static Color AccentHover { get { return Mix(TB, Color.Black, 0.2); } }
+        public static Color AccentPressed { get { return Mix(TB, Color.Black, 0.3); } }
         public static Color Success { get { return Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
         public static Color Danger { get { return Dark ? Color.FromArgb(255, 143, 143) : Color.FromArgb(196, 43, 48); } }
         public static Color Warning { get { return Dark ? Color.FromArgb(249, 202, 101) : Color.FromArgb(151, 98, 0); } }

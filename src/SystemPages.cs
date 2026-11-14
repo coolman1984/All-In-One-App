@@ -872,13 +872,13 @@ namespace StickyPro
     {
         readonly TabStrip tabs;
         readonly Control[] views;
-        static readonly string[] ids = { "procs", "startup", "drives" };
+        static readonly string[] ids = { "procs", "startup", "drives", "uninstall" };
 
         public SystemPage(MainForm owner)
         {
             Dock = DockStyle.Fill;
             Action<string> st = s => owner.Status(s);
-            views = new Control[] { new ProcessesPanel(st), new StartupPanel(st), new DrivesPanel(st) };
+            views = new Control[] { new ProcessesPanel(st), new StartupPanel(st), new DrivesPanel(st), new UninstallPanel(st) };
             var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, Ui.S(4), 0, 0) };
             foreach (var v in views) { v.Visible = false; host.Controls.Add(v); }
             Controls.Add(host);
@@ -890,9 +890,10 @@ namespace StickyPro
             tabs.Add("Processes");
             tabs.Add("Startup apps");
             tabs.Add("Drives & cleanup");
+            tabs.Add("Uninstall");
             tabs.Changed += i => { for (int k = 0; k < views.Length; k++) views[k].Visible = k == i; };
             top.Controls.Add(tabs);
-            var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Max(0, tabs.Selected)] }, null); });
+            var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Min(2, Math.Max(0, tabs.Selected))] }, null); });
             top.Controls.Add(pop);
             Controls.Add(new SystemKpis());
             Controls.Add(top);

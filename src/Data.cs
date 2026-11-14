@@ -106,8 +106,40 @@ namespace StickyPro
         public int Opacity = 100;
     }
 
+    public class SubTask { public string Text = ""; public bool Done; }
+    public class TaskItem
+    {
+        public string Id;
+        public string Title = "";
+        public string Notes = "";
+        public string List = "Inbox";
+        public int Priority = 1;             // 0 low, 1 normal, 2 high
+        public long Due;                     // ticks, 0 = no due date
+        public bool DueHasTime;
+        public long RemindAt;                // ticks, 0 = none
+        public string Repeat = "none";       // none | daily | weekdays | weekly | monthly | yearly
+        public bool Done;
+        public long DoneAt, Created, Modified;
+        public List<SubTask> Steps = new List<SubTask>();
+        public int Snoozes;
+    }
+
+    // Quick-launch dock item and user launch shortcut (global hotkey that opens anything).
+    public class DockItem { public string Name = ""; public string Path = ""; public string Args = ""; }
+    public class UserShortcut { public string Id; public string Keys = ""; public string Name = ""; public string Target = ""; public string Args = ""; }
+
     public class Settings
     {
+        public bool KeepAwake;
+        public int Theme;                    // 0..5, see Ui.Themes
+        public string UiFont = "";           // "" = Segoe UI (Variable)
+        public float UiFontSize = 10f;
+        public bool DockVisible = true;
+        public List<DockItem> Dock = new List<DockItem>();
+        public List<UserShortcut> Launchers = new List<UserShortcut>();
+        public List<string> ExplorerPaths = new List<string>();
+        public string ExplorerLayout = "2";  // 1 | 2 | 3 | 4 | 2x2
+        public bool DockSeeded;
         public bool Paused;
         public int MaxClips = 1000;
         public bool FirstRunDone;
@@ -148,6 +180,11 @@ namespace StickyPro
         public static List<ActivityRecord> Activity = new List<ActivityRecord>();
         public static List<TaggedFile> Tagged = new List<TaggedFile>();
         public static List<TagCategory> TagCats = new List<TagCategory>();
+        public static List<TaskItem> Tasks = new List<TaskItem>();
+        public static event Action TasksChanged;
+        static bool tasksDirty;
+        public static void MarkTasks() { tasksDirty = true; Kick(); }
+        public static void RaiseTasks() { var h = TasksChanged; if (h != null) h(); }
 
         public static event Action NotesChanged, PromptsChanged, ClipsChanged, CardsChanged, ActivityChanged, TaggedChanged;
 
@@ -161,7 +198,7 @@ namespace StickyPro
         public static void RaiseCards() { var h = CardsChanged; if (h != null) h(); }
         static System.Windows.Forms.Timer saveTimer;
         static readonly HashSet<string> recovered = new HashSet<string>();
-        public static bool Pending { get { return notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty; } }
+        public static bool Pending { get { return notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty; } }
         public static void StopSaver() { if (saveTimer != null) { saveTimer.Dispose(); saveTimer = null; } }
 
         public static string NewId() { return Guid.NewGuid().ToString("N"); }
@@ -206,6 +243,25 @@ namespace StickyPro
             if (History.DriveFreeDay == null) History.DriveFreeDay = new Dictionary<string, long>();
             foreach (var k in History.DriveFreeDay.Keys.Where(k => k.Length < 3).ToList()) History.DriveFreeDay.Remove(k);
             if (Settings.MaxClips < 50) Settings.MaxClips = 1000;
+            Tasks = Read<List<TaskItem>>("tasks.json") ?? new List<TaskItem>();
+            Tasks.RemoveAll(t => t == null);
+            foreach (var t in Tasks)
+            {
+                if (t.Id == null) t.Id = NewId(); if (t.Title == null) t.Title = ""; if (t.Notes == null) t.Notes = ""; if (string.IsNullOrEmpty(t.List)) t.List = "Inbox";
+                if (string.IsNullOrEmpty(t.Repeat)) t.Repeat = "none"; if (t.Steps == null) t.Steps = new List<SubTask>(); t.Steps.RemoveAll(x => x == null);
+                foreach (var st in t.Steps) if (st.Text == null) st.Text = "";
+                if (t.Due < 0 || t.Due > DateTime.MaxValue.Ticks) t.Due = 0; if (t.RemindAt < 0 || t.RemindAt > DateTime.MaxValue.Ticks) t.RemindAt = 0;
+            }
+            if (Settings.Dock == null) Settings.Dock = new List<DockItem>();
+            Settings.Dock.RemoveAll(d => d == null || string.IsNullOrEmpty(d.Path));
+            if (Settings.Launchers == null) Settings.Launchers = new List<UserShortcut>();
+            Settings.Launchers.RemoveAll(l => l == null);
+            foreach (var l in Settings.Launchers) { if (l.Id == null) l.Id = NewId(); if (l.Keys == null) l.Keys = ""; if (l.Name == null) l.Name = ""; if (l.Target == null) l.Target = ""; if (l.Args == null) l.Args = ""; }
+            if (Settings.ExplorerPaths == null) Settings.ExplorerPaths = new List<string>();
+            if (string.IsNullOrEmpty(Settings.ExplorerLayout)) Settings.ExplorerLayout = "2";
+            if (Settings.Theme < 0 || Settings.Theme > 5) Settings.Theme = 0;
+            if (Settings.UiFont == null) Settings.UiFont = "";
+            if (float.IsNaN(Settings.UiFontSize) || Settings.UiFontSize < 8 || Settings.UiFontSize > 16) Settings.UiFontSize = 10f;
             Notes.RemoveAll(n => n == null);
             Prompts.RemoveAll(p => p == null);
             Clips.RemoveAll(c => c == null || (c.Kind == "image" && (!ValidImageName(c.Image) || !File.Exists(ImagePath(c)))));
@@ -305,6 +361,7 @@ namespace StickyPro
                 case "cards.json": cardsDirty = true; break;
                 case "history.json": historyDirty = true; break;
                 case "activity.json": activityDirty = true; break;
+                case "tasks.json": tasksDirty = true; break;
                 default: taggedDirty = true; break;
             }
             if (saveTimer != null) { saveTimer.Interval = 5000; saveTimer.Start(); }
@@ -347,13 +404,14 @@ namespace StickyPro
             if (cardsDirty) cardsDirty = !Safe("cards.json", Cards.ToList());
             if (historyDirty) historyDirty = !Safe("history.json", History);
             if (activityDirty) activityDirty = !Safe("activity.json", Activity.ToList());
+            if (tasksDirty) tasksDirty = !Safe("tasks.json", Tasks.ToList());
             if (taggedDirty)
             {
                 bool filesOk = Safe("tagged.json", Tagged.ToList());
                 bool catsOk = Safe("tagcats.json", TagCats.ToList());
                 taggedDirty = !filesOk || !catsOk;
             }
-            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty))
+            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty))
             {
                 saveTimer.Interval = 5000;
                 saveTimer.Start();
@@ -549,6 +607,59 @@ namespace StickyPro
                 if (t.Length > 0) return t.Length > 70 ? t.Substring(0, 70) + "..." : t;
             }
             return "";
+        }
+
+        // ---------- Tasks ----------
+
+        public static TaskItem AddTask(TaskItem t)
+        {
+            t.Id = NewId(); t.Created = t.Modified = Now();
+            if (string.IsNullOrEmpty(t.List)) t.List = "Inbox";
+            Tasks.Insert(0, t); MarkTasks(); RaiseTasks(); return t;
+        }
+        public static TaskItem NewTask(string title) { return AddTask(new TaskItem { Title = title ?? "" }); }
+
+        public static void TouchTask(TaskItem t) { t.Modified = Now(); MarkTasks(); RaiseTasks(); }
+
+        public static void CompleteTask(TaskItem t, bool done)
+        {
+            if (done && t.Repeat != "none" && t.Due > 0)
+            {
+                long oldDue = t.Due, newDue = NextOccurrence(t.Due, t.Repeat);
+                t.Due = newDue;
+                t.RemindAt = t.RemindAt > 0 || t.DueHasTime ? (t.RemindAt > 0 ? t.RemindAt + (newDue - oldDue) : (t.DueHasTime ? newDue : 0)) : 0;
+                foreach (var s in t.Steps) s.Done = false;
+                t.Snoozes = 0;
+            }
+            else { t.Done = done; t.DoneAt = done ? Now() : 0; }
+            TouchTask(t);
+        }
+
+        public static long NextOccurrence(long ticks, string repeat)
+        {
+            var d = new DateTime(ticks);
+            var now = DateTime.Now;
+            for (int guard = 0; guard < 5000; guard++)
+            {
+                switch (repeat)
+                {
+                    case "daily": d = d.AddDays(1); break;
+                    case "weekdays": d = d.AddDays(1); while (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday) d = d.AddDays(1); break;
+                    case "weekly": d = d.AddDays(7); break;
+                    case "monthly": d = d.AddMonths(1); break;
+                    case "yearly": d = d.AddYears(1); break;
+                    default: return ticks;
+                }
+                if (d > now) break;
+            }
+            return d.Ticks;
+        }
+
+        public static List<string> TaskLists()
+        {
+            var l = Tasks.Select(t => t.List).Where(x => !string.IsNullOrEmpty(x) && !x.Equals("Inbox", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            l.Insert(0, "Inbox");
+            return l;
         }
 
         public static string ExportPrompts(List<Prompt> list) { return Js().Serialize(list); }

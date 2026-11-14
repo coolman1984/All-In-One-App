@@ -20,7 +20,7 @@ namespace StickyPro
             {
                 ClipsToday = Store.Clips.Count(c => c.Time >= today && c.Time < tomorrow), PromptCount = Store.Prompts.Count,
                 MostUsed = used != null && used.Uses > 0 ? used.Title + " (" + used.Uses + " uses)" : "No prompts used yet",
-                RemindersToday = Store.Notes.Count(n => n.RemindAt >= today && n.RemindAt < tomorrow),
+                RemindersToday = Store.Notes.Count(n => n.RemindAt >= today && n.RemindAt < tomorrow) + Store.Tasks.Count(t => !t.Done && t.Due > 0 && t.Due < tomorrow),
                 FilesToday = Store.Activity.Where(a => a.Event == "Opened" && a.Time >= today && a.Time < tomorrow).Select(a => a.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
                 Urgent = Store.Tagged.Count(t => string.Equals(t.Category, "Urgent", StringComparison.OrdinalIgnoreCase)),
                 Recording = Recorder.Active ? (Recorder.Paused ? "Paused" : "Recording") : Recorder.Saving ? "Saving" : "Ready"

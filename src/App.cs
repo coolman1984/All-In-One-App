@@ -46,8 +46,11 @@ namespace StickyPro
 
             Store.Load();
             Ui.Dark = Store.Settings.Dark;
+            Ui.ThemeIndex = Store.Settings.Theme;
+            Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
+            if (Store.Settings.KeepAwake) Awake.Set(true);
 
             msg = new MsgWindow(this);
             var failed = RegisterHotkeys();
@@ -454,12 +457,18 @@ namespace StickyPro
             var failed = RegisterHotkeys();
             if (failed.Count > 0)
                 MessageBox.Show("These shortcuts are already used by another app and do not work:\n\n" + string.Join("\n", failed) + "\n\nPick other keys in Settings.", Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            if (Ui.Dark != Store.Settings.Dark) ApplyTheme();
+            bool fontChanged = Ui.Base.Size != Store.Settings.UiFontSize || (Store.Settings.UiFont.Length > 0 && Ui.FontName != Store.Settings.UiFont);
+            if (fontChanged) Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
+            if (Ui.Dark != Store.Settings.Dark || Ui.ThemeIndex != Store.Settings.Theme || fontChanged) ApplyTheme();
         }
+
+        public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }
+        public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(5, i)); Store.MarkSettings(); ApplyTheme(); }
 
         void ApplyTheme()
         {
             Ui.Dark = Store.Settings.Dark;
+            Ui.ThemeIndex = Store.Settings.Theme;
             Ui.ThemeMenu(tray.ContextMenuStrip);
             string page = null;
             bool wasVisible = false;
