@@ -445,30 +445,48 @@ namespace StickyPro
             try { File.Delete(Path.Combine(ImgDir, name)); } catch { }
         }
 
-        public static Clip MakeImageClip(Image img)
+        // Worker-thread safe: no access to Clips. Returns png bytes and hash.
+        public static byte[] EncodePng(Image img, out string hash)
         {
             using (var ms = new MemoryStream())
             {
                 img.Save(ms, ImageFormat.Png);
                 byte[] bytes = ms.ToArray();
-                string hash;
                 using (var sha = SHA1.Create()) hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "");
-                var existing = Clips.FirstOrDefault(x => x.Kind == "image" && x.Hash == hash);
-                var c = new Clip();
-                c.Id = NewId();
-                c.Kind = "image";
-                c.Hash = hash;
-                c.ImgW = img.Width;
-                c.ImgH = img.Height;
-                c.Text = "Image " + img.Width + " x " + img.Height;
-                if (existing != null) c.Image = existing.Image;
-                else
-                {
-                    c.Image = c.Id + ".png";
-                    File.WriteAllBytes(Path.Combine(ImgDir, c.Image), bytes);
-                }
-                return c;
+                return bytes;
             }
+        }
+
+        // UI thread: builds the clip. writtenName != null means a worker already wrote that file into ImgDir.
+        public static Clip ImageClipFrom(byte[] bytes, string hash, int w, int h, string writtenName)
+        {
+            var existing = Clips.FirstOrDefault(x => x.Kind == "image" && x.Hash == hash);
+            var c = new Clip();
+            c.Id = NewId();
+            c.Kind = "image";
+            c.Hash = hash;
+            c.ImgW = w;
+            c.ImgH = h;
+            c.Text = "Image " + w + " x " + h;
+            if (existing != null)
+            {
+                c.Image = existing.Image;
+                if (writtenName != null && writtenName != existing.Image) DeleteImageFile(writtenName);
+            }
+            else if (writtenName != null) c.Image = writtenName;
+            else
+            {
+                c.Image = c.Id + ".png";
+                File.WriteAllBytes(Path.Combine(ImgDir, c.Image), bytes);
+            }
+            return c;
+        }
+
+        public static Clip MakeImageClip(Image img)
+        {
+            string hash;
+            var bytes = EncodePng(img, out hash);
+            return ImageClipFrom(bytes, hash, img.Width, img.Height, null);
         }
 
         public static void TrimNow() { Trim(); MarkClips(); RaiseClips(); }

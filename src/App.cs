@@ -590,21 +590,48 @@ namespace StickyPro
                 if (c == null && d.GetDataPresent(DataFormats.Bitmap))
                 {
                     var img = d.GetData(DataFormats.Bitmap) as Image;
-                    if (img != null) using (img) c = Store.MakeImageClip(img);
+                    if (img != null)
+                    {
+                        Bitmap copy;
+                        using (img) copy = new Bitmap(img);          // fast copy, releases the clipboard object now
+                        string source = pendingSource;
+                        System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            try
+                            {
+                                string hash, id = Store.NewId(), name = id + ".png";
+                                byte[] bytes; int w, h;
+                                using (copy) { bytes = Store.EncodePng(copy, out hash); w = copy.Width; h = copy.Height; }
+                                File.WriteAllBytes(Path.Combine(Store.ImgDir, name), bytes);
+                                Sync.BeginInvoke(new Action(() =>
+                                {
+                                    try { var clip = Store.ImageClipFrom(bytes, hash, w, h, name); clip.Id = id; AddCaptured(clip, source); }
+                                    catch (Exception ex) { Log("Capture failed: " + ex.Message); }
+                                }));
+                            }
+                            catch (Exception ex) { Log("Image capture failed: " + ex.Message); }
+                        });
+                        return;
+                    }
                 }
                 if (c == null) return;
-                if (c.Id == null) c.Id = Store.NewId();
-                c.Time = Store.Now();
-                c.Source = pendingSource;
-                Store.AddClip(c);
-                if (queueOn)
-                {
-                    var stored = Store.Clips.Count > 0 ? Store.Clips[0] : c;
-                    queue.Add(stored);
-                    UpdateTrayText();
-                }
+                AddCaptured(c, pendingSource);
             }
             catch (Exception ex) { Log("Capture failed: " + ex.Message); }
+        }
+
+        void AddCaptured(Clip c, string source)
+        {
+            if (c.Id == null) c.Id = Store.NewId();
+            c.Time = Store.Now();
+            c.Source = source;
+            Store.AddClip(c);
+            if (queueOn)
+            {
+                var stored = Store.Clips.Count > 0 ? Store.Clips[0] : c;
+                queue.Add(stored);
+                UpdateTrayText();
+            }
         }
 
         // ---------- Putting things back on the clipboard ----------
