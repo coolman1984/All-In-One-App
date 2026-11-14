@@ -15,19 +15,24 @@ namespace StickyPro
     class LivePanel : Panel
     {
         bool live;
+        Form liveForm;
         protected bool Live { get { return live; } }
         protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); Check(); }
         protected override void OnParentChanged(EventArgs e) { base.OnParentChanged(e); Check(); }
         protected void Check()
         {
-            bool now = Visible && !IsDisposed && FindForm() != null;
+            var form = FindForm();
+            if (form != liveForm) { if (liveForm != null) liveForm.Resize -= FormResize; liveForm = form; if (liveForm != null) liveForm.Resize += FormResize; }
+            bool now = Visible && !IsDisposed && form != null && form.WindowState != FormWindowState.Minimized;
             if (now == live) return;
             live = now;
             OnLive(now);
         }
+        void FormResize(object sender, EventArgs e) { Check(); }
         protected virtual void OnLive(bool on) { }
         protected override void Dispose(bool disposing)
         {
+            if (disposing && liveForm != null) liveForm.Resize -= FormResize;
             if (disposing && live) { live = false; OnLive(false); }
             base.Dispose(disposing);
         }
@@ -872,6 +877,7 @@ namespace StickyPro
             top.Controls.Add(tabs);
             var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Max(0, tabs.Selected)] }, null); });
             top.Controls.Add(pop);
+            Controls.Add(new SystemKpis());
             Controls.Add(top);
             tabs.Select(0);
         }

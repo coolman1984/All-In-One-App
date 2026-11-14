@@ -12,6 +12,8 @@ namespace StickyPro
     {
         public bool Exiting;
         readonly NavItem navNotes, navPrompts, navClips, navSettings, navSystem, navCards;
+        readonly NavItem navHome;
+        readonly DashboardPanel home;
         readonly NotesPage notes;
         readonly PromptsPage prompts;
         readonly ClipsPage clips;
@@ -38,7 +40,7 @@ namespace StickyPro
         readonly Label status, keys;
         readonly Timer statusTimer = new Timer();
         readonly ToolTip navigationTips = new ToolTip();
-        string page = "notes";
+        string page = "dashboard";
         public string Page { get { return page; } }
 
         public MainForm()
@@ -60,6 +62,8 @@ namespace StickyPro
             var content = new Panel();
             content.Dock = DockStyle.Fill;
             content.Padding = new Padding(Ui.S(12), Ui.S(10), Ui.S(12), Ui.S(4));
+            home = new DashboardPanel { Visible = false };
+            content.Controls.Add(home);
             notes = new NotesPage(this);
             prompts = new PromptsPage(this);
             clips = new ClipsPage(this);
@@ -138,6 +142,10 @@ namespace StickyPro
             navigation.Controls.Add(navClips);
             navigation.Controls.Add(navPrompts);
             navigation.Controls.Add(navNotes);
+            navHome = new NavItem("", "Home / Dashboard");
+            navHome.Click += delegate { ShowPage("dashboard"); };
+            navigation.Controls.Add(navHome);
+            navigation.AutoScrollMinSize = Ui.S(0, 378);
 
             var title = new Label();
             title.Dock = DockStyle.Top;
@@ -160,7 +168,7 @@ namespace StickyPro
             Store.NotesChanged += OnNotes;
             Store.PromptsChanged += OnPrompts;
             Store.ClipsChanged += OnClips;
-            ShowPage("notes");
+            ShowPage("dashboard");
         }
 
         public void UpdateShortcutHelp()
@@ -208,6 +216,7 @@ namespace StickyPro
             if (page == "prompts" && p != "prompts") prompts.Commit();
             if (p.StartsWith("system:")) { system.SelectTab(p.Substring(7)); p = "system"; }
             page = p;
+            navHome.Selected = p == "dashboard"; home.Visible = p == "dashboard";
             navNotes.Selected = p == "notes";
             navPrompts.Selected = p == "prompts";
             navClips.Selected = p == "clips";
@@ -250,7 +259,8 @@ namespace StickyPro
         {
             if (e.Control && !e.Alt)
             {
-                if (e.KeyCode == Keys.D1) { ShowPage("notes"); e.SuppressKeyPress = true; }
+                if (e.KeyCode == Keys.D0) { ShowPage("dashboard"); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.D1) { ShowPage("notes"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D2) { ShowPage("prompts"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D3) { ShowPage("clips"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D4) { ShowPage("system"); e.SuppressKeyPress = true; }

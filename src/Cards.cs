@@ -12,6 +12,7 @@ namespace StickyPro
     {
         public static readonly string[][] All =
         {
+            new[] { "dashboard", "Home / Dashboard" },
             new[] { "clips", "Clipboard" },
             new[] { "prompts", "Prompts" },
             new[] { "notes", "Notes" },
@@ -34,6 +35,7 @@ namespace StickyPro
             Action<string> st = s => card.Status(s);
             switch (id)
             {
+                case "dashboard": return new DashboardPanel();
                 case "clips": case "prompts": case "notes": return new QuickListPanel(id, () => card.LastExternal, st);
                 case "procs": return new ProcessesPanel(st);
                 case "drives": return new DrivesPanel(st);

@@ -41,6 +41,9 @@ namespace StickyPro
         static System.Windows.Forms.Timer timer;
 
         public static List<ProcInfo> Last = new List<ProcInfo>();
+        public static readonly Queue<double> CpuHistory = new Queue<double>();
+        public static readonly Queue<double> RamHistory = new Queue<double>();
+        public static void PushHistory(Queue<double> history, double value) { if (history.Count >= 60) history.Dequeue(); history.Enqueue(value); }
         public static double CpuTotal;
         public static int MemLoad;
         public static ulong MemTotal, MemAvail;
@@ -62,6 +65,7 @@ namespace StickyPro
         public static void Sample()
         {
             try { SampleCore(); } catch (Exception ex) { App.Log("Process sample failed: " + ex.Message); }
+            PushHistory(CpuHistory, CpuTotal); PushHistory(RamHistory, MemLoad);
             var h = Updated; if (h != null) h();
         }
 

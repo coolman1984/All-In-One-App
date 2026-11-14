@@ -41,7 +41,7 @@ try {
         $main.MaximumSize = [Drawing.Size]::Empty
         $main.Size = New-Object Drawing.Size($width, 900)
         if ($main.Width -ne $width) { throw "Main window cannot reflow at $width px." }
-        foreach ($page in @('notes', 'prompts', 'clips', 'system', 'cards', 'snip', 'activity', 'tagged')) {
+        foreach ($page in @('dashboard', 'notes', 'prompts', 'clips', 'system', 'cards', 'snip', 'activity', 'tagged')) {
             $main.ShowPage($page)
             Layout-All $main
             Check-Actions $main ("Main/$page/$width")

@@ -30,6 +30,7 @@ namespace StickyPro
         public static readonly Font Bold = new Font(FontName, 10f, FontStyle.Bold);
         public static readonly Font Small = new Font(FontName, 8.5f);
         public static readonly Font Big = new Font(FontName, 14f, FontStyle.Bold);
+        public static readonly Font Metric = new Font(FontName, 24f, FontStyle.Bold);
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
