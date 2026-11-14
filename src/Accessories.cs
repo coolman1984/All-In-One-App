@@ -156,12 +156,14 @@ namespace StickyPro
         protected override void OnMouseMove(MouseEventArgs e) { Mouse = e.Location; Invalidate(); base.OnMouseMove(e); }
         protected override void OnPaintBackground(PaintEventArgs e) { }
         protected override void OnPaint(PaintEventArgs e) { e.Graphics.DrawImage(Frozen, e.ClipRectangle, e.ClipRectangle, GraphicsUnit.Pixel); }
-        protected static void Label(Graphics g, string text, Point at, Rectangle bounds)
+        protected Rectangle LastLabel;
+        protected void Label(Graphics g, string text, Point at, Rectangle bounds)
         {
             var size = TextRenderer.MeasureText(text, Ui.Bold);
             var r = new Rectangle(at.X + Ui.S(16), at.Y + Ui.S(16), size.Width + Ui.S(10), size.Height + Ui.S(6));
             if (r.Right > bounds.Right) r.X = at.X - r.Width - Ui.S(16);
             if (r.Bottom > bounds.Bottom) r.Y = at.Y - r.Height - Ui.S(16);
+            LastLabel = Rectangle.Inflate(r, 2, 2);
             using (var b = new SolidBrush(Color.FromArgb(230, 20, 20, 20))) g.FillRectangle(b, r);
             TextRenderer.DrawText(g, text, Ui.Bold, r, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
@@ -324,8 +326,8 @@ namespace StickyPro
     // ---------- Magnifier: follows the mouse, click-through, Esc closes, Ctrl+Plus / Ctrl+Minus zoom ----------
     class MagnifierForm : Form
     {
-        readonly Timer timer = new Timer { Interval = 40 };
-        int zoom = 3;
+        readonly Timer timer = new Timer { Interval = 16 };
+        int zoom = 3, idleTicks;
         Bitmap buffer;
         Point last = new Point(int.MinValue, 0);
         const int KeyEsc = 25001, KeyIn = 25002, KeyOut = 25003;
@@ -356,7 +358,11 @@ namespace StickyPro
             if (x + Width > wa.Right) x = p.X - Width - Ui.S(24);
             if (y + Height > wa.Bottom) y = p.Y - Height - Ui.S(24);
             if (Left != x || Top != y) Location = new Point(x, y);
-            if (p == last && buffer != null) return;
+            if (p == last && buffer != null)
+            {
+                if (++idleTicks < 6) return;   // still cursor: refresh at least every ~100 ms
+            }
+            idleTicks = 0;
             last = p;
             int w = Math.Max(1, Width / zoom), h = Math.Max(1, Height / zoom);
             if (buffer == null || buffer.Width != w || buffer.Height != h) { if (buffer != null) buffer.Dispose(); buffer = new Bitmap(w, h, PixelFormat.Format32bppArgb); }
@@ -400,7 +406,7 @@ namespace StickyPro
     class PixelRuler : Form
     {
         bool vertical;
-        readonly Timer timer = new Timer { Interval = 50 };
+        readonly Timer timer = new Timer { Interval = 16 };
         Point lastCursor;
         public PixelRuler()
         {
@@ -486,6 +492,33 @@ namespace StickyPro
     {
         Point? reference;
         public CrossHairOverlay() : base(false) { Text = "CrossHair"; Cursor = Cursors.Cross; }
+        // Invalidates only what changed: the old and new cross lines, labels and reference shapes.
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            Point o = Mouse;
+            Mouse = e.Location;
+            Invalidate(new Rectangle(o.X - 2, 0, 5, Height));
+            Invalidate(new Rectangle(Mouse.X - 2, 0, 5, Height));
+            Invalidate(new Rectangle(0, o.Y - 2, Width, 5));
+            Invalidate(new Rectangle(0, Mouse.Y - 2, Width, 5));
+            Invalidate(LastLabel);
+            Invalidate(new Rectangle(e.X - Ui.S(320), e.Y - Ui.S(120), Ui.S(640), Ui.S(240)));
+            if (reference.HasValue)
+            {
+                InvalidateBox(reference.Value, o);
+                InvalidateBox(reference.Value, Mouse);
+            }
+        }
+        // Four 5-px edges of the dashed rectangle plus the bounding box of the reference->mouse line.
+        void InvalidateBox(Point r, Point m)
+        {
+            int x0 = Math.Min(r.X, m.X), y0 = Math.Min(r.Y, m.Y), x1 = Math.Max(r.X, m.X), y1 = Math.Max(r.Y, m.Y);
+            Invalidate(new Rectangle(x0 - 2, y0 - 2, x1 - x0 + 5, 5));
+            Invalidate(new Rectangle(x0 - 2, y1 - 2, x1 - x0 + 5, 5));
+            Invalidate(new Rectangle(x0 - 2, y0 - 2, 5, y1 - y0 + 5));
+            Invalidate(new Rectangle(x1 - 2, y0 - 2, 5, y1 - y0 + 5));
+            Invalidate(Rectangle.Inflate(Rectangle.FromLTRB(x0, y0, x1, y1), 3, 3));
+        }
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -531,9 +564,20 @@ namespace StickyPro
         }
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            Rectangle before = Bounding();
             Mouse = e.Location;
             if (stage == 1) armA = e.Location; else if (stage == 2) armB = e.Location;
-            Invalidate();
+            Invalidate(Rectangle.Union(before, Bounding()));
+            Invalidate(LastLabel);
+            Invalidate(new Rectangle(e.X - Ui.S(320), e.Y - Ui.S(120), Ui.S(640), Ui.S(240)));
+            Invalidate(new Rectangle(0, 0, Ui.S(900), Ui.S(50)));
+        }
+        // Box around vertex and both arms, with room for the angle arc.
+        Rectangle Bounding()
+        {
+            int x0 = Math.Min(vertex.X, Math.Min(armA.X, armB.X)), y0 = Math.Min(vertex.Y, Math.Min(armA.Y, armB.Y));
+            int x1 = Math.Max(vertex.X, Math.Max(armA.X, armB.X)), y1 = Math.Max(vertex.Y, Math.Max(armA.Y, armB.Y));
+            return Rectangle.Inflate(Rectangle.FromLTRB(x0, y0, x1, y1), Ui.S(100), Ui.S(100));
         }
         static double Distance(Point a, Point b) { int dx = a.X - b.X, dy = a.Y - b.Y; return Math.Sqrt(dx * dx + dy * dy); }
         static double Angle(Point o, Point p) { return Math.Atan2(-(p.Y - o.Y), p.X - o.X) * 180 / Math.PI; }
