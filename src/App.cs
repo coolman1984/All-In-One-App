@@ -136,6 +136,7 @@ namespace StickyPro
         public void StartSnip(string mode, int delaySec, bool ocrOnly)
         {
             if (snipping) return;
+            if (mode == "fixed" && !CaptureCommands.FixedSize(false)) return;
             snipping = true; // Reserve the overlay during the delay as well.
             bool restoreMain = main != null && !main.IsDisposed && main.Visible && main.WindowState != FormWindowState.Minimized && Form.ActiveForm == main;
             if (restoreMain) main.Hide();
@@ -145,12 +146,13 @@ namespace StickyPro
                 Bitmap pic = null;
                 try
                 {
-                    using (var ov = new SnipOverlay(mode, false))
+                    if (mode == "repeat") pic = CaptureCommands.Repeat();
+                    else using (var ov = new SnipOverlay(mode, false))
                     {
-                        if (ov.ShowDialog() == DialogResult.OK) { pic = ov.Picture; ov.Picture = null; }
+                        if (ov.ShowDialog() == DialogResult.OK) { pic = ov.Picture; ov.Picture = null; if (!ocrOnly) CaptureCommands.Remember(ov.Mode, ov.Result, ov.Mode == "free" ? ov.FreePolygon : null); }
                     }
                 }
-                catch (Exception ex) { Log("Snip failed: " + ex.Message); }
+                catch (Exception ex) { Log("Snip failed: " + ex.Message); Balloon("Could not capture", ex.Message); }
                 finally { snipping = false; }
                 if (restoreMain && main != null && !main.IsDisposed) main.Show();
                 if (pic == null) return;

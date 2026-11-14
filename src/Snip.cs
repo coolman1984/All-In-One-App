@@ -108,6 +108,7 @@ namespace StickyPro
         public string Mode;               // rect | window | full | free
         public Rectangle Result;          // in screen coordinates
         public Bitmap Picture;            // cropped result (null for recording)
+        public List<Point> FreePolygon { get { return free.Select(p => new Point(p.X + virt.X, p.Y + virt.Y)).ToList(); } }
         readonly bool forRecording;
         readonly Bitmap frozen, dim;
         readonly Rectangle virt;
@@ -139,14 +140,14 @@ namespace StickyPro
             Cursor = Cursors.Cross;
             AutoScaleMode = AutoScaleMode.None;
 
-            bar = new FlowLayoutPanel { AutoSize = true, BackColor = Color.FromArgb(40, 40, 40), Padding = new Padding(Ui.S(4)), WrapContents = false };
-            foreach (var m in new[] { new[] { "rect", "Rectangle" }, new[] { "window", "Window" }, new[] { "full", "Full screen" }, new[] { "free", "Free-form" } })
+            bar = new FlowLayoutPanel { AutoSize = true, BackColor = Color.FromArgb(40, 40, 40), Padding = new Padding(Ui.S(4)), WrapContents = true, MaximumSize = new Size(Screen.FromPoint(Cursor.Position).WorkingArea.Width - Ui.S(20), 0) };
+            foreach (var m in CaptureCommands.Modes)
             {
                 if (forRecording && m[0] == "free") continue;
                 string id = m[0];
                 var b = new Button { Text = m[1], AutoSize = true, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, Font = Ui.Base, Margin = new Padding(Ui.S(2)), Tag = id, Cursor = Cursors.Hand };
                 b.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
-                b.Click += delegate { Mode = id; MarkMode(); Invalidate(); };
+                b.Click += delegate { if (id == "fixed" && !CaptureCommands.FixedSize(false)) return; Mode = id; MarkMode(); Invalidate(); };
                 bar.Controls.Add(b);
             }
             var x = new Button { Text = "Cancel (Esc)", AutoSize = true, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, Font = Ui.Base, Margin = new Padding(Ui.S(2)), Cursor = Cursors.Hand };
@@ -173,7 +174,7 @@ namespace StickyPro
             g.DrawImageUnscaled(dim, 0, 0);
             Rectangle sel = Rectangle.Empty;
             if (Mode == "rect" && dragging) sel = Norm(start, cur);
-            else if ((Mode == "window" || Mode == "full") && hover != Rectangle.Empty) sel = new Rectangle(hover.X - virt.X, hover.Y - virt.Y, hover.Width, hover.Height);
+            else if ((Mode == "window" || Mode == "full" || Mode == "fixed" || Mode == "control") && hover != Rectangle.Empty) sel = new Rectangle(hover.X - virt.X, hover.Y - virt.Y, hover.Width, hover.Height);
             if (sel.Width > 0 && sel.Height > 0)
             {
                 g.DrawImage(frozen, sel, sel, GraphicsUnit.Pixel);
@@ -213,7 +214,12 @@ namespace StickyPro
         {
             cur = e.Location;
             var screenPt = new Point(e.X + virt.X, e.Y + virt.Y);
-            if (Mode == "window")
+            if (Mode == "fixed" || Mode == "control")
+            {
+                var next = Mode == "fixed" ? CaptureCommands.FixedAt(screenPt, new Size(Store.Settings.FixedW, Store.Settings.FixedH), virt) : CaptureNative.BoundsAt(screenPt);
+                if (next != hover) { hover = next; Invalidate(); }
+            }
+            else if (Mode == "window")
             {
                 var w = windows.FirstOrDefault(r => r.Contains(screenPt));
                 var nh = w == Rectangle.Empty ? Screen.FromPoint(screenPt).Bounds : w;
@@ -482,7 +488,7 @@ $stream.Dispose()
             tools = new ToolStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(Ui.S(6), Ui.S(3), Ui.S(6), Ui.S(3)), Font = Ui.Base, ImageScalingSize = Ui.S(16, 16) };
             Ui.ThemeMenu(tools);
             var snip = new ToolStripDropDownButton("New snip");
-            foreach (var m in new[] { new[] { "rect", "Rectangle" }, new[] { "window", "Window" }, new[] { "full", "Full screen" }, new[] { "free", "Free-form" } })
+            foreach (var m in CaptureCommands.Modes)
             {
                 string id = m[0];
                 snip.DropDownItems.Add(m[1], null, delegate { Close(); App.I.StartSnip(id, 0, false); });
@@ -1294,6 +1300,10 @@ $stream.Dispose()
             bar.Controls.Add(Ui.Btn("+  New snip", delegate { App.I.StartSnip("rect", Delay(), false); }, true));
             bar.Controls.Add(Ui.Btn("Window", delegate { App.I.StartSnip("window", Delay(), false); }));
             bar.Controls.Add(Ui.Btn("Full screen", delegate { App.I.StartSnip("full", Delay(), false); }));
+            bar.Controls.Add(Ui.Btn("Fixed Region", delegate { App.I.StartSnip("fixed", Delay(), false); }));
+            bar.Controls.Add(Ui.Btn("Fixed size...", delegate { CaptureCommands.FixedSize(true); }));
+            bar.Controls.Add(Ui.Btn("Window Control", delegate { App.I.StartSnip("control", Delay(), false); }));
+            bar.Controls.Add(Ui.Btn("Repeat Last Capture", delegate { App.I.StartSnip("repeat", 0, false); }));
             bar.Controls.Add(Ui.Btn("Free-form", delegate { App.I.StartSnip("free", Delay(), false); }));
             bar.Controls.Add(Ui.Btn("Text from screen", delegate { App.I.StartSnip("rect", Delay(), true); }));
             delay = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(100), Margin = new Padding(0, Ui.S(4), Ui.S(6), 0) };

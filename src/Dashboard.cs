@@ -131,6 +131,10 @@ namespace StickyPro
                 Ui.Btn("Record", delegate { App.I.StartRecord("rect"); }), Ui.Btn("Text from screen", delegate { App.I.StartSnip("rect", 0, true); }),
                 Ui.Btn("Cleanup", delegate { App.I.ShowMain("system:drives"); }));
             LayoutKit.Add(table, actions, false);
+            var captures = LayoutKit.Actions(DockStyle.Fill);
+            foreach (var capture in CaptureCommands.Modes) { string mode = capture[0]; captures.Controls.Add(Ui.Btn(capture[1], delegate { App.I.StartSnip(mode, 0, false); })); }
+            captures.Controls.Add(Ui.Btn("Repeat Last Capture", delegate { App.I.StartSnip("repeat", 0, false); }));
+            LayoutKit.Add(table, captures, false);
             var grid = new TileGrid(Ui.S(220), Ui.S(136), 4); grid.Dock = DockStyle.Fill;
             Add(grid, "cpu", "CPU", "system:procs"); Add(grid, "ram", "RAM", "system:procs"); Add(grid, "C", "Disk C", "system:drives"); Add(grid, "D", "Disk D", "system:drives");
             Add(grid, "apps", "Top 3 memory apps", "system:procs"); Add(grid, "clips", "Clipboard items today", "clips"); Add(grid, "prompts", "Prompts", "prompts");

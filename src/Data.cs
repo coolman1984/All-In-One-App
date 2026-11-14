@@ -120,6 +120,11 @@ namespace StickyPro
         public bool SnipAutoSave = true;
         public bool SnipAutoCopy = true;
         public string SnipCopyMode = "image";
+        public int FixedW = 800, FixedH = 600;
+        public bool FixedReady;
+        public string LastCaptureMode = "rect";
+        public int LastX, LastY, LastW, LastH;
+        public List<int> LastPolygon = new List<int>();
         public string OcrLang = "";
         public bool RecordMic;
         public int RecordFps = 30;
