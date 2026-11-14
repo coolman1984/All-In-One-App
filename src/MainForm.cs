@@ -397,7 +397,7 @@ namespace StickyPro
         readonly MainForm owner;
         readonly TextBox search;
         readonly ComboBox view, colorFilter, tagFilter;
-        readonly CardList list;
+        readonly CardGrid list;
         bool reloading;
 
         public NotesPage(MainForm owner)
@@ -405,9 +405,10 @@ namespace StickyPro
             this.owner = owner;
             Dock = DockStyle.Fill;
 
-            list = new CardList();
+            list = new CardGrid();
             list.Dock = DockStyle.Fill;
-            list.ItemHeight = Math.Min(255, Ui.S(78));
+            list.ItemHeight = Ui.S(78);
+            list.MinColumnWidth = Ui.S(320);
             list.Info = o => NoteInfo((Note)o);
             list.DoubleClick += delegate { OpenSelected(); };
             list.KeyDown += (s, e) =>
