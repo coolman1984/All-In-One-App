@@ -19,7 +19,7 @@ function Set-Store([string]$name, $value) {
     $assembly.GetType('StickyPro.Store').GetField($name, $flags).SetValue($null, $value)
 }
 function Get-Store([string]$name) {
-    $assembly.GetType('StickyPro.Store').GetField($name, $flags).GetValue($null)
+    return ,$assembly.GetType('StickyPro.Store').GetField($name, $flags).GetValue($null)
 }
 
 $fixture = Join-Path $root ('build-test\regression-' + [Guid]::NewGuid().ToString('N'))
@@ -47,6 +47,17 @@ Assert (Get-Store 'taggedDirty') 'Failed category save lost pending changes.'
 [IO.Directory]::Delete($blockedTemp)
 Invoke-Static 'Store' 'SaveNow' @()
 Assert (-not (Get-Store 'taggedDirty')) 'Tagged/category retry did not finish.'
+
+# Recovery must retain the good backup when replacing a corrupt primary.
+$notesPath = Join-Path $fixture 'notes.json'
+[IO.File]::WriteAllText(($notesPath + '.bak'), '[]')
+[IO.File]::WriteAllText($notesPath, '{broken')
+$read = $assembly.GetType('StickyPro.Store').GetMethod('Read', $flags).MakeGenericMethod(@((Get-Store 'Notes').GetType()))
+$loaded = $read.Invoke($null, @('notes.json'))
+Assert ($null -ne $loaded -and $loaded.Count -eq 0) 'Could not recover notes from the fixture backup.'
+Set-Store 'notesDirty' $true
+Invoke-Static 'Store' 'SaveNow' @()
+Assert ([IO.File]::ReadAllText(($notesPath + '.bak')) -eq '[]') 'Recovery overwrote the good backup with corrupt JSON.'
 
 # Ensure the ABI layouts used by the x64 build match the Windows structures.
 foreach ($case in @(
@@ -92,4 +103,18 @@ Assert ((Get-Store 'Clips').Count -eq 0) 'Touching a removed queued clip resurre
 # Defective imported timestamp values must not crash rendering.
 [void](Invoke-Static 'Ui' 'Ago' @([long]::MaxValue))
 
-Write-Host 'REGRESSIONS OK: save retry, paired categories, x64 layouts, tiny paths, hotkeys, removed clips, invalid timestamps'
+# Accessing the image list after temporary source bitmaps are disposed must work.
+$icons = $assembly.GetType('StickyPro.ProcMeta').GetField('Icons', $flags).GetValue($null)
+$icon = $icons.Images[0]
+Assert ($icon.Width -gt 0) 'Process image list retained a disposed source bitmap.'
+$icon.Dispose()
+
+# Stored image names cannot escape the fixture image folder.
+$clip.Image = '..\outside.png'
+Assert ((Invoke-Static 'Store' 'ImagePath' @($clip)) -eq '') 'Stored image path escaped its image folder.'
+$names = New-Object 'Collections.Generic.HashSet[string]'
+for ($i = 0; $i -lt 100; $i++) {
+    Assert ($names.Add((Invoke-Static 'Shot' 'NewName' @('.png')))) 'Rapid snips reused a filename.'
+}
+
+Write-Host 'REGRESSIONS OK: save retry/recovery, categories, ABI layouts, paths, hotkeys, removed clips, timestamps, image ownership, unique snips'

@@ -28,6 +28,7 @@ namespace StickyPro
         DateTime suppressUntil = DateTime.MinValue;
         System.Windows.Forms.Timer clipTimer, reminderTimer;
         string pendingSource = "";
+        int clipAttempts;
         ToolStripMenuItem miPause, miStartup, miQueue;
         readonly Dictionary<uint, string> procNames = new Dictionary<uint, string>();
         readonly List<int> registered = new List<int>();
@@ -459,6 +460,7 @@ namespace StickyPro
         {
             if (Store.Settings.Paused || DateTime.Now < suppressUntil) return;
             pendingSource = ForegroundProcess();
+            clipAttempts = 0;
             clipTimer.Stop();
             clipTimer.Start();
         }
@@ -484,11 +486,8 @@ namespace StickyPro
         {
             if (Store.Settings.Paused || DateTime.Now < suppressUntil) return;
             IDataObject d = null;
-            for (int i = 0; i < 8 && d == null; i++)
-            {
-                try { d = Clipboard.GetDataObject(); }
-                catch { Thread.Sleep(40); }
-            }
+            try { d = Clipboard.GetDataObject(); }
+            catch { if (++clipAttempts < 8) clipTimer.Start(); return; }
             if (d == null) return;
             try
             {
@@ -632,15 +631,6 @@ namespace StickyPro
             if (tries > 0) Ui.Later(25, () => AfterModifiers(action, tries - 1));
         }
 
-        static void WaitForModifiersUp()
-        {
-            for (int i = 0; i < 40; i++)
-            {
-                if (!Native.Down(0x11) && !Native.Down(0x12) && !Native.Down(0x10) && !Native.Down(0x5B) && !Native.Down(0x5C)) return;
-                Thread.Sleep(25);
-            }
-        }
-
         void PastePlain()
         {
             IntPtr target = Native.GetForegroundWindow();
@@ -696,26 +686,33 @@ namespace StickyPro
 
         void AddSelectionAsPrompt()
         {
-            Ui.Later(30, () =>
+            IntPtr target = Native.GetForegroundWindow();
+            AfterModifiers(() =>
             {
-                WaitForModifiersUp();
+                if (Native.GetForegroundWindow() != target) return;
                 uint before = Native.GetClipboardSequenceNumber();
                 try { SendKeys.SendWait("^c"); } catch { }
-                string text = null;
-                for (int i = 0; i < 20; i++)
+                PollSelection(target, before, 20);
+            }, 40);
+        }
+
+        void PollSelection(IntPtr target, uint before, int tries)
+        {
+            Ui.Later(25, () =>
+            {
+                if (Native.GetForegroundWindow() != target) return;
+                uint sequence = Native.GetClipboardSequenceNumber();
+                if (sequence == before && tries > 0) { PollSelection(target, before, tries - 1); return; }
+                if (sequence == before) { Balloon("Nothing selected", "Select some text first, then press " + Hotkeys.Get("addprompt") + "."); return; }
+                Ui.Later(60, () =>
                 {
-                    Application.DoEvents();
-                    if (Native.GetClipboardSequenceNumber() != before)
-                    {
-                        Thread.Sleep(60);
-                        try { text = Clipboard.GetText(); } catch { }
-                        break;
-                    }
-                    Thread.Sleep(25);
-                }
-                if (string.IsNullOrWhiteSpace(text)) { Balloon("Nothing selected", "Select some text first, then press " + Hotkeys.Get("addprompt") + "."); return; }
-                Store.NewPrompt(Store.TitleFrom(text), text.Trim(), "Inbox");
-                Balloon("Saved to Prompts", "Category: Inbox - " + Store.TitleFrom(text));
+                    if (Native.GetClipboardSequenceNumber() != sequence) return;
+                    string text = null;
+                    try { text = Clipboard.GetText(); } catch { }
+                    if (string.IsNullOrWhiteSpace(text)) { Balloon("Nothing selected", "The selection has no text."); return; }
+                    Store.NewPrompt(Store.TitleFrom(text), text.Trim(), "Inbox");
+                    Balloon("Saved to Prompts", "Category: Inbox - " + Store.TitleFrom(text));
+                });
             });
         }
 
@@ -871,16 +868,21 @@ namespace StickyPro
         }
 
         bool exitWaiting;
+        bool exiting;
         void RecordingFinished() { Recorder.Finished -= RecordingFinished; exitWaiting = false; Exit(); }
 
         public void Exit()
         {
+            if (exiting) return;
             if (Recorder.Active || Recorder.Saving)
             {
                 if (!exitWaiting) { exitWaiting = true; Recorder.Finished += RecordingFinished; if (Recorder.Active) Recorder.Stop(true); }
                 return;
             }
             FlushAll();
+            if (Store.Pending) { Balloon("Could not save changes", "The app will stay open and retry. Check free space and folder permissions."); return; }
+            exiting = true;
+            clipTimer.Dispose(); reminderTimer.Dispose();
             Snippets.Stop();
             ActivityMonitor.Stop();
             if (Recorder.Active) Recorder.Stop(true);
@@ -893,6 +895,13 @@ namespace StickyPro
             foreach (var f in cardForms.Values.ToList()) f.Close();
             Store.SaveNow();
             if (main != null && !main.IsDisposed) { main.Exiting = true; main.Close(); }
+            if (quick != null && !quick.IsDisposed) quick.Dispose();
+            Store.StopSaver();
+            Store.PromptsChanged -= Snippets.Update;
+            Thumbs.Clear();
+            msg.Close();
+            Sync.Dispose();
+            AppIcon.Dispose();
             ExitThread();
         }
 
@@ -919,6 +928,8 @@ namespace StickyPro
             cp.Parent = (IntPtr)(-3); // HWND_MESSAGE
             CreateHandle(cp);
         }
+
+        public void Close() { DestroyHandle(); }
 
         protected override void WndProc(ref Message m)
         {

@@ -359,8 +359,10 @@ namespace StickyPro
 
         void ToggleStyle(FontStyle s)
         {
-            var f = rtb.SelectionFont ?? rtb.Font;
+            var selected = rtb.SelectionFont;
+            var f = selected ?? rtb.Font;
             try { using (var styled = new Font(f, f.Style ^ s)) rtb.SelectionFont = styled; } catch { }
+            finally { if (selected != null) selected.Dispose(); }
             rtb.Focus();
         }
 

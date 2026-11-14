@@ -150,6 +150,9 @@ namespace StickyPro
         public static void MarkHistory() { historyDirty = true; Kick(); }
         public static void RaiseCards() { var h = CardsChanged; if (h != null) h(); }
         static System.Windows.Forms.Timer saveTimer;
+        static readonly HashSet<string> recovered = new HashSet<string>();
+        public static bool Pending { get { return notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty; } }
+        public static void StopSaver() { if (saveTimer != null) { saveTimer.Dispose(); saveTimer = null; } }
 
         public static string NewId() { return Guid.NewGuid().ToString("N"); }
         public static long Now() { return DateTime.Now.Ticks; }
@@ -183,12 +186,14 @@ namespace StickyPro
             if (TagCats.Count == 0)
                 TagCats.AddRange(new[] { new TagCategory { Name = "Urgent", Color = "Red" }, new TagCategory { Name = "Review", Color = "Yellow" }, new TagCategory { Name = "Important", Color = "Green" } });
             foreach (var a in Activity) { if (a.Id == null) a.Id = NewId(); if (a.Process == null) a.Process = ""; if (a.Event == null) a.Event = ""; }
+            foreach (var a in Activity) { if (a.Time < 0 || a.Time > DateTime.MaxValue.Ticks) a.Time = 0; }
             foreach (var t in Tagged) { if (t.Id == null) t.Id = NewId(); if (t.Category == null) t.Category = TagCats[0].Name; if (t.Note == null) t.Note = ""; }
             Cards.RemoveAll(c => c == null);
             foreach (var c in Cards) { if (c.Id == null) c.Id = NewId(); if (c.Features == null) c.Features = new List<string>(); if (c.Title == null) c.Title = "Card"; if (c.Opacity < 30 || c.Opacity > 100) c.Opacity = 100; }
             if (History.CleanSizes == null) History.CleanSizes = new Dictionary<string, long>();
             if (History.FolderSizes == null) History.FolderSizes = new Dictionary<string, long>();
             if (History.DriveFreeDay == null) History.DriveFreeDay = new Dictionary<string, long>();
+            foreach (var k in History.DriveFreeDay.Keys.Where(k => k.Length < 3).ToList()) History.DriveFreeDay.Remove(k);
             if (Settings.MaxClips < 50) Settings.MaxClips = 1000;
             Notes.RemoveAll(n => n == null);
             Prompts.RemoveAll(p => p == null);
@@ -215,7 +220,7 @@ namespace StickyPro
                     if (File.Exists(file))
                     {
                         var o = Js().Deserialize<T>(File.ReadAllText(file, Encoding.UTF8));
-                        if (o != null) return o;
+                        if (o != null) { if (file != p) recovered.Add(name); return o; }
                     }
                 }
                 catch (Exception ex)
@@ -232,8 +237,10 @@ namespace StickyPro
             string p = Path.Combine(Dir, name);
             string tmp = p + ".tmp";
             File.WriteAllText(tmp, Js().Serialize(o), new UTF8Encoding(false));
-            if (File.Exists(p)) File.Replace(tmp, p, p + ".bak", true);
+            // Do not replace a known-good recovery backup with the corrupt primary.
+            if (File.Exists(p)) File.Replace(tmp, p, recovered.Contains(name) ? null : p + ".bak", true);
             else File.Move(tmp, p);
+            recovered.Remove(name);
         }
 
         static void Kick() { if (saveTimer != null) { saveTimer.Stop(); saveTimer.Start(); } }
