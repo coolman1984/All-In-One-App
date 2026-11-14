@@ -382,6 +382,7 @@ namespace StickyPro
         public void Reload()
         {
             loaded = true;
+            status("Loading...");
             ThreadPool.QueueUserWorkItem(delegate
             {
                 List<StartupItem> list;
