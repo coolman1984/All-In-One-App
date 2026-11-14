@@ -64,5 +64,14 @@ move selected, notes, remove from list (files are never deleted).
 ## Data
 Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic `.bak` copy of each file.
 
+## Interface and reliability
+- Rounded buttons and inputs, keyboard focus feedback, and consistent light/dark controls. Windows 11 supplies rounded window corners where supported.
+- Toolbars, note formatting tools, and card tabs wrap in narrow windows. Prompts use a category dropdown when the sidebar would crowd the editor; short windows can scroll the main navigation.
+- Failed saves are retried. If changes cannot be saved when you choose Exit, the app stays open and explains why. Recovery preserves the last good backup.
+- Delayed pastes and snippet expansion check their target window. Restoring clipboard text never replaces a newer copy; failed queue copies stay queued.
+- Recordings finish saving before a normal app exit. If merging fails, the original segments are kept and their locations are logged. Rapid snips and backups receive distinct filenames.
+
+Review checks (leave the running app open): `pwsh -NoProfile -File tools\test-build.ps1`, then run `tools\test-regressions.ps1`, `tools\test-forms.ps1`, and `tools\test-visual.ps1` with Windows PowerShell 5.1. These load types and render controls offscreen without starting the app or accessing `data`. Preview images and isolated fixtures stay under `build-test`.
+
 ## Build
 `powershell -ExecutionPolicy Bypass -File build.ps1` (asks the running copy to save and exit, then rebuilds).

@@ -48,9 +48,11 @@ namespace StickyPro
             Font = Ui.Base;
             BackColor = Ui.Bg;
             ForeColor = Ui.Text;
-            Size = Ui.S(1120, 700);
-            MinimumSize = Ui.S(800, 480);
-            StartPosition = FormStartPosition.CenterScreen;
+            var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+            Size = new Size(Math.Min(Ui.S(1120), work.Width), Math.Min(Ui.S(700), work.Height));
+            MinimumSize = new Size(Math.Min(Ui.S(800), work.Width), Math.Min(Ui.S(480), work.Height));
+            StartPosition = FormStartPosition.Manual;
+            Location = new Point(work.Left + (work.Width - Width) / 2, work.Top + (work.Height - Height) / 2);
             KeyPreview = true;
             Ui.DarkTitle(this);
 
@@ -94,6 +96,9 @@ namespace StickyPro
             nav.Width = Ui.S(230);
             nav.BackColor = Ui.Nav;
             nav.Padding = new Padding(0, Ui.S(6), 0, Ui.S(6));
+            var navigation = new Panel { Dock = DockStyle.Fill, AutoScroll = true, AutoScrollMinSize = Ui.S(0, 336) };
+            Ui.DarkScroll(navigation);
+            nav.Controls.Add(navigation);
 
             keys = new Label();
             UpdateShortcutHelp();
@@ -113,9 +118,9 @@ namespace StickyPro
             navSnip.Click += delegate { ShowPage("snip"); };
             navActivity.Click += delegate { ShowPage("activity"); };
             navTagged.Click += delegate { ShowPage("tagged"); };
-            nav.Controls.Add(navTagged);
-            nav.Controls.Add(navActivity);
-            nav.Controls.Add(navSnip);
+            navigation.Controls.Add(navTagged);
+            navigation.Controls.Add(navActivity);
+            navigation.Controls.Add(navSnip);
 
             navClips = new NavItem(Ui.GClip, "Clipboard history");
             navPrompts = new NavItem(Ui.GPrompt, "Prompts & snippets");
@@ -127,11 +132,11 @@ namespace StickyPro
             navNotes.Click += delegate { ShowPage("notes"); };
             navSystem.Click += delegate { ShowPage("system"); };
             navCards.Click += delegate { ShowPage("cards"); };
-            nav.Controls.Add(navCards);
-            nav.Controls.Add(navSystem);
-            nav.Controls.Add(navClips);
-            nav.Controls.Add(navPrompts);
-            nav.Controls.Add(navNotes);
+            navigation.Controls.Add(navCards);
+            navigation.Controls.Add(navSystem);
+            navigation.Controls.Add(navClips);
+            navigation.Controls.Add(navPrompts);
+            navigation.Controls.Add(navNotes);
 
             var title = new Label();
             title.Dock = DockStyle.Top;
@@ -391,7 +396,7 @@ namespace StickyPro
             ci.Back = c.Body;
             ci.Strip = c.Header;
             ci.Fore = c.Text;
-            ci.SubFore = c.Name == "Charcoal" ? Color.FromArgb(200, 200, 200) : Color.FromArgb(105, 105, 105);
+            ci.SubFore = c.Name == "Charcoal" ? Ui.NoteMutedDark : Ui.NoteMuted;
             return ci;
         }
 
@@ -496,7 +501,7 @@ namespace StickyPro
         readonly ListBox cats;
         readonly CardList list;
         readonly TextBox search, tbTitle, tbTags, tbBody, tbTrigger;
-        readonly ComboBox cbCat, sort;
+        readonly ComboBox cbCat, sort, compactCats;
         readonly Button btnFav, btnHistory;
         readonly TableLayoutPanel editor;
         readonly Timer catTimer = new Timer();
@@ -516,13 +521,14 @@ namespace StickyPro
             editor.BackColor = Ui.Card;
             editor.Padding = new Padding(Ui.S(14), Ui.S(10), Ui.S(14), Ui.S(10));
             editor.ColumnCount = 1;
+            editor.AutoScroll = true;
             editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            tbTitle = new TextBox(); tbTitle.Font = Ui.Bold;
+            tbTitle = new FluentTextBox(); tbTitle.Font = Ui.Bold;
             cbCat = new ComboBox(); cbCat.DropDownStyle = ComboBoxStyle.DropDown;
-            tbTags = new TextBox();
-            tbTrigger = new TextBox();
+            tbTags = new FluentTextBox();
+            tbTrigger = new FluentTextBox();
             Ui.Cue(tbTrigger, "e.g.  ;sig   (type this anywhere and it becomes the prompt text)");
-            tbBody = new TextBox(); tbBody.Multiline = true; tbBody.ScrollBars = ScrollBars.Vertical; tbBody.AcceptsReturn = true; tbBody.AcceptsTab = true;
+            tbBody = new FluentTextBox(); tbBody.Multiline = true; tbBody.ScrollBars = ScrollBars.Vertical; tbBody.AcceptsReturn = true; tbBody.AcceptsTab = true;
             Ui.UseFont(tbBody, new Font(Store.Settings.NoteFontName, 10.5f)); tbBody.WordWrap = true;
             foreach (var c in new Control[] { tbTitle, cbCat, tbTags, tbTrigger, tbBody }) { c.Dock = DockStyle.Fill; c.Margin = new Padding(0, 0, 0, Ui.S(6)); }
             AddRow(FieldLabel("Title"), SizeType.AutoSize);
@@ -584,6 +590,10 @@ namespace StickyPro
             var searchWrap = new Panel(); searchWrap.Dock = DockStyle.Top; searchWrap.Height = Ui.S(34); searchWrap.Padding = new Padding(0, Ui.S(2), 0, Ui.S(6));
             searchWrap.Controls.Add(search);
             mid.Controls.Add(searchWrap);
+            compactCats = MainForm.Combo(200);
+            compactCats.Dock = DockStyle.Top;
+            compactCats.SelectedIndexChanged += delegate { if (compactCats.SelectedIndex >= 0 && compactCats.SelectedIndex < cats.Items.Count) cats.SelectedIndex = compactCats.SelectedIndex; };
+            mid.Controls.Add(compactCats);
             Controls.Add(mid);
 
             // ---- left: categories ----
@@ -595,7 +605,7 @@ namespace StickyPro
             cats.ItemHeight = Ui.S(30);
             cats.IntegralHeight = false;
             cats.DrawItem += DrawCat;
-            cats.SelectedIndexChanged += delegate { var c = cats.SelectedItem as CatItem; if (c != null && c.Key != catKey) { catKey = c.Key; RefreshList(); } };
+            cats.SelectedIndexChanged += delegate { var c = cats.SelectedItem as CatItem; if (c != null && c.Key != catKey) { catKey = c.Key; RefreshList(); } if (cats.SelectedIndex >= 0 && cats.SelectedIndex < compactCats.Items.Count) compactCats.SelectedIndex = cats.SelectedIndex; };
             var catMenu = Ui.Menu();
             catMenu.Items.Add("Rename category", null, delegate { RenameCategory(); });
             Ui.ThemeMenu(catMenu);
@@ -605,10 +615,20 @@ namespace StickyPro
             var io = new FlowLayoutPanel(); io.Dock = DockStyle.Bottom; io.Height = Ui.S(36); io.WrapContents = false;
             io.Controls.Add(Ui.Btn("Import", delegate { Import(); }));
             io.Controls.Add(Ui.Btn("Export", delegate { Export(); }));
-            left.Controls.Add(io);
+            mid.Controls.Add(io);
             var head = MainForm.Heading("Prompts"); head.Dock = DockStyle.Top; head.AutoSize = false; head.Height = Ui.S(40);
             left.Controls.Add(head);
             Controls.Add(left);
+
+            EventHandler layout = delegate
+            {
+                bool compact = Width < Ui.S(850);
+                left.Visible = !compact;
+                compactCats.Visible = compact;
+                mid.Width = compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Ui.S(340);
+            };
+            Resize += layout;
+            layout(this, EventArgs.Empty);
 
             LoadEditor(null);
         }
@@ -680,6 +700,11 @@ namespace StickyPro
             if (idx < 0) { idx = 0; catKey = "*all"; }
             cats.SelectedIndex = idx;
             cats.EndUpdate();
+            compactCats.BeginUpdate();
+            compactCats.Items.Clear();
+            compactCats.Items.AddRange(items.Cast<object>().ToArray());
+            compactCats.SelectedIndex = idx;
+            compactCats.EndUpdate();
 
             string typed = cbCat.Text;
             bool wasLoading = loading; loading = true;
@@ -828,7 +853,7 @@ namespace StickyPro
                 f.MinimumSize = Ui.S(500, 300);
                 var lb = new ListBox(); lb.Dock = DockStyle.Left; lb.Width = Ui.S(240); lb.IntegralHeight = false; lb.Font = Ui.Base;
                 foreach (var v in cur.Versions) lb.Items.Add(Ui.Ago(v.Time) + "  -  " + Ui.OneLine(v.Title, 30));
-                var tb = new TextBox(); tb.Multiline = true; tb.ReadOnly = true; tb.ScrollBars = ScrollBars.Vertical; tb.Dock = DockStyle.Fill; tb.Font = Ui.Base;
+                var tb = new FluentTextBox(); tb.Multiline = true; tb.ReadOnly = true; tb.ScrollBars = ScrollBars.Vertical; tb.Dock = DockStyle.Fill; tb.Font = Ui.Base;
                 var bar = new FlowLayoutPanel(); bar.Dock = DockStyle.Bottom; bar.Height = Ui.S(42); bar.FlowDirection = FlowDirection.RightToLeft; bar.Padding = new Padding(Ui.S(6));
                 var restore = Ui.Btn("Restore this version", null, true); restore.DialogResult = DialogResult.OK;
                 var close = Ui.Btn("Close", null); close.DialogResult = DialogResult.Cancel;
@@ -971,7 +996,7 @@ namespace StickyPro
             Controls.Add(list);
 
             var right = new Panel(); right.Dock = DockStyle.Right; right.Width = Ui.S(340); right.Padding = new Padding(Ui.S(10), Ui.S(4), 0, Ui.S(4));
-            preview = new TextBox(); preview.Multiline = true; preview.ReadOnly = true; preview.ScrollBars = ScrollBars.Vertical; preview.Dock = DockStyle.Fill;
+            preview = new FluentTextBox(); preview.Multiline = true; preview.ReadOnly = true; preview.ScrollBars = ScrollBars.Vertical; preview.Dock = DockStyle.Fill;
             preview.BorderStyle = BorderStyle.FixedSingle; preview.Font = Ui.Base;
             picture = new PictureBox(); picture.Dock = DockStyle.Fill; picture.SizeMode = PictureBoxSizeMode.Zoom; picture.BackColor = Ui.Card; picture.Visible = false;
             previewMeta = new Label(); previewMeta.Dock = DockStyle.Top; previewMeta.Height = Ui.S(24); previewMeta.ForeColor = Ui.Muted; previewMeta.Font = Ui.Small;

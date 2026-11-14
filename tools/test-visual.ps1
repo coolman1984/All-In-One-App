@@ -39,6 +39,18 @@ foreach ($dark in @($false, $true)) {
         $search.Text = 'Search notes and tags'
         $search.SetBounds(410, 76, 320, 30)
         $panel.Controls.Add($search)
+        $combo = New-Object Windows.Forms.ComboBox
+        $combo.DropDownStyle = 'DropDownList'
+        [void]$combo.Items.Add('All notes')
+        [void]$combo.Items.Add('Arabic / RTL')
+        $combo.SelectedIndex = 0
+        $combo.SetBounds(410, 116, 190, 28)
+        $panel.Controls.Add($combo)
+        $check = New-Object Windows.Forms.CheckBox
+        $check.Text = 'Keep on top'
+        $check.Checked = $true
+        $check.SetBounds(410, 150, 220, 28)
+        $panel.Controls.Add($check)
         $list = [Activator]::CreateInstance($assembly.GetType('StickyPro.FastList'), $true)
         $list.SetBounds(24, 190, 706, 200)
         [void]$list.Columns.Add('Feature', 210)
@@ -66,6 +78,16 @@ foreach ($dark in @($false, $true)) {
             $name = if ($dark) { 'controls-dark.png' } else { 'controls-light.png' }
             $bitmap.Save((Join-Path $root ('build-test\' + $name)), [Drawing.Imaging.ImageFormat]::Png)
         } finally { $bitmap.Dispose() }
+        $panel.Scale((New-Object Drawing.SizeF(1.5, 1.5)))
+        $panel.PerformLayout(); $toolbarHost.PerformLayout(); $bar.PerformLayout()
+        if ($bar.Width -gt $toolbarHost.Width) { throw 'Scaled toolbar escaped its host.' }
+        foreach ($button in $bar.Controls) { if ($button.Right -gt $bar.ClientSize.Width -or $button.Bottom -gt $bar.ClientSize.Height) { throw 'Scaled toolbar clipped an action.' } }
+        $scaled = New-Object Drawing.Bitmap($panel.Width, $panel.Height)
+        try {
+            $panel.DrawToBitmap($scaled, (New-Object Drawing.Rectangle(0, 0, $panel.Width, $panel.Height)))
+            $name = if ($dark) { 'controls-dark-150.png' } else { 'controls-light-150.png' }
+            $scaled.Save((Join-Path $root ('build-test\' + $name)), [Drawing.Imaging.ImageFormat]::Png)
+        } finally { $scaled.Dispose() }
     } finally { $panel.Dispose() }
 }
-Write-Host 'VISUAL OK: offscreen light/dark controls and narrow toolbar wrapping'
+Write-Host 'VISUAL OK: light/dark controls, combo/check states, narrow wrapping, 150% layout scaling (offscreen)'

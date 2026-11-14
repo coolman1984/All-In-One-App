@@ -73,7 +73,7 @@ namespace StickyPro
             lv.ContextMenuStrip = m;
             Controls.Add(lv);
 
-            moveBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(38), WrapContents = false };
+            moveBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 38), WrapContents = true };
             Controls.Add(moveBar);
 
             var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 0, 0, Ui.S(4)) };

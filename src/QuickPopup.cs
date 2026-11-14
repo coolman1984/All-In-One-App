@@ -96,6 +96,7 @@ namespace StickyPro
             SetMode(m);
             var c = Cursor.Position;
             var wa = Screen.FromPoint(c).WorkingArea;
+            Size = new Size(Math.Min(Ui.S(500), wa.Width), Math.Min(Ui.S(540), wa.Height));
             int x = Math.Max(wa.Left, Math.Min(c.X - Width / 3, wa.Right - Width));
             int y = Math.Max(wa.Top, Math.Min(c.Y + Ui.S(12), wa.Bottom - Height));
             Location = new Point(x, y);

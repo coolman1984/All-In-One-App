@@ -9,7 +9,8 @@ namespace StickyPro
     {
         public readonly Note N;
         public bool Deleting, Exiting;
-        readonly EdgePanel header, bodyHost, toolbar;
+        readonly EdgePanel header, bodyHost;
+        readonly FlowLayoutPanel toolbar;
         readonly RichTextBox rtb;
         readonly IconButton btnAdd, btnPin, btnMenu, btnClose, btnClock;
         readonly Label btnRtl;
@@ -26,6 +27,7 @@ namespace StickyPro
             StartPosition = FormStartPosition.Manual;
             KeyPreview = true;
             Icon = App.AppIcon;
+            Ui.DarkTitle(this);
             Text = "Sticky note";
             MinimumSize = Ui.S(200, 150);
             TopMost = n.Top;
@@ -58,13 +60,14 @@ namespace StickyPro
             bodyHost.Controls.Add(rtb);
             Controls.Add(bodyHost);
 
-            toolbar = new EdgePanel();
+            toolbar = new EdgeFlowPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, FlowDirection = FlowDirection.RightToLeft };
             toolbar.Dock = DockStyle.Bottom;
             toolbar.Height = Ui.S(34);
             toolbar.Padding = new Padding(Ui.S(6), 0, Ui.S(6), Ui.S(2));
             btnRtl = new IconButton("ع", 10f, "Right-to-left / Arabic (Ctrl+Shift+R)", tips, delegate { SetRtl(!N.Rtl); rtb.Focus(); });
             Ui.UseFont(btnRtl, new Font("Segoe UI", 11f, FontStyle.Bold));
             btnRtl.Dock = DockStyle.Right;
+            btnRtl.Size = Ui.S(34, 30); btnRtl.Margin = new Padding(0);
             toolbar.Controls.Add(btnRtl);
             AddTool(Ui.GImage, "Insert image", delegate { InsertImage(); });
             AddTool(Ui.GBullets, "Bullets (Ctrl+Shift+L)", delegate { ToggleBullets(); });
@@ -141,6 +144,7 @@ namespace StickyPro
             var b = new IconButton(glyph, 10f, tip, tips, click);
             b.Dock = DockStyle.Left;
             b.Width = Ui.S(32);
+            b.Height = Ui.S(30); b.Margin = new Padding(0);
             toolbar.Controls.Add(b);
         }
 

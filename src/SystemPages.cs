@@ -81,8 +81,8 @@ namespace StickyPro
             protected override void WndProc(ref Message m)
             {
                 base.WndProc(ref m);
-                if (m.Msg != 0xF && m.Msg != 0x318) return;
-                using (var g = m.Msg == 0x318 ? Graphics.FromHdc(m.WParam) : Graphics.FromHwnd(Handle))
+                if (m.Msg != 0xF && m.Msg != 0x318 && m.Msg != 0x317) return;
+                using (var g = m.Msg == 0x318 || m.Msg == 0x317 ? Graphics.FromHdc(m.WParam) : Graphics.FromHwnd(Handle))
                 using (var b = new SolidBrush(Ui.Nav))
                 {
                     int right = owner.Columns.Cast<ColumnHeader>().Sum(c => c.Width) - Native.GetScrollPos(owner.Handle, 0);
@@ -204,7 +204,7 @@ namespace StickyPro
             lv.ContextMenuStrip = m;
             Controls.Add(lv);
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(36), WrapContents = false };
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 36), WrapContents = true };
             search = Ui.Search("Filter processes");
             search.Width = Ui.S(170);
             search.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
@@ -288,7 +288,7 @@ namespace StickyPro
 
             double used = ProcessSampler.MemTotal - ProcessSampler.MemAvail;
             summary.Text = "CPU " + ProcessSampler.CpuTotal.ToString("0") + "%    RAM " + ProcessSampler.MemLoad + "%  (" + Fmt.Bytes((long)used) + " of " + Fmt.Bytes((long)ProcessSampler.MemTotal) + ")    " + src.Count + " processes";
-            summary.ForeColor = ProcessSampler.MemLoad >= 85 ? Color.FromArgb(220, 60, 60) : Ui.Text;
+            summary.ForeColor = ProcessSampler.MemLoad >= 85 ? Ui.Danger : Ui.Text;
         }
 
         void Retrieve(object sender, RetrieveVirtualItemEventArgs e)
@@ -301,7 +301,7 @@ namespace StickyPro
             it.SubItems.Add(p.Cpu < 0.05 ? "0 %" : p.Cpu.ToString("0.0") + " %");
             it.SubItems.Add(Fmt.Bytes(p.Mem));
             it.SubItems.Add(p.Io < 1024 ? "0" : Fmt.Bytes((long)p.Io) + "/s");
-            if (p.Mem > 500L << 20) it.ForeColor = Color.FromArgb(230, 90, 60);
+            if (p.Mem > 500L << 20) it.ForeColor = Ui.Danger;
             e.Item = it;
         }
 
@@ -361,7 +361,7 @@ namespace StickyPro
             lv.ContextMenuStrip = m;
             Controls.Add(lv);
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(38), WrapContents = false };
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 38), WrapContents = true };
             bar.Controls.Add(Ui.Btn("Enable", delegate { Toggle(true); }, true));
             bar.Controls.Add(Ui.Btn("Disable", delegate { Toggle(false); }));
             bar.Controls.Add(Ui.Btn("Open location", delegate { OpenLocation(); }));
@@ -458,12 +458,12 @@ namespace StickyPro
             g.SmoothingMode = SmoothingMode.None;
             TextRenderer.DrawText(g, Label, Ui.Bold, new Rectangle(Ui.S(10), Ui.S(5), Width - Ui.S(20), Ui.S(20)), Ui.Text, TextFormatFlags.EndEllipsis);
             var bar = new Rectangle(Ui.S(10), Ui.S(27), Width - Ui.S(20), Ui.S(10));
-            using (var b = new SolidBrush(Ui.Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225))) g.FillRectangle(b, bar);
+            using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bar);
             Color fill = Used >= 0.9 ? Color.FromArgb(218, 38, 38) : Used >= 0.75 ? Color.FromArgb(235, 150, 30) : Color.FromArgb(38, 160, 218);
             using (var b = new SolidBrush(fill)) g.FillRectangle(b, bar.X, bar.Y, (int)(bar.Width * Math.Min(1, Used)), bar.Height);
             TextRenderer.DrawText(g, Info, Ui.Small, new Rectangle(Ui.S(10), Ui.S(40), Width - Ui.S(20), Ui.S(18)), Ui.Muted, TextFormatFlags.EndEllipsis);
             if (!string.IsNullOrEmpty(Delta))
-                TextRenderer.DrawText(g, Delta, Ui.Small, new Rectangle(Ui.S(10), Ui.S(40), Width - Ui.S(20), Ui.S(18)), Delta.StartsWith("-") ? Color.FromArgb(220, 70, 60) : Color.FromArgb(40, 160, 90), TextFormatFlags.Right);
+                TextRenderer.DrawText(g, Delta, Ui.Small, new Rectangle(Ui.S(10), Ui.S(40), Width - Ui.S(20), Ui.S(18)), Delta.StartsWith("-") ? Ui.Danger : Ui.Success, TextFormatFlags.Right);
         }
     }
 
@@ -522,7 +522,7 @@ namespace StickyPro
             tabs.Changed += i => { lvClean.Visible = i == 0; lvBig.Visible = i == 1; lvFolders.Visible = i == 2; };
             Controls.Add(tabs);
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(38), WrapContents = false };
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 38), WrapContents = true };
             btnScan = Ui.Btn("Refresh", delegate { MeasureAll(); });
             btnDeep = Ui.Btn("Deep scan (big files)", delegate { DeepScan(); });
             btnDelete = Ui.Btn("Delete selected", delegate { DeleteSelected(); }, true);
@@ -538,7 +538,7 @@ namespace StickyPro
             info = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, TextAlign = ContentAlignment.MiddleLeft };
             Controls.Add(info);
 
-            tiles = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(74), WrapContents = true, AutoScroll = false };
+            tiles = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 74), WrapContents = true, AutoScroll = false };
             Controls.Add(tiles);
 
             driveTimer.Interval = 5000;
@@ -673,7 +673,7 @@ namespace StickyPro
                 li.SubItems[1].Text = t.Size < 0 ? "..." : Fmt.Bytes(t.Size);
                 li.SubItems[2].Text = Fmt.Delta(t.Size, t.Prev);
                 li.SubItems[3].Text = t.Recycle ? t.Files + " items" : t.Files.ToString("N0");
-                if (t.Size > (1L << 30)) li.ForeColor = Color.FromArgb(220, 90, 50);
+                if (t.Size > (1L << 30)) li.ForeColor = Ui.Warning;
             }
             UpdateDeleteButton();
         }
@@ -781,7 +781,7 @@ namespace StickyPro
                 li.SubItems.Add(Fmt.Bytes(kv.Value));
                 long prev;
                 li.SubItems.Add(hist.TryGetValue(kv.Key, out prev) ? Fmt.Delta(kv.Value, prev) : "new");
-                if (hist.ContainsKey(kv.Key) && kv.Value - prev > (500L << 20)) li.ForeColor = Color.FromArgb(220, 90, 50);
+                if (hist.ContainsKey(kv.Key) && kv.Value - prev > (500L << 20)) li.ForeColor = Ui.Warning;
                 lvFolders.Items.Add(li);
             }
             lvFolders.EndUpdate();
@@ -861,20 +861,17 @@ namespace StickyPro
             foreach (var v in views) { v.Visible = false; host.Controls.Add(v); }
             Controls.Add(host);
 
-            var top = new Panel { Dock = DockStyle.Top, Height = Ui.S(40) };
+            var top = MainForm.Bar();
             var head = MainForm.Heading("System");
-            head.Location = new Point(0, Ui.S(4));
             top.Controls.Add(head);
-            tabs = new TabStrip { Dock = DockStyle.None, AutoSize = true, Location = new Point(Ui.S(110), Ui.S(2)) };
+            tabs = new TabStrip { Dock = DockStyle.None, AutoSize = true, Margin = new Padding(0) };
             tabs.Add("Processes");
             tabs.Add("Startup apps");
             tabs.Add("Drives & cleanup");
             tabs.Changed += i => { for (int k = 0; k < views.Length; k++) views[k].Visible = k == i; };
             top.Controls.Add(tabs);
             var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Max(0, tabs.Selected)] }, null); });
-            pop.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             top.Controls.Add(pop);
-            top.Resize += delegate { pop.Location = new Point(top.Width - pop.Width - Ui.S(4), Ui.S(4)); };
             Controls.Add(top);
             tabs.Select(0);
         }

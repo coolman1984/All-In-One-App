@@ -451,11 +451,11 @@ namespace StickyPro
             it.SubItems.Add(a.Process);
             it.SubItems.Add(Path.GetFileName(a.Path), Ui.Text, Ui.Card, Ui.Bold);
             it.SubItems.Add(Path.GetDirectoryName(a.Path) ?? "");
-            it.SubItems.Add(a.Event, a.Event == "Opened" ? Color.FromArgb(40, 160, 90) : Ui.Muted, Ui.Card, Ui.Bold);
+            it.SubItems.Add(a.Event, a.Event == "Opened" ? Ui.Success : Ui.Muted, Ui.Card, Ui.Bold);
             it.SubItems.Add(a.Time > 0 && a.Time <= DateTime.MaxValue.Ticks ? new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss") : "");
             it.SubItems.Add(a.Size >= 0 ? Fmt.Bytes(a.Size) : "-");
-            if (a.Backup != null) it.SubItems.Add("✓ " + Ui.Ago(a.BackupTime), Color.FromArgb(40, 160, 90), Ui.Card, Ui.Base);
-            else it.SubItems.Add("⚠ SAVE!", Color.FromArgb(230, 150, 20), Ui.Card, Ui.Bold);
+            if (a.Backup != null) it.SubItems.Add("✓ " + Ui.Ago(a.BackupTime), Ui.Success, Ui.Card, Ui.Base);
+            else it.SubItems.Add("⚠ SAVE!", Ui.Warning, Ui.Card, Ui.Bold);
             if (a.Fav) it.SubItems[0].ForeColor = Color.FromArgb(240, 180, 0);
             foreach (ListViewItem.ListViewSubItem si in it.SubItems) if (si.BackColor != Ui.Card) si.BackColor = Ui.Card;
             e.Item = it;

@@ -28,6 +28,7 @@ namespace StickyPro
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
             ClientSize = Ui.S(560, 720);
+            MaximumSize = Screen.FromPoint(Cursor.Position).WorkingArea.Size;
             Ui.DarkTitle(this);
 
             var t = new TableLayoutPanel();
@@ -43,7 +44,7 @@ namespace StickyPro
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
             Row(t, "Theme (main window and popups)", theme);
             fontName = new ComboBox(); fontName.DropDownStyle = ComboBoxStyle.DropDownList;
-            foreach (var f in FontFamily.Families) fontName.Items.Add(f.Name);
+            foreach (var f in FontFamily.Families) { using (f) fontName.Items.Add(f.Name); }
             int fi = fontName.Items.IndexOf(Store.Settings.NoteFontName);
             fontName.SelectedIndex = fi >= 0 ? fi : Math.Max(0, fontName.Items.IndexOf("Segoe UI"));
             Row(t, "Font for notes and prompts", fontName);
@@ -61,7 +62,7 @@ namespace StickyPro
             Row(t, "Startup", startup);
 
             Section(t, "Snip, record and file activity");
-            snipFolder = new TextBox { Text = Shot.SnipFolder };
+            snipFolder = new FluentTextBox { Text = Shot.SnipFolder };
             Row(t, "Save snips to folder", snipFolder);
             autoSave = new CheckBox { Text = "Save every snip automatically", AutoSize = true, Checked = Store.Settings.SnipAutoSave };
             Row(t, "Auto-save", autoSave);
@@ -153,7 +154,7 @@ namespace StickyPro
     }
 
     // Text box that records a key combination like "Ctrl+Alt+V".
-    class HotkeyBox : TextBox
+    class HotkeyBox : FluentTextBox
     {
         public HotkeyBox()
         {

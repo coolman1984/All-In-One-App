@@ -134,7 +134,7 @@ namespace StickyPro
         public static void DisposeItem(ToolStripItem item)
         {
             var menu = item as ToolStripDropDownItem;
-            if (menu != null) ClearItems(menu.DropDownItems);
+            if (menu != null && menu.HasDropDownItems) ClearItems(menu.DropDownItems);
             var image = item.Image;
             item.Image = null;
             if (image != null) image.Dispose();
@@ -242,6 +242,16 @@ namespace StickyPro
             public override Color CheckBackground { get { return SelBg; } }
             public override Color CheckSelectedBackground { get { return SelBg; } }
             public override Color CheckPressedBackground { get { return SelBg; } }
+            public override Color ToolStripGradientBegin { get { return Card; } }
+            public override Color ToolStripGradientMiddle { get { return Card; } }
+            public override Color ToolStripGradientEnd { get { return Card; } }
+            public override Color ToolStripBorder { get { return Line; } }
+            public override Color ButtonSelectedGradientBegin { get { return HoverBg; } }
+            public override Color ButtonSelectedGradientEnd { get { return HoverBg; } }
+            public override Color ButtonPressedGradientBegin { get { return PressBg; } }
+            public override Color ButtonPressedGradientEnd { get { return PressBg; } }
+            public override Color ButtonCheckedGradientBegin { get { return SelBg; } }
+            public override Color ButtonCheckedGradientEnd { get { return SelBg; } }
         }
 
         public static ContextMenuStrip Menu(bool persistent = false)
@@ -445,6 +455,7 @@ namespace StickyPro
             f.ShowInTaskbar = false; f.TopMost = true; f.AutoScaleMode = AutoScaleMode.None;
             f.BackColor = Card; f.ForeColor = Text; f.Icon = App.AppIcon;
             f.ClientSize = new Size(S(w), S(h));
+            f.MaximumSize = Screen.FromPoint(Cursor.Position).WorkingArea.Size;
             DarkTitle(f);
             return f;
         }
@@ -470,7 +481,7 @@ namespace StickyPro
                 foreach (var n in names)
                 {
                     var l = new Label(); l.Text = n; l.AutoSize = true; l.Font = Bold; l.Margin = new Padding(0, S(6), 0, S(2));
-                    var t = new TextBox(); t.Width = S(420); t.Font = Base;
+                    var t = new FluentTextBox(); t.Width = S(420); t.Font = Base;
                     string v; if (lastValues.TryGetValue(n, out v)) t.Text = v;
                     t.Multiline = true; t.Height = S(48); t.ScrollBars = ScrollBars.Vertical; t.AcceptsReturn = false;
                     table.Controls.Add(l); table.Controls.Add(t); boxes.Add(t);
@@ -502,7 +513,7 @@ namespace StickyPro
             using (var f = Dialog(title, 390, 124))
             {
                 var l = new Label(); l.Text = label; l.AutoSize = true; l.Location = new Point(S(14), S(14));
-                var t = new TextBox(); t.Text = value ?? ""; t.Width = S(360); t.Location = new Point(S(14), S(40));
+                var t = new FluentTextBox(); t.Text = value ?? ""; t.Width = S(360); t.Location = new Point(S(14), S(40));
                 var ok = Btn("OK", null, true); ok.DialogResult = DialogResult.OK; ok.Location = new Point(S(220), S(80));
                 var cancel = Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel; cancel.Location = new Point(S(300), S(80));
                 f.Controls.Add(l); f.Controls.Add(t); f.Controls.Add(ok); f.Controls.Add(cancel);
@@ -550,6 +561,11 @@ namespace StickyPro
         public FluentButton()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            var text = TextRenderer.MeasureText(Text, Font);
+            return new Size(Math.Max(MinimumSize.Width, text.Width + Padding.Horizontal + Ui.S(4)), Math.Max(MinimumSize.Height, Font.Height + Padding.Vertical + Ui.S(4)));
         }
         public override void NotifyDefault(bool value) { defaultButton = value; base.NotifyDefault(value); Invalidate(); }
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -784,6 +800,10 @@ namespace StickyPro
 
         public IconButton(string glyph, float size, string tip, ToolTip tt, EventHandler click)
         {
+            SetStyle(ControlStyles.Selectable | ControlStyles.OptimizedDoubleBuffer, true);
+            TabStop = true;
+            AccessibleRole = AccessibleRole.PushButton;
+            AccessibleName = tip;
             Text = glyph;
             Font = Ui.Icon(size);
             TextAlign = ContentAlignment.MiddleCenter;
@@ -795,10 +815,18 @@ namespace StickyPro
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space || e.KeyCode == Keys.Enter) { OnClick(EventArgs.Empty); e.Handled = true; } base.OnKeyDown(e); }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            if (hover) using (var b = new SolidBrush(HoverColor)) e.Graphics.FillRectangle(b, ClientRectangle);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Ui.Round(Rectangle.Inflate(ClientRectangle, -Ui.S(2), -Ui.S(2)), Ui.S(Ui.SpaceSmall)))
+            {
+                if (hover || Focused) using (var b = new SolidBrush(HoverColor)) e.Graphics.FillPath(b, path);
+                if (Focused) using (var p = new Pen(ForeColor)) e.Graphics.DrawPath(p, path);
+            }
             TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
     }
@@ -826,6 +854,24 @@ namespace StickyPro
         }
     }
 
+    public class EdgeFlowPanel : FlowLayoutPanel
+    {
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == Native.WM_NCHITTEST)
+            {
+                var form = FindForm();
+                if (form != null && form.FormBorderStyle == FormBorderStyle.None)
+                {
+                    var p = form.PointToClient(Cursor.Position);
+                    int edge = Ui.S(6);
+                    if (p.X < edge || p.Y < edge || p.X >= form.ClientSize.Width - edge || p.Y >= form.ClientSize.Height - edge) { m.Result = (IntPtr)Native.HTTRANSPARENT; return; }
+                }
+            }
+            base.WndProc(ref m);
+        }
+    }
+
     // Left navigation item in the main window.
     public class NavItem : Control
     {
@@ -835,6 +881,8 @@ namespace StickyPro
 
         public NavItem(string glyph, string text)
         {
+            TabStop = true;
+            AccessibleRole = AccessibleRole.PageTab;
             Glyph = glyph; Text = text;
             Height = Ui.S(42);
             Dock = DockStyle.Top;
@@ -844,13 +892,16 @@ namespace StickyPro
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space) { OnClick(EventArgs.Empty); e.Handled = true; } base.OnKeyDown(e); }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.Clear(Parent != null ? Parent.BackColor : Ui.Nav);
             var r = new Rectangle(Ui.S(8), Ui.S(3), Width - Ui.S(16), Height - Ui.S(6));
-            if (selected || hover)
+            if (selected || hover || Focused)
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 using (var path = Ui.Round(r, Ui.S(6)))

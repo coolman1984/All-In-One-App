@@ -154,7 +154,7 @@ namespace StickyPro
             ci.Sub = nl > 0 ? Ui.OneLine(n.Text.Trim().Substring(nl + 1), 140) : "";
             ci.Meta = (n.RemindAt > 0 ? "Reminder " + Ui.Ago(n.RemindAt) + "  ·  " : "") + Ui.Ago(n.Modified);
             ci.Back = nc.Body; ci.Strip = nc.Header; ci.Fore = nc.Text;
-            ci.SubFore = nc.Name == "Charcoal" ? Color.FromArgb(200, 200, 200) : Color.FromArgb(105, 105, 105);
+            ci.SubFore = nc.Name == "Charcoal" ? Ui.NoteMutedDark : Ui.NoteMuted;
             return ci;
         }
 
@@ -248,6 +248,7 @@ namespace StickyPro
             StartPosition = FormStartPosition.Manual;
             Text = d.Title;
             Icon = App.AppIcon;
+            Ui.DarkTitle(this);
             BackColor = Ui.Line;
             ForeColor = Ui.Text;
             Font = Ui.Base;
@@ -265,7 +266,8 @@ namespace StickyPro
             statusTimer.Tick += delegate { statusTimer.Stop(); statusLabel.Text = ""; };
 
             header = new EdgePanel { Dock = DockStyle.Top, Height = Ui.S(32), BackColor = Ui.Nav };
-            tabBar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = Ui.Nav, Padding = new Padding(Ui.S(4), Ui.S(4), 0, 0) };
+            tabBar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, BackColor = Ui.Nav, Padding = new Padding(Ui.S(4), Ui.S(4), 0, 0) };
+            tabBar.Resize += delegate { LayoutTabs(); };
             tabBar.MouseDown += Drag;
             header.MouseDown += Drag;
             header.Controls.Add(tabBar);
@@ -283,8 +285,10 @@ namespace StickyPro
             chip = new Label
             {
                 Dock = DockStyle.Fill, Visible = false, Text = Ui.GPin, Font = Ui.Icon(13f), TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.FromArgb(255, 228, 120), ForeColor = Color.FromArgb(60, 50, 10), Cursor = Cursors.Hand
+                BackColor = Ui.PinBack, ForeColor = Ui.Accent, Cursor = Cursors.Hand
             };
+            chip.MouseEnter += delegate { chip.BackColor = Ui.SelBg; };
+            chip.MouseLeave += delegate { chip.BackColor = Ui.PinBack; };
             chip.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { chipDown = Cursor.Position; chipDragging = false; } };
             chip.MouseMove += (s, e) =>
             {
@@ -350,7 +354,13 @@ namespace StickyPro
                 string fid = id;
                 var l = new Label { Text = Features.Title(id), UseMnemonic = false, AutoSize = true, Cursor = Cursors.Hand, Padding = new Padding(Ui.S(6), Ui.S(3), Ui.S(6), Ui.S(3)), Margin = new Padding(0, 0, Ui.S(2), 0), Tag = id };
                 l.Click += delegate { ShowFeature(fid); };
-                l.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left && e.Clicks == 1) { } };
+                Point down = Point.Empty;
+                l.MouseDown += (s, e) => { down = Cursor.Position; if (e.Clicks > 1) Collapse(); };
+                l.MouseMove += (s, e) =>
+                {
+                    if (e.Button == MouseButtons.Left && Math.Abs(Cursor.Position.X - down.X) + Math.Abs(Cursor.Position.Y - down.Y) > Ui.S(4)) Drag(l, new MouseEventArgs(MouseButtons.Left, 1, e.X, e.Y, 0));
+                };
+                tips.SetToolTip(l, Features.Title(id));
                 tabBar.Controls.Add(l);
             }
             if (D.Features.Count == 1)
@@ -359,6 +369,23 @@ namespace StickyPro
                 ((Label)tabBar.Controls[0]).Text = D.Title == "Card" ? Features.Title(D.Features[0]) : D.Title;
             }
             HighlightTabs();
+            LayoutTabs();
+        }
+
+        void LayoutTabs()
+        {
+            if (tabBar == null || header == null || D.Collapsed) return;
+            int width = Math.Max(Ui.S(60), tabBar.ClientSize.Width - Ui.S(8));
+            foreach (Control c in tabBar.Controls)
+            {
+                c.AutoSize = false;
+                c.Size = new Size(Math.Min(width, TextRenderer.MeasureText(c.Text, Ui.Bold).Width + Ui.S(16)), Ui.S(28));
+                var label = c as Label;
+                if (label != null) { label.AutoEllipsis = true; label.TextAlign = ContentAlignment.MiddleCenter; }
+            }
+            int height = Math.Max(Ui.S(36), tabBar.GetPreferredSize(new Size(Math.Max(1, tabBar.Width), 0)).Height + Ui.S(4));
+            if (header.Height != height) header.Height = height;
+            MinimumSize = new Size(Ui.S(240), Math.Max(Ui.S(160), height + Ui.S(100)));
         }
 
         void HighlightTabs()
@@ -647,7 +674,7 @@ namespace StickyPro
             using (var f = Ui.Dialog(d == null ? "New floating card" : "Edit card", 380, 360))
             {
                 var l1 = new Label { Text = "Card name:", AutoSize = true, Location = new Point(Ui.S(14), Ui.S(12)) };
-                var name = new TextBox { Text = d != null ? d.Title : "My card", Width = Ui.S(350), Location = new Point(Ui.S(14), Ui.S(34)) };
+                var name = new FluentTextBox { Text = d != null ? d.Title : "My card", Width = Ui.S(350), Location = new Point(Ui.S(14), Ui.S(34)) };
                 var l2 = new Label { Text = "Features inside this card (each one becomes a tab):", AutoSize = true, Location = new Point(Ui.S(14), Ui.S(70)) };
                 var cl = new CheckedListBox { Location = new Point(Ui.S(14), Ui.S(94)), Size = Ui.S(350, 190), CheckOnClick = true, BorderStyle = BorderStyle.FixedSingle };
                 foreach (var ft in Features.All) cl.Items.Add(ft[1], d != null ? d.Features.Contains(ft[0]) : ft[0] == "clips");

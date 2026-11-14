@@ -430,7 +430,7 @@ $stream.Dispose()
             Size = new Size(Math.Min(wa.Width - 80, Math.Max(Ui.S(760), img.Width + Ui.S(60))), Math.Min(wa.Height - 80, Math.Max(Ui.S(520), img.Height + Ui.S(150))));
             Ui.DarkTitle(this);
 
-            canvas = new SnipCanvas { Ed = this, Dock = DockStyle.Fill, BackColor = Ui.Dark ? Color.FromArgb(28, 28, 28) : Color.FromArgb(225, 225, 225), Cursor = Cursors.Cross };
+            canvas = new SnipCanvas { Ed = this, Dock = DockStyle.Fill, BackColor = Ui.Canvas, Cursor = Cursors.Cross };
             canvas.MouseDown += CanvasDown;
             canvas.MouseMove += CanvasMove;
             canvas.MouseUp += CanvasUp;
@@ -439,7 +439,7 @@ $stream.Dispose()
             Controls.Add(canvas);
 
             ocrPanel = new Panel { Dock = DockStyle.Right, Width = Ui.S(320), Visible = false, Padding = new Padding(Ui.S(8)), BackColor = Ui.Card };
-            ocrText = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = Ui.Base };
+            ocrText = new FluentTextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = Ui.Base };
             var ocrBar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = Ui.S(40), WrapContents = false };
             ocrBar.Controls.Add(Ui.Btn("Copy all text", delegate { if (App.I.CopyText(ocrText.Text)) ocrStatus.Text = "Copied."; }, true));
             ocrBar.Controls.Add(Ui.Btn("Close", delegate { ocrPanel.Visible = false; }));
@@ -1200,7 +1200,7 @@ $stream.Dispose()
             list.ContextMenuStrip = m;
             Controls.Add(list);
 
-            var rec = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(40), WrapContents = false };
+            var rec = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 40), WrapContents = true };
             rec.Controls.Add(Ui.Btn("●  Record area", delegate { App.I.StartRecord("rect"); }));
             rec.Controls.Add(Ui.Btn("Record window", delegate { App.I.StartRecord("window"); }));
             rec.Controls.Add(Ui.Btn("Record full screen", delegate { App.I.StartRecord("full"); }));
