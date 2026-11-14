@@ -196,7 +196,7 @@ namespace StickyPro
         void BuildMenu()
         {
             var m = list.ContextMenuStrip;
-            m.Items.Clear();
+            Ui.ClearItems(m.Items);
             if (mode == "notes")
             {
                 m.Items.Add("Open note", null, delegate { Act(false, 0); });
@@ -303,6 +303,7 @@ namespace StickyPro
             chipMenu.Items.Add("Close card", null, delegate { CloseCard(); });
             Ui.ThemeMenu(chipMenu);
             chip.ContextMenuStrip = chipMenu;
+            Ui.Theme(chip);
             Controls.Add(chip);
             tips.SetToolTip(chip, d.Title + " - click to open, drag to move");
 
@@ -343,7 +344,7 @@ namespace StickyPro
 
         void BuildTabs()
         {
-            tabBar.Controls.Clear();
+            Ui.ClearControls(tabBar.Controls);
             foreach (var id in D.Features)
             {
                 string fid = id;

@@ -65,7 +65,7 @@ namespace StickyPro
             Ui.ThemeMenu(m);
             m.Opening += delegate
             {
-                while (m.Items.Count > 5) m.Items.RemoveAt(5);
+                while (m.Items.Count > 5) { var item = m.Items[5]; m.Items.RemoveAt(5); Ui.DisposeItem(item); }
                 m.Items.Add(new ToolStripSeparator());
                 foreach (var c in Store.TagCats) { string name = c.Name; m.Items.Add("Move to " + name, Ui.Swatch(Ui.LabelColor(c.Color), Ui.S(14)), delegate { MoveTo(name); }); }
                 Ui.ThemeMenu(m);
@@ -105,7 +105,7 @@ namespace StickyPro
 
         void BuildMoveBar()
         {
-            moveBar.Controls.Clear();
+            Ui.ClearControls(moveBar.Controls);
             moveBar.Controls.Add(new Label { Text = "Move selected to:", AutoSize = true, Margin = new Padding(0, Ui.S(9), Ui.S(6), 0) });
             foreach (var c in Store.TagCats)
             {
@@ -118,6 +118,7 @@ namespace StickyPro
                 cm.Items.Add("Delete category", null, delegate { DeleteCategory(name); });
                 Ui.ThemeMenu(cm);
                 b.ContextMenuStrip = cm;
+                Ui.Theme(b);
                 moveBar.Controls.Add(b);
             }
         }
@@ -288,6 +289,7 @@ namespace StickyPro
             var name = Ui.Ask("Rename category", "New name:", old, FindForm());
             if (string.IsNullOrWhiteSpace(name)) return;
             name = name.Trim();
+            if (Store.TagCats.Any(c => !string.Equals(c.Name, old, StringComparison.OrdinalIgnoreCase) && string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))) { status("That category already exists."); return; }
             foreach (var c in Store.TagCats.Where(c => c.Name == old)) c.Name = name;
             foreach (var t in Store.Tagged.Where(t => t.Category == old)) t.Category = name;
             Store.MarkTagged();
@@ -315,45 +317,52 @@ namespace StickyPro
         public static List<string> Get(IntPtr foreground)
         {
             var result = new List<string>();
-            object shell = null;
+            object shell = null, windows = null;
             try
             {
                 var t = Type.GetTypeFromProgID("Shell.Application");
                 shell = Activator.CreateInstance(t);
-                object windows = t.InvokeMember("Windows", System.Reflection.BindingFlags.InvokeMethod, null, shell, null);
+                windows = t.InvokeMember("Windows", System.Reflection.BindingFlags.InvokeMethod, null, shell, null);
                 int count = (int)windows.GetType().InvokeMember("Count", System.Reflection.BindingFlags.GetProperty, null, windows, null);
                 for (int i = 0; i < count; i++)
                 {
-                    object w = null;
+                    object w = null, doc = null, items = null, folder = null, self = null;
                     try
                     {
                         w = windows.GetType().InvokeMember("Item", System.Reflection.BindingFlags.InvokeMethod, null, windows, new object[] { i });
                         if (w == null) continue;
                         long hwnd = Convert.ToInt64(w.GetType().InvokeMember("HWND", System.Reflection.BindingFlags.GetProperty, null, w, null));
                         if (hwnd != foreground.ToInt64()) continue;
-                        object doc = w.GetType().InvokeMember("Document", System.Reflection.BindingFlags.GetProperty, null, w, null);
-                        object items = doc.GetType().InvokeMember("SelectedItems", System.Reflection.BindingFlags.InvokeMethod, null, doc, null);
+                        doc = w.GetType().InvokeMember("Document", System.Reflection.BindingFlags.GetProperty, null, w, null);
+                        items = doc.GetType().InvokeMember("SelectedItems", System.Reflection.BindingFlags.InvokeMethod, null, doc, null);
                         int n = (int)items.GetType().InvokeMember("Count", System.Reflection.BindingFlags.GetProperty, null, items, null);
                         for (int k = 0; k < n; k++)
                         {
-                            object it = items.GetType().InvokeMember("Item", System.Reflection.BindingFlags.InvokeMethod, null, items, new object[] { k });
-                            result.Add((string)it.GetType().InvokeMember("Path", System.Reflection.BindingFlags.GetProperty, null, it, null));
-                            Marshal.ReleaseComObject(it);
+                            object it = null;
+                            try { it = items.GetType().InvokeMember("Item", System.Reflection.BindingFlags.InvokeMethod, null, items, new object[] { k }); result.Add((string)it.GetType().InvokeMember("Path", System.Reflection.BindingFlags.GetProperty, null, it, null)); }
+                            finally { if (it != null) Marshal.ReleaseComObject(it); }
                         }
                         if (n == 0)
                         {
                             // Nothing selected: tag the folder that is open.
-                            object folder = doc.GetType().InvokeMember("Folder", System.Reflection.BindingFlags.GetProperty, null, doc, null);
-                            object self = folder.GetType().InvokeMember("Self", System.Reflection.BindingFlags.GetProperty, null, folder, null);
+                            folder = doc.GetType().InvokeMember("Folder", System.Reflection.BindingFlags.GetProperty, null, doc, null);
+                            self = folder.GetType().InvokeMember("Self", System.Reflection.BindingFlags.GetProperty, null, folder, null);
                             result.Add((string)self.GetType().InvokeMember("Path", System.Reflection.BindingFlags.GetProperty, null, self, null));
                         }
                     }
                     catch { }
-                    finally { if (w != null) Marshal.ReleaseComObject(w); }
+                    finally
+                    {
+                        if (self != null) Marshal.ReleaseComObject(self);
+                        if (folder != null) Marshal.ReleaseComObject(folder);
+                        if (items != null) Marshal.ReleaseComObject(items);
+                        if (doc != null) Marshal.ReleaseComObject(doc);
+                        if (w != null) Marshal.ReleaseComObject(w);
+                    }
                 }
             }
             catch (Exception ex) { App.Log("Explorer selection: " + ex.Message); }
-            finally { if (shell != null) Marshal.ReleaseComObject(shell); }
+            finally { if (windows != null) Marshal.ReleaseComObject(windows); if (shell != null) Marshal.ReleaseComObject(shell); }
             return result;
         }
     }

@@ -140,6 +140,7 @@ namespace StickyPro
             title.Font = Ui.Big;
             title.TextAlign = ContentAlignment.MiddleLeft;
             title.Image = Ui.Logo(Ui.S(26));
+            title.Disposed += delegate { if (title.Image != null) title.Image.Dispose(); };
             title.ImageAlign = ContentAlignment.MiddleLeft;
             title.Padding = new Padding(Ui.S(14), 0, 0, 0);
             nav.Controls.Add(title);
@@ -161,6 +162,16 @@ namespace StickyPro
                 if (k.Length > 0) lines.Add(k + "   " + a[3]);
             }
             keys.Text = string.Join("\n", lines);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                statusTimer.Dispose();
+                Store.NotesChanged -= OnNotes; Store.PromptsChanged -= OnPrompts; Store.ClipsChanged -= OnClips;
+            }
+            base.Dispose(disposing);
         }
 
         void OnNotes() { if (Visible && page == "notes") notes.RefreshList(); else notes.Stale = true; }
@@ -510,7 +521,7 @@ namespace StickyPro
             tbTrigger = new TextBox();
             Ui.Cue(tbTrigger, "e.g.  ;sig   (type this anywhere and it becomes the prompt text)");
             tbBody = new TextBox(); tbBody.Multiline = true; tbBody.ScrollBars = ScrollBars.Vertical; tbBody.AcceptsReturn = true; tbBody.AcceptsTab = true;
-            tbBody.Font = new Font(Store.Settings.NoteFontName, 10.5f); tbBody.WordWrap = true;
+            Ui.UseFont(tbBody, new Font(Store.Settings.NoteFontName, 10.5f)); tbBody.WordWrap = true;
             foreach (var c in new Control[] { tbTitle, cbCat, tbTags, tbTrigger, tbBody }) { c.Dock = DockStyle.Fill; c.Margin = new Padding(0, 0, 0, Ui.S(6)); }
             AddRow(FieldLabel("Title"), SizeType.AutoSize);
             AddRow(tbTitle, SizeType.AutoSize);
@@ -605,6 +616,12 @@ namespace StickyPro
             editor.RowStyles.Add(st == SizeType.Percent ? new RowStyle(SizeType.Percent, 100) : new RowStyle(SizeType.AutoSize));
             editor.Controls.Add(c, 0, editor.RowStyles.Count - 1);
             editor.RowCount = editor.RowStyles.Count;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { Commit(); catTimer.Dispose(); }
+            base.Dispose(disposing);
         }
 
         static Label FieldLabel(string t)
@@ -809,7 +826,7 @@ namespace StickyPro
                 f.MinimumSize = Ui.S(500, 300);
                 var lb = new ListBox(); lb.Dock = DockStyle.Left; lb.Width = Ui.S(240); lb.IntegralHeight = false; lb.Font = Ui.Base;
                 foreach (var v in cur.Versions) lb.Items.Add(Ui.Ago(v.Time) + "  -  " + Ui.OneLine(v.Title, 30));
-                var tb = new TextBox(); tb.Multiline = true; tb.ReadOnly = true; tb.ScrollBars = ScrollBars.Vertical; tb.Dock = DockStyle.Fill; tb.Font = new Font("Segoe UI", 10f);
+                var tb = new TextBox(); tb.Multiline = true; tb.ReadOnly = true; tb.ScrollBars = ScrollBars.Vertical; tb.Dock = DockStyle.Fill; tb.Font = Ui.Base;
                 var bar = new FlowLayoutPanel(); bar.Dock = DockStyle.Bottom; bar.Height = Ui.S(42); bar.FlowDirection = FlowDirection.RightToLeft; bar.Padding = new Padding(Ui.S(6));
                 var restore = Ui.Btn("Restore this version", null, true); restore.DialogResult = DialogResult.OK;
                 var close = Ui.Btn("Close", null); close.DialogResult = DialogResult.Cancel;
@@ -953,7 +970,7 @@ namespace StickyPro
 
             var right = new Panel(); right.Dock = DockStyle.Right; right.Width = Ui.S(340); right.Padding = new Padding(Ui.S(10), Ui.S(4), 0, Ui.S(4));
             preview = new TextBox(); preview.Multiline = true; preview.ReadOnly = true; preview.ScrollBars = ScrollBars.Vertical; preview.Dock = DockStyle.Fill;
-            preview.BorderStyle = BorderStyle.FixedSingle; preview.Font = new Font("Segoe UI", 10f);
+            preview.BorderStyle = BorderStyle.FixedSingle; preview.Font = Ui.Base;
             picture = new PictureBox(); picture.Dock = DockStyle.Fill; picture.SizeMode = PictureBoxSizeMode.Zoom; picture.BackColor = Ui.Card; picture.Visible = false;
             previewMeta = new Label(); previewMeta.Dock = DockStyle.Top; previewMeta.Height = Ui.S(24); previewMeta.ForeColor = Ui.Muted; previewMeta.Font = Ui.Small;
             right.Controls.Add(preview);
@@ -997,6 +1014,12 @@ namespace StickyPro
         }
 
         public void UpdatePaused() { pause.Checked = Store.Settings.Paused; }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && picture != null && picture.Image != null) { picture.Image.Dispose(); picture.Image = null; }
+            base.Dispose(disposing);
+        }
 
         CardInfo ClipInfo(Clip c)
         {
@@ -1208,7 +1231,7 @@ namespace StickyPro
 
         void BuildMenu(ContextMenuStrip m)
         {
-            m.Items.Clear();
+            Ui.ClearItems(m.Items);
             m.Items.Add("Copy\tEnter", null, delegate { CopySelected(0); });
             var asMenu = new ToolStripMenuItem("Copy as");
             AddTransforms(asMenu.DropDownItems);

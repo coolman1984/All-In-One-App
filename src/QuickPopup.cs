@@ -55,7 +55,7 @@ namespace StickyPro
 
             search = Ui.Search("Type to search...");
             search.Dock = DockStyle.Top;
-            search.Font = new Font("Segoe UI", 11f);
+            Ui.UseFont(search, new Font("Segoe UI", 11f));
             search.TextChanged += delegate { Fill(); };
             var sw = new Panel(); sw.Dock = DockStyle.Top; sw.Height = Ui.S(38); sw.Padding = new Padding(0, Ui.S(4), 0, Ui.S(6));
             sw.Controls.Add(search);

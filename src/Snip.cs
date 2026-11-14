@@ -33,8 +33,8 @@ namespace StickyPro
         public static Bitmap Capture(Rectangle r)
         {
             var b = new Bitmap(Math.Max(1, r.Width), Math.Max(1, r.Height), PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(b)) g.CopyFromScreen(r.Location, Point.Empty, r.Size, CopyPixelOperation.SourceCopy);
-            return b;
+            try { using (var g = Graphics.FromImage(b)) g.CopyFromScreen(r.Location, Point.Empty, r.Size, CopyPixelOperation.SourceCopy); return b; }
+            catch { b.Dispose(); throw; }
         }
 
         // Visible top-level windows in Z order (front first), with their visible frame.
@@ -59,7 +59,7 @@ namespace StickyPro
             return list;
         }
 
-        public static string NewName(string ext) { return "Snip " + DateTime.Now.ToString("yyyy-MM-dd HHmmss") + ext; }
+        public static string NewName(string ext) { return "Snip " + DateTime.Now.ToString("yyyy-MM-dd HHmmssfff") + " " + Guid.NewGuid().ToString("N").Substring(0, 8) + ext; }
 
         public static string SnipFolder
         {
@@ -270,7 +270,7 @@ namespace StickyPro
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { frozen.Dispose(); dim.Dispose(); }
+            if (disposing) { frozen.Dispose(); dim.Dispose(); if (Picture != null) { Picture.Dispose(); Picture = null; } }
             base.Dispose(disposing);
         }
     }
@@ -322,10 +322,12 @@ $stream.Dispose()
             using (var p = Process.Start(psi))
             {
                 var errTask = p.StandardError.ReadToEndAsync();
-                string output = p.StandardOutput.ReadToEnd();
+                var outTask = p.StandardOutput.ReadToEndAsync();
                 if (!p.WaitForExit(timeoutMs)) { try { p.Kill(); } catch { } error = "Timed out."; return null; }
+                if (!System.Threading.Tasks.Task.WaitAll(new System.Threading.Tasks.Task[] { errTask, outTask }, 5000)) { error = "Output timed out."; return null; }
+                string output = outTask.Result;
                 string err = errTask.Result;
-                if (p.ExitCode != 0 && !string.IsNullOrWhiteSpace(err)) error = err.Split('\n')[0].Trim();
+                if (p.ExitCode != 0) { error = string.IsNullOrWhiteSpace(err) ? "OCR process failed." : err.Split('\n')[0].Trim(); return null; }
                 return output;
             }
         }
@@ -437,7 +439,7 @@ $stream.Dispose()
             Controls.Add(canvas);
 
             ocrPanel = new Panel { Dock = DockStyle.Right, Width = Ui.S(320), Visible = false, Padding = new Padding(Ui.S(8)), BackColor = Ui.Card };
-            ocrText = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10.5f) };
+            ocrText = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = Ui.Base };
             var ocrBar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = Ui.S(40), WrapContents = false };
             ocrBar.Controls.Add(Ui.Btn("Copy all text", delegate { if (App.I.CopyText(ocrText.Text)) ocrStatus.Text = "Copied."; }, true));
             ocrBar.Controls.Add(Ui.Btn("Close", delegate { ocrPanel.Visible = false; }));
@@ -594,16 +596,19 @@ $stream.Dispose()
                     return;
                 case "arrow":
                     if (op.Pts.Count < 2) return;
-                    using (var p = new Pen(op.Color, op.Width) { EndCap = LineCap.Custom, CustomEndCap = new AdjustableArrowCap(4, 4, true), StartCap = LineCap.Round })
+                    using (var cap = new AdjustableArrowCap(4, 4, true))
+                    using (var p = new Pen(op.Color, op.Width) { CustomEndCap = cap, StartCap = LineCap.Round })
                         g.DrawLine(p, op.Pts[0], op.Pts[op.Pts.Count - 1]);
                     return;
                 case "text":
                     using (var f = new Font("Segoe UI Semibold", 10 + op.Width * 2.5f, GraphicsUnit.Pixel))
                     using (var b = new SolidBrush(op.Color))
                     {
-                        var fmt = Ui.IsRtl(op.Text) ? new StringFormat(StringFormatFlags.DirectionRightToLeft) : StringFormat.GenericDefault;
+                        using (var fmt = Ui.IsRtl(op.Text) ? new StringFormat(StringFormatFlags.DirectionRightToLeft) : new StringFormat())
+                        {
                         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                         g.DrawString(op.Text, f, b, op.Pts[0], fmt);
+                        }
                     }
                     return;
             }
@@ -870,6 +875,7 @@ $stream.Dispose()
             m.Items.Add("Close", null, delegate { Close(); });
             Ui.ThemeMenu(m);
             ContextMenuStrip = m;
+            Ui.Theme(this);
         }
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ClassStyle |= Native.CS_DROPSHADOW; cp.ExStyle |= 0x80; return cp; } }
         protected override void OnPaint(PaintEventArgs e)
@@ -903,6 +909,8 @@ $stream.Dispose()
     static class Recorder
     {
         static Process ff;
+        public static bool Saving;
+        public static event Action Finished;
         static readonly List<string> segs = new List<string>();
         static Rectangle area;
         static string outPath;
@@ -944,8 +952,10 @@ $stream.Dispose()
                 var psi = new ProcessStartInfo(exe, "-hide_banner -list_devices true -f dshow -i dummy") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, StandardErrorEncoding = Encoding.UTF8 };
                 using (var p = Process.Start(psi))
                 {
-                    string err = p.StandardError.ReadToEnd();
-                    p.WaitForExit(8000);
+                    var read = p.StandardError.ReadToEndAsync();
+                    if (!p.WaitForExit(8000)) { try { p.Kill(); } catch { } return null; }
+                    if (!read.Wait(1000)) return null;
+                    string err = read.Result;
                     foreach (var line in err.Split('\n'))
                     {
                         if (!line.Contains("(audio)")) continue;
@@ -960,6 +970,7 @@ $stream.Dispose()
 
         public static void Start(Rectangle r, bool withMic)
         {
+            if (Active || Saving) return;
             string exe = FindFfmpeg();
             if (exe == null)
             {
@@ -971,14 +982,15 @@ $stream.Dispose()
             area.Height -= area.Height % 2;
             mic = withMic;
             segs.Clear();
-            outPath = Path.Combine(Shot.VideoFolder, "Recording " + DateTime.Now.ToString("yyyy-MM-dd HHmmss") + ".mp4");
+            outPath = Path.Combine(Shot.VideoFolder, "Recording " + DateTime.Now.ToString("yyyy-MM-dd HHmmssfff") + " " + Guid.NewGuid().ToString("N").Substring(0, 8) + ".mp4");
             Paused = false;
             watch.Reset();
             border = new RecordBorder(area);
             border.Show();
             bar = new RecordBar(area);
             bar.Show();
-            StartSegment();
+            try { StartSegment(); }
+            catch (Exception ex) { Stop(false); App.I.Balloon("Could not start recording", ex.Message); }
         }
 
         static void StartSegment()
@@ -1006,9 +1018,8 @@ $stream.Dispose()
             watch.Stop();
             if (ff == null) return;
             try { ff.StandardInput.Write("q"); ff.StandardInput.Flush(); } catch { }
-            if (!ff.WaitForExit(6000)) try { ff.Kill(); } catch { }
-            ff.Dispose();
-            ff = null;
+            try { if (!ff.WaitForExit(6000)) { try { ff.Kill(); ff.WaitForExit(2000); } catch { } } }
+            finally { ff.Dispose(); ff = null; }
         }
 
         public static TimeSpan Elapsed { get { return watch.Elapsed; } }
@@ -1016,7 +1027,7 @@ $stream.Dispose()
         public static void TogglePause()
         {
             if (!Active) return;
-            if (Paused) { Paused = false; StartSegment(); }
+            if (Paused) { try { StartSegment(); Paused = false; } catch (Exception ex) { App.I.Balloon("Could not resume recording", ex.Message); } }
             else { Paused = true; StopSegment(); }
         }
 
@@ -1028,8 +1039,10 @@ $stream.Dispose()
             if (b != null) b.Close();
             if (border != null) { border.Close(); border = null; }
             var parts = segs.Where(File.Exists).ToList();
-            if (!keep || parts.Count == 0) { foreach (var s in parts) try { File.Delete(s); } catch { } return; }
+            if (!keep || parts.Count == 0) { foreach (var s in parts) try { File.Delete(s); } catch { } NotifyFinished(); return; }
+            Saving = true;
             string final = outPath;
+            uint copySequence = Native.GetClipboardSequenceNumber();
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
@@ -1039,22 +1052,37 @@ $stream.Dispose()
                     {
                         string list = Path.Combine(Path.GetTempPath(), "snp_rec_list_" + Guid.NewGuid().ToString("N") + ".txt");
                         File.WriteAllLines(list, parts.Select(s => "file '" + s.Replace("'", "'\\''") + "'"));
-                        var psi = new ProcessStartInfo(FindFfmpeg(), "-hide_banner -loglevel error -y -f concat -safe 0 -i \"" + list + "\" -c copy \"" + final + "\"") { UseShellExecute = false, CreateNoWindow = true };
-                        using (var p = Process.Start(psi)) p.WaitForExit(120000);
-                        try { File.Delete(list); } catch { }
-                        foreach (var s in parts) try { File.Delete(s); } catch { }
+                        try
+                        {
+                            var psi = new ProcessStartInfo(FindFfmpeg(), "-hide_banner -loglevel error -n -f concat -safe 0 -i \"" + list + "\" -c copy \"" + final + "\"") { UseShellExecute = false, CreateNoWindow = true };
+                            using (var p = Process.Start(psi))
+                            {
+                                if (!p.WaitForExit(120000)) { try { p.Kill(); p.WaitForExit(2000); } catch { } throw new IOException("Recording merge timed out; source segments were kept in the temporary folder."); }
+                                if (p.ExitCode != 0 || !File.Exists(final) || new FileInfo(final).Length == 0) throw new IOException("Recording merge failed; source segments were kept in the temporary folder.");
+                            }
+                            foreach (var s in parts) try { File.Delete(s); } catch { }
+                        }
+                        finally { try { File.Delete(list); } catch { } }
                     }
                     App.I.Sync.BeginInvoke(new Action(() =>
                     {
                         var sc = new System.Collections.Specialized.StringCollection { final };
-                        try { Clipboard.SetFileDropList(sc); } catch { }
-                        App.I.Balloon("Recording saved", Path.GetFileName(final) + " - copied, paste it into a chat or folder.");
+                        bool copied = false;
+                        if (Native.GetClipboardSequenceNumber() == copySequence) { try { Clipboard.SetFileDropList(sc); copied = true; } catch { } }
+                        App.I.Balloon("Recording saved", Path.GetFileName(final) + (copied ? " - copied, paste it into a chat or folder." : " - saved in Screen Recordings."));
                         SnipPanel.RaiseChanged();
                     }));
                 }
-                catch (Exception ex) { App.Log("Recording save failed: " + ex.Message); }
+                catch (Exception ex)
+                {
+                    App.Log("Recording save failed: " + ex.Message + " Segments: " + string.Join(", ", parts));
+                    try { App.I.Sync.BeginInvoke(new Action(() => App.I.Balloon("Recording save failed", ex.Message))); } catch { }
+                }
+                finally { try { App.I.Sync.BeginInvoke(new Action(NotifyFinished)); } catch { Saving = false; } }
             });
         }
+
+        static void NotifyFinished() { Saving = false; var h = Finished; if (h != null) h(); }
     }
 
     // Floating control bar shown while recording (hidden from the recording itself).
@@ -1075,7 +1103,7 @@ $stream.Dispose()
             Font = Ui.Base;
             StartPosition = FormStartPosition.Manual;
             var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(Ui.S(6), Ui.S(4), Ui.S(6), 0) };
-            var dot = new Label { Text = "●", ForeColor = Color.FromArgb(235, 60, 60), AutoSize = true, Font = new Font("Segoe UI", 12f), Margin = new Padding(0, Ui.S(2), 0, 0) };
+            var dot = new Label { Text = "●", ForeColor = Color.FromArgb(235, 60, 60), AutoSize = true, Font = Ui.Bold, Margin = new Padding(0, Ui.S(2), 0, 0) };
             time = new Label { Text = "00:00", AutoSize = true, Font = Ui.Bold, Margin = new Padding(Ui.S(2), Ui.S(6), Ui.S(8), 0) };
             pause = Btn("Pause", delegate { Recorder.TogglePause(); pause.Text = Recorder.Paused ? "Resume" : "Pause"; });
             var stop = Btn("Stop & save", delegate { Recorder.Stop(true); });
@@ -1248,12 +1276,17 @@ $stream.Dispose()
         void Fill()
         {
             stale = false;
+            var selected = list.SelectedItem as FileInfo;
+            foreach (var thumb in thumbs.Values) if (thumb != null) thumb.Dispose();
+            thumbs.Clear();
             var files = new List<FileInfo>();
             foreach (var dir in new[] { Shot.SnipFolder, Shot.VideoFolder })
             {
                 try { files.AddRange(new DirectoryInfo(dir).GetFiles().Where(f => IsImage(f.FullName) || f.Extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase))); } catch { }
             }
-            list.SetItems(files.OrderByDescending(f => f.LastWriteTime).Take(80).Cast<object>());
+            var recent = files.GroupBy(f => f.FullName, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderByDescending(f => f.LastWriteTime).Take(80).ToList();
+            list.SetItems(recent.Cast<object>());
+            if (selected != null) list.SelectedItem = recent.FirstOrDefault(f => string.Equals(f.FullName, selected.FullName, StringComparison.OrdinalIgnoreCase));
         }
 
         SnipEditor OpenEditor(string path)

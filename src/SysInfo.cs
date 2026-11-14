@@ -178,7 +178,7 @@ namespace StickyPro
         {
             Icons.ColorDepth = System.Windows.Forms.ColorDepth.Depth32Bit;
             Icons.ImageSize = new Size(Ui.S(16), Ui.S(16));
-            using (var blank = new Bitmap(Ui.S(16), Ui.S(16))) Icons.Images.Add(blank);
+            using (var blank = new Bitmap(Ui.S(16), Ui.S(16))) { Icons.Images.Add(blank); var unused = Icons.Handle; }
         }
 
         public static void Fill(List<ProcInfo> list)
@@ -519,6 +519,7 @@ namespace StickyPro
                 {
                     do
                     {
+                        if (cancel != null && cancel()) return;
                         string n = d.cFileName;
                         if (n == "." || n == "..") continue;
                         if ((d.dwFileAttributes & REPARSE) != 0) continue;

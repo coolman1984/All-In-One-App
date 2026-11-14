@@ -436,6 +436,7 @@ namespace StickyPro
         readonly Label info;
         readonly Button btnScan, btnDeep, btnDelete, btnCancel;
         readonly System.Windows.Forms.Timer driveTimer = new System.Windows.Forms.Timer();
+        System.Windows.Forms.Timer scanProgress;
         readonly Action<string> status;
         List<CleanTarget> targets = new List<CleanTarget>();
         List<BigFile> bigFiles = new List<BigFile>();
@@ -515,7 +516,7 @@ namespace StickyPro
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { cancel = true; driveTimer.Dispose(); }
+            if (disposing) { cancel = true; driveTimer.Dispose(); if (scanProgress != null) scanProgress.Dispose(); }
             base.Dispose(disposing);
         }
 
@@ -578,6 +579,7 @@ namespace StickyPro
             measured = true;
             cancel = false;
             var oldChecks = targets.ToDictionary(t => t.Id, t => t.Checked);
+            var previousSizes = new Dictionary<string, long>(Store.History.CleanSizes);
             SetBusy(true, "Measuring cleanup locations...");
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -585,7 +587,7 @@ namespace StickyPro
                 foreach (var t in list)
                 {
                     bool c; if (oldChecks.TryGetValue(t.Id, out c)) t.Checked = c;
-                    long prev; t.Prev = Store.History.CleanSizes.TryGetValue(t.Id, out prev) ? prev : -1;
+                    long prev; t.Prev = previousSizes.TryGetValue(t.Id, out prev) ? prev : -1;
                 }
                 UI(() => { targets = list; FillClean(); });
                 foreach (var t in list)
@@ -646,7 +648,7 @@ namespace StickyPro
             SetBusy(true, "Deep scan started...");
             long files = 0, bytes = 0;
             string current = "";
-            var progress = new System.Windows.Forms.Timer { Interval = 300 };
+            var progress = scanProgress = new System.Windows.Forms.Timer { Interval = 300 };
             progress.Tick += delegate { info.Text = "Scanning " + files.ToString("N0") + " files, " + Fmt.Bytes(bytes) + "   " + current; };
             progress.Start();
             var t = new Thread(() =>

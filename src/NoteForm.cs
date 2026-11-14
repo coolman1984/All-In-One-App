@@ -37,7 +37,7 @@ namespace StickyPro
             rtb = new RichTextBox();
             rtb.Dock = DockStyle.Fill;
             rtb.BorderStyle = BorderStyle.None;
-            rtb.Font = Ui.NoteFont;
+            Ui.UseFont(rtb, new Font(Ui.NoteFont, Ui.NoteFont.Style));
             rtb.DetectUrls = true;
             rtb.AcceptsTab = true;
             rtb.EnableAutoDragDrop = true;
@@ -63,13 +63,13 @@ namespace StickyPro
             toolbar.Height = Ui.S(34);
             toolbar.Padding = new Padding(Ui.S(6), 0, Ui.S(6), Ui.S(2));
             btnRtl = new IconButton("ع", 10f, "Right-to-left / Arabic (Ctrl+Shift+R)", tips, delegate { SetRtl(!N.Rtl); rtb.Focus(); });
-            btnRtl.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            Ui.UseFont(btnRtl, new Font("Segoe UI", 11f, FontStyle.Bold));
             btnRtl.Dock = DockStyle.Right;
             toolbar.Controls.Add(btnRtl);
             AddTool(Ui.GImage, "Insert image", delegate { InsertImage(); });
             AddTool(Ui.GBullets, "Bullets (Ctrl+Shift+L)", delegate { ToggleBullets(); });
             AddTool("S", "Strikethrough (Ctrl+T)", delegate { ToggleStyle(FontStyle.Strikeout); });
-            toolbar.Controls[toolbar.Controls.Count - 1].Font = new Font("Segoe UI", 10.5f, FontStyle.Strikeout);
+            Ui.UseFont(toolbar.Controls[toolbar.Controls.Count - 1], new Font("Segoe UI", 10.5f, FontStyle.Strikeout));
             AddTool(Ui.GUnder, "Underline (Ctrl+U)", delegate { ToggleStyle(FontStyle.Underline); });
             AddTool(Ui.GItalic, "Italic (Ctrl+I)", delegate { ToggleStyle(FontStyle.Italic); });
             AddTool(Ui.GBold, "Bold (Ctrl+B)", delegate { ToggleStyle(FontStyle.Bold); });
@@ -421,7 +421,7 @@ namespace StickyPro
 
         void ShowMenu()
         {
-            var m = new ContextMenuStrip();
+            var m = Ui.Menu();
             m.Font = Ui.Base;
             foreach (var c in Ui.Colors)
             {

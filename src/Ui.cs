@@ -84,8 +84,36 @@ namespace StickyPro
 
         public static void SetNoteFont(string name, float size)
         {
+            var old = NoteFont;
             try { NoteFont = new Font(name, size); }
             catch { NoteFont = new Font("Segoe UI", 11f); }
+            old.Dispose();
+        }
+
+        public static void UseFont(Control control, Font font)
+        {
+            control.Font = font;
+            control.Disposed += delegate { font.Dispose(); };
+        }
+
+        public static void ClearControls(Control.ControlCollection controls)
+        {
+            foreach (Control c in controls.Cast<Control>().ToArray()) c.Dispose();
+        }
+
+        public static void ClearItems(ToolStripItemCollection items)
+        {
+            while (items.Count > 0) { var item = items[0]; items.RemoveAt(0); DisposeItem(item); }
+        }
+
+        public static void DisposeItem(ToolStripItem item)
+        {
+            var menu = item as ToolStripDropDownItem;
+            if (menu != null) ClearItems(menu.DropDownItems);
+            var image = item.Image;
+            item.Image = null;
+            if (image != null) image.Dispose();
+            item.Dispose();
         }
 
         public static Font Icon(float size)
@@ -113,6 +141,12 @@ namespace StickyPro
         // Applies theme colors to inputs (which do not inherit colors) and dark scrollbars / title bar.
         public static void Theme(Control root)
         {
+            var menu = root.ContextMenuStrip as OwnedMenu;
+            if (menu != null && !menu.Bound)
+            {
+                menu.Bound = true;
+                root.Disposed += delegate { menu.Dispose(); };
+            }
             foreach (Control c in root.Controls)
             {
                 if (c is TextBox || c is ComboBox || c is NumericUpDown || (c is ListBox && !(c is CardList)) || c is RichTextBox)
@@ -157,12 +191,26 @@ namespace StickyPro
             public override Color CheckPressedBackground { get { return SelBg; } }
         }
 
-        public static ContextMenuStrip Menu()
+        public static ContextMenuStrip Menu(bool persistent = false)
         {
-            var m = new ContextMenuStrip();
+            var m = new OwnedMenu { Bound = persistent };
             m.Font = Base;
+            m.Closed += delegate
+            {
+                if (!m.Bound && (m.SourceControl == null || m.SourceControl.ContextMenuStrip != m)) Later(250, () => m.Dispose());
+            };
             ThemeMenu(m);
             return m;
+        }
+
+        class OwnedMenu : ContextMenuStrip
+        {
+            public bool Bound;
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) ClearItems(Items);
+                base.Dispose(disposing);
+            }
         }
 
         public static void ThemeMenu(ToolStrip m)

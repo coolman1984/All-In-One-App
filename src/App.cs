@@ -183,6 +183,7 @@ namespace StickyPro
         public void StartRecord(string mode)
         {
             if (Recorder.Active) { Recorder.Stop(true); return; }
+            if (Recorder.Saving) { Balloon("Recording is saving", "Wait for the current recording to finish saving."); return; }
             if (snipping) return;
             snipping = true;
             bool restoreMain = main != null && !main.IsDisposed && main.Visible && Form.ActiveForm == main;
@@ -329,7 +330,7 @@ namespace StickyPro
 
         void BuildTray()
         {
-            var menu = Ui.Menu();
+            var menu = Ui.Menu(true);
             menu.Items.Add("Open " + Name, null, delegate { ShowMain(null); }).Font = Ui.Bold;
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("New note", null, delegate { NewNote(null); });
@@ -869,8 +870,16 @@ namespace StickyPro
             catch { }
         }
 
+        bool exitWaiting;
+        void RecordingFinished() { Recorder.Finished -= RecordingFinished; exitWaiting = false; Exit(); }
+
         public void Exit()
         {
+            if (Recorder.Active || Recorder.Saving)
+            {
+                if (!exitWaiting) { exitWaiting = true; Recorder.Finished += RecordingFinished; if (Recorder.Active) Recorder.Stop(true); }
+                return;
+            }
             FlushAll();
             Snippets.Stop();
             ActivityMonitor.Stop();
@@ -878,6 +887,7 @@ namespace StickyPro
             try { Native.RemoveClipboardFormatListener(msg.Handle); } catch { }
             foreach (int id in registered) Native.UnregisterHotKey(msg.Handle, id);
             tray.Visible = false;
+            tray.ContextMenuStrip.Dispose();
             tray.Dispose();
             foreach (var f in noteForms.Values.ToList()) { f.Exiting = true; f.Close(); }
             foreach (var f in cardForms.Values.ToList()) f.Close();
