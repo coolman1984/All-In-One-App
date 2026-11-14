@@ -481,6 +481,8 @@ $stream.Dispose()
             ocrPanel.Controls.Add(ocrLang);
             ocrPanel.Controls.Add(new Label { Dock = DockStyle.Top, Height = Ui.S(26), Text = "Text from the picture", Font = Ui.Bold });
             Controls.Add(ocrPanel);
+            ocrPanel.Width = PaneGrip.Size("snip.ocr", DockStyle.Right, Ui.S(320), Width);
+            PaneGrip.Attach(ocrPanel, "snip.ocr", Ui.S(140));
 
             info = new Label { Dock = DockStyle.Bottom, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, Padding = new Padding(Ui.S(8), 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft };
             Controls.Add(info);
@@ -537,9 +539,17 @@ $stream.Dispose()
             tools.Items.Add(new ToolStripButton("Print", null, delegate { Print(); }) { ToolTipText = "Print the picture fitted to the page" });
             tools.Items.Add(new ToolStripButton("Show in folder", null, delegate { OpenFolder(); }));
             foreach (ToolStripItem i in tools.Items) i.ForeColor = Ui.Text;
+            Ui.ThemeMenu(tools);
             Controls.Add(tools);
             LayoutKit.FlowTools(tools, this);
-            Resize += delegate { ocrPanel.Dock = ClientSize.Width < Ui.S(1000) ? DockStyle.Bottom : DockStyle.Right; if (ocrPanel.Dock == DockStyle.Bottom) ocrPanel.Height = Math.Max(Ui.S(100), ClientSize.Height / 3); };
+            Resize += delegate
+            {
+                var want = ClientSize.Width < Ui.S(1000) ? DockStyle.Bottom : DockStyle.Right;
+                if (ocrPanel.Dock == want) return;
+                ocrPanel.Dock = want;
+                if (want == DockStyle.Bottom) ocrPanel.Height = PaneGrip.Size("snip.ocr", want, Math.Max(Ui.S(100), ClientSize.Height / 3), ClientSize.Height);
+                else ocrPanel.Width = PaneGrip.Size("snip.ocr", want, Ui.S(320), ClientSize.Width);
+            };
             SelectTool("rect");
             Rerender();
             Ui.Theme(this);

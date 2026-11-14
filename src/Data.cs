@@ -133,6 +133,7 @@ namespace StickyPro
         public List<string> ColorHistory = new List<string>();
         public List<string> Swatches = new List<string>();
         public bool WelcomeHidden;
+        public Dictionary<string, int> PaneSizes = new Dictionary<string, int>();
     }
 
     static class Store
@@ -214,12 +215,13 @@ namespace StickyPro
             if (Settings.Hotkeys == null) Settings.Hotkeys = new Dictionary<string, string>();
             if (Settings.ColorHistory == null) Settings.ColorHistory = new List<string>();
             if (Settings.Swatches == null) Settings.Swatches = new List<string>();
+            if (Settings.PaneSizes == null) Settings.PaneSizes = new Dictionary<string, int>();
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
             if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
 
             saveTimer = new System.Windows.Forms.Timer();
             saveTimer.Interval = 700;
-            saveTimer.Tick += delegate { saveTimer.Stop(); SaveNow(); };
+            saveTimer.Tick += delegate { saveTimer.Stop(); asyncSave = true; try { SaveNow(); } finally { asyncSave = false; } };
         }
 
         static T Read<T>(string name) where T : class
@@ -244,15 +246,85 @@ namespace StickyPro
             return null;
         }
 
-        static void Write(string name, object o)
+        static void WriteText(string name, string json)
         {
             string p = Path.Combine(Dir, name);
             string tmp = p + ".tmp";
-            File.WriteAllText(tmp, Js().Serialize(o), new UTF8Encoding(false));
-            // Do not replace a known-good recovery backup with the corrupt primary.
-            if (File.Exists(p)) File.Replace(tmp, p, recovered.Contains(name) ? null : p + ".bak", true);
-            else File.Move(tmp, p);
-            recovered.Remove(name);
+            File.WriteAllText(tmp, json, new UTF8Encoding(false));
+            lock (recovered)
+            {
+                // Do not replace a known-good recovery backup with the corrupt primary.
+                if (File.Exists(p)) File.Replace(tmp, p, recovered.Contains(name) ? null : p + ".bak", true);
+                else File.Move(tmp, p);
+                recovered.Remove(name);
+            }
+        }
+
+        // Background writer: the UI thread only serializes; disk I/O never blocks a frame.
+        // One writer, latest content per file wins, so writes cannot overtake each other.
+        static readonly object ioLock = new object();
+        static readonly Dictionary<string, string> pendingWrites = new Dictionary<string, string>();
+        static bool writerBusy;
+        static void QueueWrite(string name, string json)
+        {
+            lock (ioLock)
+            {
+                pendingWrites[name] = json;
+                if (writerBusy) return;
+                writerBusy = true;
+            }
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { Drain(); });
+        }
+        static void Drain()
+        {
+            while (true)
+            {
+                string name, json;
+                lock (ioLock)
+                {
+                    if (pendingWrites.Count == 0) { writerBusy = false; System.Threading.Monitor.PulseAll(ioLock); return; }
+                    var first = pendingWrites.First(); name = first.Key; json = first.Value; pendingWrites.Remove(name);
+                }
+                try { WriteText(name, json); }
+                catch (Exception ex)
+                {
+                    App.Log("Save failed " + name + ": " + ex.Message);
+                    string n = name;
+                    try { if (App.I != null) App.I.Sync.BeginInvoke(new Action(() => Remark(n))); } catch { }
+                }
+            }
+        }
+        static void Remark(string name)
+        {
+            switch (name)
+            {
+                case "notes.json": notesDirty = true; break;
+                case "prompts.json": promptsDirty = true; break;
+                case "clips.json": clipsDirty = true; break;
+                case "settings.json": settingsDirty = true; break;
+                case "cards.json": cardsDirty = true; break;
+                case "history.json": historyDirty = true; break;
+                case "activity.json": activityDirty = true; break;
+                default: taggedDirty = true; break;
+            }
+            if (saveTimer != null) { saveTimer.Interval = 5000; saveTimer.Start(); }
+        }
+        // Waits until queued writes are on disk (used before exit, backup and restore).
+        public static void FlushWrites()
+        {
+            lock (ioLock)
+            {
+                var until = DateTime.Now.AddSeconds(10);
+                while (writerBusy && DateTime.Now < until) System.Threading.Monitor.Wait(ioLock, 500);
+            }
+        }
+
+        static bool asyncSave;
+        static void Write(string name, object o)
+        {
+            string json = Js().Serialize(o);
+            if (asyncSave) QueueWrite(name, json);
+            else { FlushWrites(); WriteText(name, json); }
         }
 
         static void Kick() { if (saveTimer != null) { saveTimer.Stop(); saveTimer.Start(); } }
@@ -287,6 +359,7 @@ namespace StickyPro
                 saveTimer.Start();
             }
             else if (saveTimer != null) saveTimer.Interval = 700;
+            if (!asyncSave) FlushWrites(); // a direct SaveNow (exit, backup) returns only when everything is on disk
         }
 
         static bool Safe(string name, object o)

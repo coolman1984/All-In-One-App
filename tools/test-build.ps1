@@ -6,7 +6,7 @@ $out  = Join-Path $root 'build-test'
 New-Item -ItemType Directory -Force $out | Out-Null
 $src  = Get-ChildItem (Join-Path $root 'src') -Filter *.cs | ForEach-Object { $_.FullName }
 $refs = '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll', '/r:System.Web.Extensions.dll'
-$outArg = '/out:' + (Join-Path $out 'StickyNotesPro.test.exe')
+$outArg = '/out:' + (Join-Path $out 'AllInOne.test.exe')
 $icoArg = '/win32icon:' + (Join-Path $root 'src\app.ico')
 & $csc /nologo /target:winexe /optimize+ /platform:x64 $outArg $icoArg $refs $src
 if ($LASTEXITCODE -ne 0) { Write-Error 'BUILD FAILED'; exit 1 }

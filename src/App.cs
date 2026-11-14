@@ -16,7 +16,7 @@ namespace StickyPro
     {
         public static App I;
         public static Icon AppIcon;
-        public const string Name = "Sticky Notes Pro";
+        public const string Name = "All in One";
 
         public Control Sync;
         NotifyIcon tray;
@@ -69,6 +69,7 @@ namespace StickyPro
                 SetStartup(true);
                 if (Store.Prompts.Count == 0) SeedPrompts();
             }
+            MigrateStartup();
             miStartup.Checked = IsStartup();
 
             Store.PromptsChanged += Snippets.Update;
@@ -481,12 +482,31 @@ namespace StickyPro
         // ---------- Start with Windows ----------
 
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string RunName = "StickyNotesPro";
+        const string RunName = "AllInOne";
+        const string OldRunName = "StickyNotesPro"; // name before the rename to "All in One"
 
         public static bool IsStartup()
         {
             try { using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue(RunName) != null; }
             catch { return false; }
+        }
+
+        // After the rename: move an old "start with Windows" entry to the new exe, and keep the path current.
+        public static void MigrateStartup()
+        {
+            try
+            {
+                bool on;
+                using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) on = k != null && (k.GetValue(OldRunName) != null || k.GetValue(RunName) != null);
+                if (!on) return;
+                using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
+                {
+                    k.DeleteValue(OldRunName, false);
+                    string want = "\"" + Application.ExecutablePath + "\" /startup";
+                    if (!want.Equals(k.GetValue(RunName) as string, StringComparison.OrdinalIgnoreCase)) k.SetValue(RunName, want);
+                }
+            }
+            catch (Exception ex) { Log("Startup migration failed: " + ex.Message); }
         }
 
         public static void SetStartup(bool on)

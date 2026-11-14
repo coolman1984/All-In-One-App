@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
-$assembly = [Reflection.Assembly]::LoadFile((Join-Path $root 'build-test\StickyNotesPro.test.exe'))
+$assembly = [Reflection.Assembly]::LoadFile((Join-Path $root 'build-test\AllInOne.test.exe'))
 $static = [Reflection.BindingFlags]'Public,NonPublic,Static'
 $capture = $assembly.GetType('StickyPro.CaptureCommands')
 $desktop = New-Object Drawing.Rectangle(-1920, -200, 3840, 1280)

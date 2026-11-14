@@ -159,7 +159,17 @@ namespace StickyPro
             title.Padding = new Padding(Ui.S(14), 0, 0, 0);
             nav.Controls.Add(title);
             Controls.Add(nav);
-            EventHandler adaptNav = delegate { bool compact = Width < Ui.S(900); nav.Width = Ui.S(compact ? 64 : 224); title.Text = compact ? "" : "        " + App.Name; };
+            var navGrip = PaneGrip.Attach(nav, "nav", Ui.S(56));
+            // Sidebar: drag its edge to any width (narrow = icons only). Small windows fold it automatically.
+            EventHandler adaptNav = delegate
+            {
+                bool compact = Width < Ui.S(820);
+                nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
+                bool wide = nav.Width >= Ui.S(150);
+                title.Text = wide ? "        " + App.Name : "";
+            };
+            nav.SizeChanged += delegate { bool wide = nav.Width >= Ui.S(150); title.Text = wide ? "        " + App.Name : ""; };
+            navGrip.BackColor = Ui.Sidebar;
             Resize += adaptNav; adaptNav(this, EventArgs.Empty);
 
             Ui.Theme(this);
@@ -638,16 +648,19 @@ namespace StickyPro
             var head = MainForm.Heading("Prompts"); head.Dock = DockStyle.Top; head.AutoSize = false; head.Height = Ui.S(40);
             left.Controls.Add(head);
             Controls.Add(left);
+            PaneGrip.Attach(mid, "prompts.list", Ui.S(160));
+            PaneGrip.Attach(left, "prompts.cats", Ui.S(110));
 
             EventHandler layout = delegate
             {
                 bool compact = Width < Ui.S(850);
                 left.Visible = !compact;
                 compactCats.Visible = compact;
+                if (!compact) left.Width = PaneGrip.Size("prompts.cats", DockStyle.Left, Ui.S(200), Width / 2);
                 bool stacked = Width < Ui.S(600);
                 mid.Dock = stacked ? DockStyle.Top : DockStyle.Left;
-                if (stacked) mid.Height = Ui.S(190);
-                mid.Width = compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Ui.S(340);
+                if (stacked) mid.Height = PaneGrip.Size("prompts.list", DockStyle.Top, Ui.S(190), Height);
+                else mid.Width = PaneGrip.Size("prompts.list", DockStyle.Left, compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Ui.S(340), Width - (compact ? 0 : left.Width));
             };
             Resize += layout;
             layout(this, EventArgs.Empty);
@@ -1025,7 +1038,7 @@ namespace StickyPro
             right.Controls.Add(preview);
             right.Controls.Add(picture);
             right.Controls.Add(previewMeta);
-            Controls.Add(new ResponsivePane(list, right, Ui.S(340), Ui.S(780), Ui.S(210)));
+            Controls.Add(new ResponsivePane(list, right, Ui.S(340), Ui.S(780), Ui.S(210), "clips.preview"));
 
             var bar2 = MainForm.Bar();
             bar2.Controls.Add(Ui.Btn("Copy", delegate { CopySelected(0); }, true));

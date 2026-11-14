@@ -322,6 +322,8 @@ namespace StickyPro
         class OwnedMenu : ContextMenuStrip
         {
             public bool Bound;
+            // Items are often added after creation: theme them and add icons right before showing.
+            protected override void OnOpening(System.ComponentModel.CancelEventArgs e) { base.OnOpening(e); ThemeMenu(this); }
             protected override void Dispose(bool disposing)
             {
                 if (disposing) ClearItems(Items);
@@ -337,6 +339,7 @@ namespace StickyPro
             foreach (ToolStripItem i in m.Items)
             {
                 i.ForeColor = Text;
+                AutoIcon(i);
                 var mi = i as ToolStripMenuItem;
                 if (mi != null && mi.HasDropDownItems) ThemeMenu(mi.DropDown);
             }
@@ -359,8 +362,72 @@ namespace StickyPro
             b.MinimumSize = S(0, ControlHeight);
             b.Cursor = Cursors.Hand;
             b.UseVisualStyleBackColor = false;
+            b.Glyph = GlyphFor(text);
+            if (b.Glyph != null) b.Text = text.TrimStart('+', '●', ' ');
             if (click != null) b.Click += click;
             return b;
+        }
+
+        // Icons everywhere: buttons get a Segoe Fluent/MDL2 icon chosen from their text.
+        static readonly string[][] glyphWords = {
+            new[] { "run as admin", "" }, new[] { "end task", "" }, new[] { "pop out", "" }, new[] { "copy path", "" },
+            new[] { "copy", "" }, new[] { "paste", "" }, new[] { "save swatch", "" }, new[] { "save", "" }, new[] { "back up", "" },
+            new[] { "restore", "" }, new[] { "delete", "" }, new[] { "remove", "" }, new[] { "clear", "" }, new[] { "clean", "" },
+            new[] { "refresh", "" }, new[] { "repeat", "" }, new[] { "deep scan", "" }, new[] { "search", "" }, new[] { "find", "" },
+            new[] { "new note", "" }, new[] { "new prompt", "" }, new[] { "new", "" }, new[] { "add", "" }, new[] { "create", "" },
+            new[] { "import", "" }, new[] { "export", "" }, new[] { "folder", "" }, new[] { "open", "" }, new[] { "show in", "" },
+            new[] { "settings", "" }, new[] { "shortcut", "" }, new[] { "record", "" }, new[] { "text from screen", "" },
+            new[] { "full screen", "" }, new[] { "window control", "" }, new[] { "window", "" }, new[] { "scrolling", "" },
+            new[] { "fixed", "" }, new[] { "free", "" }, new[] { "region", "" }, new[] { "snip", "" }, new[] { "capture", "" },
+            new[] { "pick from screen", "" }, new[] { "color", "" }, new[] { "print", "" }, new[] { "pin", "" },
+            new[] { "history", "" }, new[] { "tag", "" }, new[] { "rename", "" }, new[] { "edit", "" }, new[] { "queue", "" },
+            new[] { "stop", "" }, new[] { "pause", "" }, new[] { "resume", "" }, new[] { "start", "" }, new[] { "cancel", "" },
+            new[] { "close", "" }, new[] { "got it", "" }, new[] { "ok", "" }, new[] { "use ", "" }, new[] { "set ", "" },
+            new[] { "default", "" }, new[] { "favorite", "" }, new[] { "cleanup", "" }, new[] { "fit", "" },
+            new[] { "exit", "" }, new[] { "show / hide", "" }, new[] { "graphic", "" }, new[] { "screen", "" },
+            new[] { "home", "" }, new[] { "sticky", "" }, new[] { "notes", "" }, new[] { "prompts", "" }, new[] { "clipboard", "" },
+            new[] { "system", "" }, new[] { "file activity", "" }, new[] { "magnifier", "" }, new[] { "ruler", "" },
+            new[] { "crosshair", "" }, new[] { "protractor", "" }, new[] { "whiteboard", "" },
+            new[] { "highlighter", "" }, new[] { "eraser", "" }, new[] { "pen", "" }, new[] { "box", "" }, new[] { "arrow", "" },
+            new[] { "text", "" }, new[] { "hide", "" }, new[] { "crop", "" }, new[] { "undo", "" }, new[] { "redo", "" },
+            new[] { "data folder", "" }, new[] { "paste queue", "" },
+        };
+
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ToolStripItem, object> autoIcons = new System.Runtime.CompilerServices.ConditionalWeakTable<ToolStripItem, object>();
+        public static Bitmap GlyphImage(string glyph, int size, Color color)
+        {
+            var b = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(b))
+            using (var br = new SolidBrush(color))
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            {
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                g.DrawString(glyph, Icon(size * 0.56f), br, new RectangleF(0, 0, size, size + 1), sf);
+            }
+            return b;
+        }
+        // Adds (or re-colours after a theme change) an icon on menu items and toolbar buttons that have none.
+        static void AutoIcon(ToolStripItem i)
+        {
+            if (i is ToolStripSeparator || i is ToolStripControlHost) return;
+            object marker;
+            bool ours = autoIcons.TryGetValue(i, out marker);
+            if (i.Image != null && !ours) return;
+            string glyph = GlyphFor(i.Text);
+            if (glyph == null) return;
+            var old = i.Image;
+            i.Image = GlyphImage(glyph, S(16), Accent);
+            if (old != null) old.Dispose();
+            if (!ours) autoIcons.Add(i, glyph);
+            var button = i as ToolStripButton;
+            if (button != null && button.DisplayStyle == ToolStripItemDisplayStyle.Text) button.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+        }
+        public static string GlyphFor(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            string t = text.Trim().TrimStart('+', '●', ' ').ToLowerInvariant() + " ";
+            foreach (var w in glyphWords) if (t.StartsWith(w[0]) || t.Contains(" " + w[0])) return w[1];
+            return null;
         }
 
         public static TextBox Search(string cue)
@@ -455,18 +522,31 @@ namespace StickyPro
             var b = new Bitmap(s, s, PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(b))
             {
+                // "All in One": blue rounded square holding a 2x2 grid of tools; the top-left tile is a yellow note.
                 g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 g.Clear(Color.Transparent);
-                float m = s * 0.06f;
-                var r = new Rectangle((int)m, (int)m, (int)(s - 2 * m), (int)(s - 2 * m));
-                using (var path = Round(r, (int)(s * 0.18f)))
-                using (var br = new SolidBrush(Color.FromArgb(52, 52, 52)))
+                float m = Math.Max(0.5f, s * 0.04f);
+                var r = new RectangleF(m, m, s - 2 * m, s - 2 * m);
+                using (var path = Round(Rectangle.Round(r), Math.Max(2, (int)(s * 0.22f))))
+                using (var br = new LinearGradientBrush(r, Color.FromArgb(46, 134, 222), Color.FromArgb(18, 88, 168), 90f))
                     g.FillPath(br, path);
-                float x0 = s * 0.42f, y0 = s * 0.42f, x1 = s * 0.80f, y1 = s * 0.80f, f = s * 0.13f;
-                var poly = new[] { new PointF(x0, y0), new PointF(x1, y0), new PointF(x1, y1 - f), new PointF(x1 - f, y1), new PointF(x0, y1) };
-                using (var br = new SolidBrush(Color.FromArgb(255, 213, 0))) g.FillPolygon(br, poly);
-                var fold = new[] { new PointF(x1, y1 - f), new PointF(x1 - f, y1 - f), new PointF(x1 - f, y1) };
-                using (var br = new SolidBrush(Color.FromArgb(200, 160, 0))) g.FillPolygon(br, fold);
+                float pad = s * 0.19f, gap = Math.Max(1f, s * 0.08f), tile = (s - 2 * pad - gap) / 2f;
+                int rad = Math.Max(1, (int)(tile * 0.28f));
+                for (int i = 0; i < 4; i++)
+                {
+                    float x = pad + (i % 2) * (tile + gap), y = pad + (i / 2) * (tile + gap);
+                    var tr = Rectangle.Round(new RectangleF(x, y, tile, tile));
+                    var c = i == 0 ? Color.FromArgb(255, 213, 0) : Color.White;
+                    using (var p = Round(tr, rad)) using (var br = new SolidBrush(c)) g.FillPath(br, p);
+                }
+                if (s >= 32)
+                {
+                    // tiny folded corner on the note tile
+                    float x1 = pad + tile, y1 = pad + tile, f = tile * 0.32f;
+                    using (var br = new SolidBrush(Color.FromArgb(205, 160, 0)))
+                        g.FillPolygon(br, new[] { new PointF(x1 - f, y1), new PointF(x1, y1 - f), new PointF(x1 - f, y1 - f) });
+                }
             }
             return b;
         }
@@ -610,7 +690,9 @@ namespace StickyPro
     class FluentButton : Button
     {
         public bool Primary;
+        public string Glyph;
         bool hover, pressed, defaultButton;
+        int GlyphSpace { get { return string.IsNullOrEmpty(Glyph) ? 0 : Ui.S(22); } }
         public FluentButton()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -618,7 +700,7 @@ namespace StickyPro
         public override Size GetPreferredSize(Size proposedSize)
         {
             var text = TextRenderer.MeasureText(Text, Font);
-            return new Size(Math.Max(MinimumSize.Width, text.Width + Padding.Horizontal + Ui.S(4)), Math.Max(MinimumSize.Height, Font.Height + Padding.Vertical + Ui.S(4)));
+            return new Size(Math.Max(MinimumSize.Width, text.Width + GlyphSpace + Padding.Horizontal + Ui.S(4)), Math.Max(MinimumSize.Height, Font.Height + Padding.Vertical + Ui.S(4)));
         }
         public override void NotifyDefault(bool value) { defaultButton = value; base.NotifyDefault(value); Invalidate(); }
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -644,7 +726,18 @@ namespace StickyPro
             var textRect = Rectangle.Inflate(ClientRectangle, -Ui.S(Ui.Space), -Ui.S(2));
             var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
             if (!UseMnemonic) flags |= TextFormatFlags.NoPrefix; else if (!ShowKeyboardCues) flags |= TextFormatFlags.HidePrefix;
-            TextRenderer.DrawText(g, Text, Font, textRect, !Enabled ? Ui.Muted : Primary ? Color.White : ForeColor, flags);
+            var fore = !Enabled ? Ui.Muted : Primary ? Color.White : ForeColor;
+            if (GlyphSpace > 0)
+            {
+                // Icon + text centred together.
+                int textW = TextRenderer.MeasureText(Text, Font).Width;
+                int total = Math.Min(textRect.Width, GlyphSpace + textW);
+                int x = textRect.X + Math.Max(0, (textRect.Width - total) / 2);
+                TextRenderer.DrawText(g, Glyph, Ui.Icon(10.5f), new Rectangle(x, textRect.Y, Ui.S(18), textRect.Height), !Enabled ? Ui.Muted : Primary ? Color.White : Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                textRect = new Rectangle(x + GlyphSpace, textRect.Y, Math.Max(1, textRect.Right - x - GlyphSpace), textRect.Height);
+                flags = (flags & ~TextFormatFlags.HorizontalCenter) | TextFormatFlags.Left;
+            }
+            TextRenderer.DrawText(g, Text, Font, textRect, fore, flags);
             if (Focused && ShowFocusCues)
             {
                 var focus = Rectangle.Inflate(r, -Ui.S(3), -Ui.S(3));

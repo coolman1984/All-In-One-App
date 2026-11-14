@@ -180,7 +180,7 @@ namespace StickyPro
                 try
                 {
                     Store.SaveNow();
-                    string target = System.IO.Path.Combine(d.SelectedPath, "StickyNotesPro backup " + DateTime.Now.ToString("yyyy-MM-dd HHmm"));
+                    string target = System.IO.Path.Combine(d.SelectedPath, "All in One backup " + DateTime.Now.ToString("yyyy-MM-dd HHmm"));
                     CopyData(Store.Dir, target);
                     MessageBox.Show(owner, "Backup saved to:\n" + target, App.Name);
                     try { System.Diagnostics.Process.Start("explorer.exe", "\"" + target + "\""); } catch { }
@@ -191,7 +191,7 @@ namespace StickyPro
 
         public static bool Import(IWin32Window owner)
         {
-            using (var d = new FolderBrowserDialog { Description = "Choose a StickyNotesPro backup folder (it contains notes.json)" })
+            using (var d = new FolderBrowserDialog { Description = "Choose an All in One backup folder (it contains notes.json)" })
             {
                 if (d.ShowDialog(owner) != DialogResult.OK) return false;
                 if (!System.IO.File.Exists(System.IO.Path.Combine(d.SelectedPath, "notes.json")) && !System.IO.File.Exists(System.IO.Path.Combine(d.SelectedPath, "settings.json")))
