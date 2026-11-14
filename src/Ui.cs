@@ -611,6 +611,9 @@ namespace StickyPro
             f.BackColor = Card; f.ForeColor = Text; f.Icon = App.AppIcon;
             f.ClientSize = new Size(S(w), S(h));
             f.MaximumSize = Screen.FromPoint(Cursor.Position).WorkingArea.Size;
+            // Dialogs can grow (long prompts, many variables) but never shrink below the designed size.
+            f.FormBorderStyle = FormBorderStyle.Sizable; f.SizeGripStyle = SizeGripStyle.Show;
+            f.Shown += delegate { f.MinimumSize = f.Size; };
             DarkTitle(f);
             return f;
         }

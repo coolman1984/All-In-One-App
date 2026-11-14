@@ -29,6 +29,7 @@ namespace StickyPro
             TopMost = true;
             ClientSize = Ui.S(560, 720);
             MaximumSize = Screen.FromPoint(Cursor.Position).WorkingArea.Size;
+            MinimumSize = Ui.S(420, 360);
             Ui.DarkTitle(this);
 
             var t = new TableLayoutPanel();
