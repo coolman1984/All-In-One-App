@@ -52,7 +52,8 @@ namespace StickyPro
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
             TextRenderer.DrawText(g, Text, Ui.Small, new Rectangle(Ui.S(14), Ui.S(10), Width - Ui.S(28), Ui.S(20)), Ui.Muted, flags);
             TextRenderer.DrawText(g, Value, Height > Ui.S(100) ? Ui.Metric : Ui.Big, new Rectangle(Ui.S(14), Ui.S(30), Width - Ui.S(28), Ui.S(42)), Ui.Text, flags);
-            TextRenderer.DrawText(g, Detail, Ui.Small, new Rectangle(Ui.S(14), Ui.S(Height > Ui.S(100) ? 76 : 58), Width - Ui.S(28), Ui.S(42)), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+            int detailTop = Height > Ui.S(100) ? Ui.S(74) : Ui.S(58);
+            TextRenderer.DrawText(g, Detail, Ui.Small, new Rectangle(Ui.S(14), detailTop, Width - Ui.S(28), Math.Max(Ui.S(16), Height - detailTop - Ui.S(12))), Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
             if (Fraction >= 0)
             {
                 var bar = new Rectangle(Ui.S(14), Height - Ui.S(10), Math.Max(1, Width - Ui.S(28)), Ui.S(4));
@@ -305,15 +306,18 @@ namespace StickyPro
             {
                 int pad = Ui.S(20), w = Math.Max(Ui.S(240), ClientSize.Width - pad * 2);
                 int y = AutoScrollPosition.Y + Ui.S(12);
-                int th = tasks.Measure(w); tasks.SetBounds(pad, y, w, th); tasks.Invalidate(); y += th;
-                liveHead.SetBounds(pad, y, w, Ui.S(36)); y += Ui.S(44);
-                int gh = grid.GetPreferredSize(new Size(w, 0)).Height; grid.SetBounds(pad, y, w, gh); y += gh + pad;
+                // Live data first so it is always in view, then the PicPick-style task list.
+                liveHead.SetBounds(pad, y, w, Ui.S(36)); y += Ui.S(42);
+                int gh = grid.GetPreferredSize(new Size(w, 0)).Height; grid.SetBounds(pad, y, w, gh); y += gh + Ui.S(8);
+                int th = tasks.Measure(w); tasks.SetBounds(pad, y, w, th); tasks.Invalidate(); y += th + pad;
                 var min = new Size(0, y - AutoScrollPosition.Y);
                 if (AutoScrollMinSize != min) AutoScrollMinSize = min;
             }
             finally { laying = false; }
         }
         protected override void OnResize(EventArgs e) { base.OnResize(e); PerformLayout(); }
+        // Keep the live tiles in view: do not jump to the task list when it takes keyboard focus.
+        protected override Point ScrollToControl(Control activeControl) { return DisplayRectangle.Location; }
         protected override void OnLive(bool on) { ProcessSampler.Watch(this, on); if (on) RefreshMetrics(); }
         void RefreshMetrics()
         {
