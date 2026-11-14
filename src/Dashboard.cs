@@ -133,6 +133,7 @@ namespace StickyPro
             LayoutKit.Add(table, actions, false);
             var captures = LayoutKit.Actions(DockStyle.Fill);
             foreach (var capture in CaptureCommands.Modes) { string mode = capture[0]; captures.Controls.Add(Ui.Btn(capture[1], delegate { App.I.StartSnip(mode, 0, false); })); }
+            captures.Controls.Add(Ui.Btn("Scrolling Window", delegate { App.I.StartSnip("scroll", 0, false); }));
             captures.Controls.Add(Ui.Btn("Repeat Last Capture", delegate { App.I.StartSnip("repeat", 0, false); }));
             LayoutKit.Add(table, captures, false);
             var grid = new TileGrid(Ui.S(220), Ui.S(136), 4); grid.Dock = DockStyle.Fill;

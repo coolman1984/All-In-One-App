@@ -123,6 +123,7 @@ namespace StickyPro
                 case "next": PasteNext(); break;
                 case "cards": ToggleCards(); break;
                 case "snip": StartSnip("rect", 0, false); break;
+                case "repeat": StartSnip("repeat", 0, false); break;
                 case "ocr": StartSnip("rect", 0, true); break;
                 case "record": StartRecord("rect"); break;
                 case "tagfile": TagExplorerSelection(); break;
@@ -142,19 +143,45 @@ namespace StickyPro
             if (restoreMain) main.Hide();
             Action go = () =>
             {
-                snipping = true;
-                Bitmap pic = null;
+                Bitmap pic = null; Rectangle selected = Rectangle.Empty;
                 try
                 {
-                    if (mode == "repeat") pic = CaptureCommands.Repeat();
-                    else using (var ov = new SnipOverlay(mode, false))
+                    if (mode == "repeat")
                     {
-                        if (ov.ShowDialog() == DialogResult.OK) { pic = ov.Picture; ov.Picture = null; if (!ocrOnly) CaptureCommands.Remember(ov.Mode, ov.Result, ov.Mode == "free" ? ov.FreePolygon : null); }
+                        if (Store.Settings.LastCaptureMode == "scroll") selected = new Rectangle(Store.Settings.LastX, Store.Settings.LastY, Store.Settings.LastW, Store.Settings.LastH);
+                        else pic = CaptureCommands.Repeat();
+                    }
+                    else using (var ov = new SnipOverlay(mode == "scroll" ? "control" : mode, mode == "scroll"))
+                    {
+                        if (ov.ShowDialog() == DialogResult.OK)
+                        {
+                            selected = ov.Result; pic = ov.Picture; ov.Picture = null;
+                            if (!ocrOnly) CaptureCommands.Remember(mode == "scroll" ? "scroll" : ov.Mode, ov.Result, ov.Mode == "free" ? ov.FreePolygon : null);
+                        }
+                    }
+                    if ((mode == "scroll" || (mode == "repeat" && Store.Settings.LastCaptureMode == "scroll")) && selected.Width > 0)
+                    {
+                        var scrolling = new ScrollingCapture(selected, result =>
+                        {
+                            snipping = false;
+                            if (restoreMain && main != null && !main.IsDisposed) main.Show();
+                            if (result != null) FinishSnip(result, false);
+                            else Balloon("No scrolling capture", "Choose a scrollable content area and try again.");
+                        });
+                        scrolling.Show(); return;
                     }
                 }
                 catch (Exception ex) { Log("Snip failed: " + ex.Message); Balloon("Could not capture", ex.Message); }
-                finally { snipping = false; }
+                snipping = false;
                 if (restoreMain && main != null && !main.IsDisposed) main.Show();
+                if (pic != null) FinishSnip(pic, ocrOnly);
+            };
+            if (delaySec > 0) { Balloon("Snip in " + delaySec + " seconds", "Get the screen ready."); Ui.Later(delaySec * 1000, go); }
+            else Ui.Later(restoreMain ? 300 : 120, go);
+        }
+
+        void FinishSnip(Bitmap pic, bool ocrOnly)
+        {
                 if (pic == null) return;
                 if (ocrOnly)
                 {
@@ -182,9 +209,6 @@ namespace StickyPro
                 var ed = new SnipEditor(pic, saved);
                 ed.Show();
                 ed.Activate();
-            };
-            if (delaySec > 0) { Balloon("Snip in " + delaySec + " seconds", "Get the screen ready."); Ui.Later(delaySec * 1000, go); }
-            else Ui.Later(restoreMain ? 300 : 120, go);
         }
 
         public void StartRecord(string mode)

@@ -1302,6 +1302,7 @@ $stream.Dispose()
             bar.Controls.Add(Ui.Btn("Full screen", delegate { App.I.StartSnip("full", Delay(), false); }));
             bar.Controls.Add(Ui.Btn("Fixed Region", delegate { App.I.StartSnip("fixed", Delay(), false); }));
             bar.Controls.Add(Ui.Btn("Fixed size...", delegate { CaptureCommands.FixedSize(true); }));
+            bar.Controls.Add(Ui.Btn("Scrolling Window", delegate { App.I.StartSnip("scroll", Delay(), false); }));
             bar.Controls.Add(Ui.Btn("Window Control", delegate { App.I.StartSnip("control", Delay(), false); }));
             bar.Controls.Add(Ui.Btn("Repeat Last Capture", delegate { App.I.StartSnip("repeat", 0, false); }));
             bar.Controls.Add(Ui.Btn("Free-form", delegate { App.I.StartSnip("free", Delay(), false); }));

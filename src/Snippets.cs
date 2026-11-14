@@ -140,6 +140,7 @@ namespace StickyPro
             new[] { "toggle",    "Show / hide all notes",            "Ctrl+Alt+H", "Show/hide notes" },
             new[] { "cards",     "Show / hide floating cards",       "Ctrl+Alt+C", "Show/hide cards" },
             new[] { "snip",      "New snip (screenshot)",            "Ctrl+Alt+X", "Snip" },
+            new[] { "repeat",    "Repeat last capture",              "Ctrl+Alt+D", "Repeat capture" },
             new[] { "ocr",       "Copy text from the screen (OCR)",  "Ctrl+Alt+O", "Text from screen" },
             new[] { "record",    "Start / stop screen recording",    "Ctrl+Alt+R", "Record screen" },
             new[] { "tagfile",   "Tag files selected in Explorer",   "Ctrl+Alt+F", "Tag Explorer files" },
