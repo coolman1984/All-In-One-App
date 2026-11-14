@@ -184,6 +184,15 @@ namespace StickyPro
                 try { doubleBufferedProp.SetValue(c, true, null); } catch { }
         }
 
+        // Applies several visual changes as one repaint.
+        public static void Batch(Control c, Action change)
+        {
+            if (c == null || !c.IsHandleCreated || !c.Visible) { change(); return; }
+            Native.SendMessage(c.Handle, Native.WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+            try { c.SuspendLayout(); try { change(); } finally { c.ResumeLayout(true); } }
+            finally { Native.SendMessage(c.Handle, Native.WM_SETREDRAW, (IntPtr)1, IntPtr.Zero); c.Invalidate(true); }
+        }
+
         // Applies theme colors to inputs (which do not inherit colors) and dark scrollbars / title bar.
         public static void Theme(Control root)
         {

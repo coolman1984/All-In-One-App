@@ -5,6 +5,7 @@ namespace StickyPro
 {
     static class Native
     {
+        public const int WM_SETREDRAW = 0x000B;
         public const int WM_HOTKEY = 0x0312;
         public const int WM_CLIPBOARDUPDATE = 0x031D;
         public const int WM_NCHITTEST = 0x0084;

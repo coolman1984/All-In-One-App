@@ -37,6 +37,7 @@ namespace StickyPro
             p.Controls.Add(bar);
             return p;
         }
+        readonly Panel content;
         readonly Label status, keys;
         readonly Timer statusTimer = new Timer();
         readonly ToolTip navigationTips = new ToolTip();
@@ -59,7 +60,7 @@ namespace StickyPro
             KeyPreview = true;
             Ui.DarkTitle(this);
 
-            var content = new Panel();
+            content = new Panel();
             content.Dock = DockStyle.Fill;
             content.Padding = new Padding(Ui.S(12), Ui.S(10), Ui.S(12), Ui.S(4));
             home = new DashboardPanel { Visible = false };
@@ -225,24 +226,28 @@ namespace StickyPro
         {
             if (page == "prompts" && p != "prompts") prompts.Commit();
             if (p.StartsWith("system:")) { system.SelectTab(p.Substring(7)); p = "system"; }
-            page = p;
-            navHome.Selected = p == "dashboard"; home.Visible = p == "dashboard";
-            navNotes.Selected = p == "notes";
-            navPrompts.Selected = p == "prompts";
-            navClips.Selected = p == "clips";
-            navSystem.Selected = p == "system";
-            navCards.Selected = p == "cards";
-            notes.Visible = p == "notes";
-            prompts.Visible = p == "prompts";
-            clips.Visible = p == "clips";
-            system.Visible = p == "system";
-            cards.Visible = p == "cards";
-            navSnip.Selected = p == "snip";
-            navActivity.Selected = p == "activity";
-            navTagged.Selected = p == "tagged";
-            snipPage.Visible = p == "snip";
-            activityPage.Visible = p == "activity";
-            taggedPage.Visible = p == "tagged";
+            string target = p;
+            Ui.Batch(content, () =>
+            {
+                page = target;
+                navHome.Selected = target == "dashboard"; home.Visible = target == "dashboard";
+                navNotes.Selected = target == "notes";
+                navPrompts.Selected = target == "prompts";
+                navClips.Selected = target == "clips";
+                navSystem.Selected = target == "system";
+                navCards.Selected = target == "cards";
+                notes.Visible = target == "notes";
+                prompts.Visible = target == "prompts";
+                clips.Visible = target == "clips";
+                system.Visible = target == "system";
+                cards.Visible = target == "cards";
+                navSnip.Selected = target == "snip";
+                navActivity.Selected = target == "activity";
+                navTagged.Selected = target == "tagged";
+                snipPage.Visible = target == "snip";
+                activityPage.Visible = target == "activity";
+                taggedPage.Visible = target == "tagged";
+            });
             RefreshCurrent();
             FocusSearch();
         }
