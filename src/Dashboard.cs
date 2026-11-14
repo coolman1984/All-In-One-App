@@ -150,6 +150,7 @@ namespace StickyPro
             TabStop = true; AccessibleRole = AccessibleRole.List; AccessibleName = "Pick a task";
 
             var s = Add("New task", 0);
+            s.Tasks.Add(T("\uE73A", "New task / reminder", "\"call Ali tomorrow 3pm !high\"  (" + Key("newtask") + ")", () => QuickTaskForm.Open()));
             s.Tasks.Add(T("", "New note", "Sticky note on the desktop  (" + Key("note") + ")", () => App.I.NewNote(null)));
             s.Tasks.Add(T("", "New prompt", "Save a reusable prompt or snippet", () => App.I.NewPrompt()));
             s.Tasks.Add(T("", "New blank image", "Start a picture from an empty canvas", () => SnipEditor.NewBlank()));
@@ -183,6 +184,15 @@ namespace StickyPro
             s.Tasks.Add(T("", "Startup apps", "Choose what starts with Windows", () => App.I.ShowMain("system:startup")));
             s.Tasks.Add(T("", "File activity", "Office files you opened and closed", () => App.I.ShowMain("activity")));
             s.Tasks.Add(T("", "Tagged files", "Files you marked as Urgent, Review ...", () => App.I.ShowMain("tagged")));
+            s = Add("Tools", 1);
+            s.Tasks.Add(T("\uE73A", "Tasks & reminders", "Lists, due dates, repeats  (Ctrl+9)", () => App.I.ShowMain("tasks")));
+            s.Tasks.Add(T("\uEC50", "Explorer", "Up to 4 folder panes, fast copy", () => App.I.ShowMain("explorer")));
+            s.Tasks.Add(T("\uE774", "Chrome bookmarks", "Manage, search, open in Chrome", () => App.I.ShowMain("chrome")));
+            s.Tasks.Add(T("\uEA86", "Chrome extensions", "All profiles, on/off, manage", () => App.I.ShowMain("chrome:extensions")));
+            s.Tasks.Add(T("\uE74D", "Uninstall programs", "Deep clean of leftovers", () => App.I.ShowMain("system:uninstall")));
+            s.Tasks.Add(T("\uE945", "Power tools", "Always on top, hosts, who uses a file", () => App.I.ShowMain("power")));
+            s.Tasks.Add(T("\uE756", "Quick run", "Run anything  (" + Key("run") + ")", () => QuickRunForm.Open()));
+            s.Tasks.Add(T("\uE765", "Shortcuts", "All keys, your own launch keys", () => App.I.ShowMain("shortcuts")));
             foreach (var sec in sections) all.AddRange(sec.Tasks);
         }
         static string Key(string action) { var k = Hotkeys.Get(action); return k.Length > 0 ? k : "no shortcut"; }
@@ -434,6 +444,8 @@ namespace StickyPro
                 { var prompt = p; hits.Add(new Hit { Kind = "Prompt", Title = p.Title, Sub = "Prompt  ·  " + Ui.OneLine(p.Body, 80) + "   (Enter copies)", Run = () => { if (App.I.CopyText(prompt.Body)) { prompt.Uses++; prompt.LastUsed = Store.Now(); Store.MarkPrompts(); App.I.Balloon("Prompt copied", prompt.Title); } } }); }
                 foreach (var c in Store.Clips.Where(c => Has(c.Text, q) || Has(c.Label, q)).Take(40))
                 { var clip = c; hits.Add(new Hit { Kind = "Clip", Title = Ui.OneLine(c.Text, 90), Sub = "Clipboard  ·  " + Ui.Ago(c.Time) + "   (Enter copies)", Run = () => { if (App.I.CopyClip(clip)) App.I.Balloon("Copied", Ui.OneLine(clip.Text, 60)); } }); }
+                foreach (var tk in Store.Tasks.Where(t => Has(t.Title, q) || Has(t.Notes, q) || Has(t.List, q)).Take(30))
+                { var task = tk; hits.Add(new Hit { Kind = "Task", Title = (tk.Done ? "\u2714 " : "") + tk.Title, Sub = "Task  ·  " + tk.List + (tk.Due > 0 ? "  ·  " + TaskParse.DueText(tk) : ""), Run = () => { App.I.ShowMain("tasks"); var mf = Application.OpenForms.OfType<MainForm>().FirstOrDefault(); if (mf != null) mf.SelectTask(task); } }); }
                 foreach (var t in Store.Tagged.Where(t => Has(t.Path, q) || Has(t.Note, q) || Has(t.Category, q)).Take(30))
                 { var file = t; hits.Add(new Hit { Kind = "File", Title = System.IO.Path.GetFileName(t.Path.TrimEnd('\\')), Sub = t.Category + "  ·  " + t.Path, Run = () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file.Path) { UseShellExecute = true }) }); }
             }

@@ -21,6 +21,14 @@ namespace StickyPro
         readonly CardsPage cards;
         readonly NavItem navSnip, navActivity, navTagged, navKeys;
         readonly Panel snipPage, activityPage, taggedPage;
+        readonly NavItem navTasks, navExplorer, navChrome, navPower;
+        readonly TasksPage tasks;
+        readonly ExplorerPage explorer;
+        readonly ChromePage chrome;
+        readonly PowerPage power;
+        readonly ShortcutsPage shortcuts;
+        readonly TopBar topBar;
+        readonly QuickDock dock;
 
         Panel PageWith(string title, Control inner)
         {
@@ -84,6 +92,16 @@ namespace StickyPro
             content.Controls.Add(snipPage);
             content.Controls.Add(activityPage);
             content.Controls.Add(taggedPage);
+            tasks = new TasksPage { Visible = false };
+            explorer = new ExplorerPage();
+            chrome = new ChromePage(this) { Visible = false };
+            power = new PowerPage();
+            shortcuts = new ShortcutsPage();
+            content.Controls.Add(tasks);
+            content.Controls.Add(explorer);
+            content.Controls.Add(chrome);
+            content.Controls.Add(power);
+            content.Controls.Add(shortcuts);
             Controls.Add(content);
 
             status = new Label();
@@ -96,6 +114,8 @@ namespace StickyPro
             Controls.Add(status);
             statusTimer.Interval = 4000;
             statusTimer.Tick += delegate { statusTimer.Stop(); status.Text = ""; };
+            dock = new QuickDock { Visible = Store.Settings.DockVisible };
+            Controls.Add(dock);
 
             var nav = new Panel();
             nav.Dock = DockStyle.Left;
@@ -115,7 +135,7 @@ namespace StickyPro
             nav.Controls.Add(navSettings);
             navKeys = new NavItem("", "Shortcuts");
             navKeys.Dock = DockStyle.Bottom;
-            navKeys.Click += delegate { MessageBox.Show(this, keys.Text + "\n\nChange any of them in Settings.", App.Name + " - shortcuts"); };
+            navKeys.Click += delegate { ShowPage("shortcuts"); };
             nav.Controls.Add(navKeys);
 
             navSnip = new NavItem("", "Snip & record");
@@ -124,6 +144,9 @@ namespace StickyPro
             navSnip.Click += delegate { ShowPage("snip"); };
             navActivity.Click += delegate { ShowPage("activity"); };
             navTagged.Click += delegate { ShowPage("tagged"); };
+            navPower = new NavItem("\uE945", "Power tools");
+            navPower.Click += delegate { ShowPage("power"); };
+            navigation.Controls.Add(navPower);
             navigation.Controls.Add(navTagged);
             navigation.Controls.Add(navActivity);
             navigation.Controls.Add(navSnip);
@@ -140,36 +163,34 @@ namespace StickyPro
             navCards.Click += delegate { ShowPage("cards"); };
             navigation.Controls.Add(navCards);
             navigation.Controls.Add(navSystem);
+            navChrome = new NavItem("\uE774", "Chrome bookmarks");
+            navChrome.Click += delegate { ShowPage("chrome"); };
+            navigation.Controls.Add(navChrome);
+            navExplorer = new NavItem("\uEC50", "Explorer");
+            navExplorer.Click += delegate { ShowPage("explorer"); };
+            navigation.Controls.Add(navExplorer);
             navigation.Controls.Add(navClips);
             navigation.Controls.Add(navPrompts);
             navigation.Controls.Add(navNotes);
+            navTasks = new NavItem("\uE73A", "Tasks & reminders");
+            navTasks.Click += delegate { ShowPage("tasks"); };
+            navigation.Controls.Add(navTasks);
             navHome = new NavItem("", "Home");
             navHome.Click += delegate { ShowPage("dashboard"); };
             navigation.Controls.Add(navHome);
-            navigation.AutoScrollMinSize = Ui.S(0, 378);
+            navigation.AutoScrollMinSize = Ui.S(0, 42 * 13 + 6);
 
-            var title = new Label();
-            title.Dock = DockStyle.Top;
-            title.Height = Ui.S(52);
-            title.Text = "        " + App.Name;
-            title.Font = Ui.Big; title.ForeColor = Color.White; title.BackColor = Ui.SidebarSel;
-            title.TextAlign = ContentAlignment.MiddleLeft;
-            title.Image = Ui.Logo(Ui.S(26));
-            title.Disposed += delegate { if (title.Image != null) title.Image.Dispose(); };
-            title.ImageAlign = ContentAlignment.MiddleLeft;
-            title.Padding = new Padding(Ui.S(14), 0, 0, 0);
-            nav.Controls.Add(title);
             Controls.Add(nav);
+            topBar = new TopBar(() => nav.Width);
+            Controls.Add(topBar);
             var navGrip = PaneGrip.Attach(nav, "nav", Ui.S(56));
             // Sidebar: drag its edge to any width (narrow = icons only). Small windows fold it automatically.
             EventHandler adaptNav = delegate
             {
                 bool compact = Width < Ui.S(820);
                 nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
-                bool wide = nav.Width >= Ui.S(150);
-                title.Text = wide ? "        " + App.Name : "";
             };
-            nav.SizeChanged += delegate { bool wide = nav.Width >= Ui.S(150); title.Text = wide ? "        " + App.Name : ""; };
+            nav.SizeChanged += delegate { topBar.Invalidate(); topBar.PerformLayout(); };
             navGrip.BackColor = Ui.Sidebar;
             Resize += adaptNav; adaptNav(this, EventArgs.Empty);
 
@@ -226,6 +247,8 @@ namespace StickyPro
         {
             if (page == "prompts" && p != "prompts") prompts.Commit();
             if (p.StartsWith("system:")) { system.SelectTab(p.Substring(7)); p = "system"; }
+            if (p.StartsWith("chrome:")) { chrome.SelectTab(p.Substring(7)); p = "chrome"; }
+            if (p == "home") p = "dashboard";
             string target = p;
             Ui.Batch(content, () =>
             {
@@ -247,6 +270,11 @@ namespace StickyPro
                 snipPage.Visible = target == "snip";
                 activityPage.Visible = target == "activity";
                 taggedPage.Visible = target == "tagged";
+                navTasks.Selected = target == "tasks"; tasks.Visible = target == "tasks";
+                navExplorer.Selected = target == "explorer"; explorer.Visible = target == "explorer";
+                navChrome.Selected = target == "chrome"; chrome.Visible = target == "chrome";
+                navPower.Selected = target == "power"; power.Visible = target == "power";
+                navKeys.Selected = target == "shortcuts"; shortcuts.Visible = target == "shortcuts";
             });
             RefreshCurrent();
             FocusSearch();
@@ -263,7 +291,7 @@ namespace StickyPro
         // page only has to paint. Each step is small; stops as soon as the window hides.
         void PrewarmPages()
         {
-            var pages = new List<Control> { notes, prompts, clips, system, cards, snipPage, activityPage, taggedPage };
+            var pages = new List<Control> { tasks, notes, prompts, clips, system, cards, snipPage, activityPage, taggedPage, chrome, power };
             int i = 0;
             var t = new Timer { Interval = 250 };
             t.Tick += delegate
@@ -286,7 +314,13 @@ namespace StickyPro
             else if (page == "prompts") prompts.FocusSearch();
             else if (page == "clips") clips.FocusSearch();
             else if (page == "cards") cards.FocusSearch();
+            else if (page == "tasks") tasks.FocusQuick();
         }
+
+        public void SelectTask(TaskItem t) { ShowPage("tasks"); tasks.Select(t); }
+        public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); }
+        public void RefreshLaunchers() { shortcuts.RefreshLaunchers(); }
+        public void SetDockVisible(bool v) { dock.Visible = v; }
 
         public void StartNewPrompt() { ShowPage("prompts"); prompts.NewPrompt(); }
         public void UpdatePaused() { clips.UpdatePaused(); }
@@ -312,15 +346,16 @@ namespace StickyPro
                 else if (e.KeyCode == Keys.D6) { ShowPage("snip"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D7) { ShowPage("activity"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D8) { ShowPage("tagged"); e.SuppressKeyPress = true; }
-                else if (e.KeyCode == Keys.F) { FocusSearch(); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.D9) { ShowPage("tasks"); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.F && page != "explorer") { FocusSearch(); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.K) { GlobalSearch.Open(this); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.N && !e.Shift)
                 {
                     e.SuppressKeyPress = true;
-                    if (page == "prompts") prompts.NewPrompt(); else App.I.NewNote(null);
+                    if (page == "prompts") prompts.NewPrompt(); else if (page == "tasks") tasks.FocusQuick(); else App.I.NewNote(null);
                 }
             }
-            else if (e.KeyCode == Keys.Escape && !e.Control) { Hide(); e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.Escape && !e.Control && !(ActiveControl is TextBoxBase)) { Hide(); e.SuppressKeyPress = true; }
             base.OnKeyDown(e);
         }
 

@@ -8,9 +8,9 @@ namespace StickyPro
 {
     class SettingsForm : Form
     {
-        readonly ComboBox theme, fontName, copyMode;
-        readonly NumericUpDown fontSize, maxClips;
-        readonly CheckBox snippets, startup, autoSave, autoCopy, activity;
+        readonly ComboBox theme, fontName, copyMode, colorTheme, uiFont;
+        readonly NumericUpDown fontSize, maxClips, uiSize;
+        readonly CheckBox snippets, startup, autoSave, autoCopy, activity, dockVisible, keepAwake;
         readonly TextBox snipFolder;
         readonly NumericUpDown fps;
         readonly Dictionary<string, HotkeyBox> boxes = new Dictionary<string, HotkeyBox>();
@@ -43,7 +43,32 @@ namespace StickyPro
             Section(t, "Look");
             theme = new ComboBox(); theme.DropDownStyle = ComboBoxStyle.DropDownList; theme.Items.AddRange(new object[] { "Light", "Dark" });
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
-            Row(t, "Theme (main window and popups)", theme);
+            Row(t, "Light or dark mode", theme);
+            colorTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(22) };
+            colorTheme.Items.AddRange(Ui.ThemeNames);
+            colorTheme.SelectedIndex = Math.Max(0, Math.Min(5, Store.Settings.Theme));
+            colorTheme.DrawItem += (s, e) =>
+            {
+                if (e.Index < 0) return;
+                bool sel = (e.State & DrawItemState.Selected) != 0;
+                using (var b = new SolidBrush(sel ? Ui.SelBg : Ui.Field)) e.Graphics.FillRectangle(b, e.Bounds);
+                var r = new Rectangle(e.Bounds.X + Ui.S(4), e.Bounds.Y + Ui.S(3), Ui.S(26), e.Bounds.Height - Ui.S(6));
+                using (var b = new SolidBrush(Ui.ThemeColor(e.Index))) e.Graphics.FillRectangle(b, r);
+                TextRenderer.DrawText(e.Graphics, Ui.ThemeNames[e.Index], Ui.Base, new Rectangle(r.Right + Ui.S(8), e.Bounds.Y, e.Bounds.Width, e.Bounds.Height), Ui.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+            };
+            Row(t, "Color theme", colorTheme);
+            uiFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            uiFont.Items.Add("(default: Segoe UI)");
+            foreach (var n in new[] { "Segoe UI", "Segoe UI Variable Text", "Calibri", "Arial", "Tahoma", "Verdana", "Bahnschrift", "Consolas", "Cascadia Code", "Microsoft Sans Serif" })
+                using (var probe = new Font(n, 10f)) if (probe.Name == n) uiFont.Items.Add(n);
+            int ui = uiFont.Items.IndexOf(Store.Settings.UiFont); uiFont.SelectedIndex = ui > 0 ? ui : 0;
+            Row(t, "App font", uiFont);
+            uiSize = new NumericUpDown { Minimum = 8, Maximum = 16, DecimalPlaces = 1, Increment = 0.5m, Value = (decimal)Math.Max(8f, Math.Min(16f, Store.Settings.UiFontSize)) };
+            Row(t, "App font size (the window reopens)", uiSize);
+            dockVisible = new CheckBox { Text = "Show the quick launch bar on the right", AutoSize = true, Checked = Store.Settings.DockVisible };
+            Row(t, "Quick launch", dockVisible);
+            keepAwake = new CheckBox { Text = "Keep the PC awake (no sleep, screen stays on)", AutoSize = true, Checked = Awake.On };
+            Row(t, "Awake", keepAwake);
             fontName = new ComboBox(); fontName.DropDownStyle = ComboBoxStyle.DropDownList;
             foreach (var f in FontFamily.Families) { using (f) fontName.Items.Add(f.Name); }
             int fi = fontName.Items.IndexOf(Store.Settings.NoteFontName);
@@ -150,6 +175,11 @@ namespace StickyPro
             }
             var s = Store.Settings;
             s.Dark = theme.SelectedIndex == 1;
+            s.Theme = colorTheme.SelectedIndex;
+            s.UiFont = uiFont.SelectedIndex > 0 ? (string)uiFont.SelectedItem : "";
+            s.UiFontSize = (float)uiSize.Value;
+            s.DockVisible = dockVisible.Checked;
+            if (keepAwake.Checked != Awake.On) Awake.Set(keepAwake.Checked);
             s.NoteFontName = fontName.SelectedItem as string ?? "Segoe UI";
             s.NoteFontSize = (float)fontSize.Value;
             s.MaxClips = (int)maxClips.Value;

@@ -148,6 +148,10 @@ namespace StickyPro
             new[] { "picker",    "Color Picker",                     "Ctrl+Alt+K", "Color picker" },
             new[] { "magnifier", "Magnifier",                        "Ctrl+Alt+M", "Magnifier" },
             new[] { "whiteboard","WhiteBoard (draw on the screen)",  "Ctrl+Alt+B", "WhiteBoard" },
+            new[] { "newtask",   "New task / reminder",              "Ctrl+Alt+J", "New task" },
+            new[] { "run",       "Quick run box",                    "Ctrl+Alt+G", "Quick run" },
+            new[] { "ontop",     "Pin the current window on top",    "Ctrl+Alt+U", "Always on top" },
+            new[] { "awake",     "Keep awake on / off",              "",           "Keep awake" },
         };
 
         public static string Get(string action)

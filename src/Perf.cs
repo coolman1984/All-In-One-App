@@ -26,7 +26,7 @@ namespace StickyPro
             t.Start();
             var steps = new List<KeyValuePair<string, Action>>();
             steps.Add(new KeyValuePair<string, Action>("open main", () => App.I.ShowMain("dashboard")));
-            foreach (var p in new[] { "dashboard", "notes", "prompts", "clips", "system:procs", "system:startup", "system:drives", "cards", "snip", "activity", "tagged", "dashboard" })
+            foreach (var p in new[] { "dashboard", "notes", "prompts", "clips", "system:procs", "system:startup", "system:drives", "cards", "snip", "activity", "tagged", "tasks", "explorer", "chrome", "chrome:extensions", "system:uninstall", "power", "shortcuts", "dashboard" })
             { string page = p; steps.Add(new KeyValuePair<string, Action>("page " + page, () => App.I.ShowMain(page))); }
             int i = 0;
             var timer = new System.Windows.Forms.Timer { Interval = 1500 };

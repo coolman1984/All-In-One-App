@@ -88,6 +88,7 @@ namespace StickyPro
             Microsoft.Win32.SystemEvents.SessionEnding += delegate { FlushAll(); };
             Application.ApplicationExit += delegate { FlushAll(); Snippets.Stop(); };
             Ui.Later(1500, CheckReminders);
+            Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerMode;
             Ui.Later(4000, Trim);
         }
 
@@ -107,12 +108,27 @@ namespace StickyPro
                 if (Native.RegisterHotKey(msg.Handle, id, mods | Native.MOD_NOREPEAT, (uint)key)) registered.Add(id);
                 else failed.Add(combo);
             }
+            var launchers = Store.Settings.Launchers;
+            for (int i = 0; i < launchers.Count; i++)
+            {
+                uint mods; Keys key;
+                if (!Hotkeys.Parse(launchers[i].Keys, out mods, out key)) continue;
+                int id = 1000 + i;
+                if (Native.RegisterHotKey(msg.Handle, id, mods | Native.MOD_NOREPEAT, (uint)key)) registered.Add(id);
+                else failed.Add(launchers[i].Keys + " (" + launchers[i].Name + ")");
+            }
             if (main != null && !main.IsDisposed) main.UpdateShortcutHelp();
             return failed;
         }
 
         public void OnHotkey(int id)
         {
+            if (id >= 1000)
+            {
+                int li = id - 1000;
+                if (li < Store.Settings.Launchers.Count) { var u = Store.Settings.Launchers[li]; QuickDock.Launch(new DockItem { Name = u.Name, Path = u.Target, Args = u.Args }); }
+                return;
+            }
             if (id < 1 || id > Hotkeys.Actions.Length) return;
             switch (Hotkeys.Actions[id - 1][0])
             {
@@ -132,6 +148,10 @@ namespace StickyPro
                 case "ocr": StartSnip("rect", 0, true); break;
                 case "record": StartRecord("rect"); break;
                 case "tagfile": TagExplorerSelection(); break;
+                case "newtask": QuickTaskForm.Open(); break;
+                case "run": QuickRunForm.Open(); break;
+                case "ontop": PowerTools.ToggleForeground(); break;
+                case "awake": Awake.Set(!Awake.On); Balloon(Awake.On ? "Keep awake: ON" : "Keep awake: OFF", Awake.On ? "The PC will not sleep." : "Normal sleep settings."); break;
             }
         }
 
@@ -370,6 +390,8 @@ namespace StickyPro
             menu.Items.Add("Open " + Name, null, delegate { ShowMain(null); }).Font = Ui.Bold;
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("New note", null, delegate { NewNote(null); });
+            menu.Items.Add("New task / reminder...", null, delegate { QuickTaskForm.Open(); });
+            menu.Items.Add("Quick run...", null, delegate { QuickRunForm.Open(); });
             menu.Items.Add("New snip", null, delegate { StartSnip("rect", 0, false); });
             var capture = new ToolStripMenuItem("Screen capture");
             foreach (var m in CaptureCommands.Modes) { string mode = m[0]; capture.DropDownItems.Add(m[1], null, delegate { StartSnip(mode, 0, false); }); }
@@ -383,6 +405,7 @@ namespace StickyPro
             menu.Items.Add(new ToolStripSeparator());
             var open = new ToolStripMenuItem("Open page");
             open.DropDownItems.Add("Home", null, delegate { ShowMain("dashboard"); });
+            open.DropDownItems.Add("Tasks & reminders", null, delegate { ShowMain("tasks"); });
             open.DropDownItems.Add("Sticky notes", null, delegate { ShowMain("notes"); });
             open.DropDownItems.Add("Prompts & snippets", null, delegate { ShowMain("prompts"); });
             open.DropDownItems.Add("Clipboard history", null, delegate { ShowMain("clips"); });
@@ -390,6 +413,11 @@ namespace StickyPro
             open.DropDownItems.Add("Snip & record", null, delegate { ShowMain("snip"); });
             open.DropDownItems.Add("File activity", null, delegate { ShowMain("activity"); });
             open.DropDownItems.Add("Tagged files", null, delegate { ShowMain("tagged"); });
+            open.DropDownItems.Add("Explorer", null, delegate { ShowMain("explorer"); });
+            open.DropDownItems.Add("Chrome bookmarks", null, delegate { ShowMain("chrome"); });
+            open.DropDownItems.Add("Uninstall programs", null, delegate { ShowMain("system:uninstall"); });
+            open.DropDownItems.Add("Power tools", null, delegate { ShowMain("power"); });
+            open.DropDownItems.Add("Shortcuts", null, delegate { ShowMain("shortcuts"); });
             menu.Items.Add(open);
             menu.Items.Add("Show / hide notes", null, delegate { ToggleNotes(); });
             menu.Items.Add("Show / hide floating cards", null, delegate { ToggleCards(); });
@@ -401,6 +429,11 @@ namespace StickyPro
             miPause.Checked = Store.Settings.Paused;
             miPause.Click += delegate { SetPaused(!Store.Settings.Paused); };
             menu.Items.Add(miPause);
+            var miAwake = new ToolStripMenuItem("Keep the PC awake");
+            miAwake.Checked = Store.Settings.KeepAwake;
+            miAwake.Click += delegate { Awake.Set(!Awake.On); };
+            Awake.Changed += delegate { miAwake.Checked = Awake.On; };
+            menu.Items.Add(miAwake);
             miStartup = new ToolStripMenuItem("Start with Windows");
             miStartup.Click += delegate { SetStartup(!IsStartup()); miStartup.Checked = IsStartup(); };
             menu.Items.Add(miStartup);
@@ -459,6 +492,7 @@ namespace StickyPro
                 MessageBox.Show("These shortcuts are already used by another app and do not work:\n\n" + string.Join("\n", failed) + "\n\nPick other keys in Settings.", Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             bool fontChanged = Ui.Base.Size != Store.Settings.UiFontSize || (Store.Settings.UiFont.Length > 0 && Ui.FontName != Store.Settings.UiFont);
             if (fontChanged) Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
+            if (main != null && !main.IsDisposed) main.SetDockVisible(Store.Settings.DockVisible);
             if (Ui.Dark != Store.Settings.Dark || Ui.ThemeIndex != Store.Settings.Theme || fontChanged) ApplyTheme();
         }
 
@@ -836,6 +870,27 @@ namespace StickyPro
                 Balloon("Reminder", Store.TitleFrom(n.Text).Length > 0 ? Store.TitleFrom(n.Text) : "Sticky note reminder");
                 Store.RaiseNotes();
             }
+            int shown = 0;
+            foreach (var t in Store.Tasks.Where(t => !t.Done && t.RemindAt > 0 && t.RemindAt <= now).OrderBy(t => t.RemindAt).ToList())
+            {
+                var task = t;
+                task.RemindAt = 0; Store.MarkTasks();
+                if (shown >= 5 || ReminderToast.OpenCount >= 5) { Balloon("Task reminder", task.Title); continue; }
+                shown++;
+                var toast = new ReminderToast(task.Title, TaskParse.DueText(task), task.Priority >= 2,
+                    () => Store.CompleteTask(task, true),
+                    when => { task.RemindAt = when.Ticks; task.Snoozes++; Store.TouchTask(task); },
+                    () => { ShowMain("tasks"); if (main != null && !main.IsDisposed) main.SelectTask(task); },
+                    null);
+                toast.Pop();
+                try { SystemSounds.Asterisk.Play(); } catch { }
+            }
+            if (shown > 0) Store.RaiseTasks();
+        }
+
+        void OnPowerMode(object s, Microsoft.Win32.PowerModeChangedEventArgs e)
+        {
+            if (e.Mode == Microsoft.Win32.PowerModes.Resume) Sync.BeginInvoke(new Action(() => Ui.Later(3000, CheckReminders)));
         }
 
         // ---------- Windows ----------
@@ -1004,6 +1059,7 @@ namespace StickyPro
             if (Store.Pending) { Balloon("Could not save changes", "The app will stay open and retry. Check free space and folder permissions."); return; }
             exiting = true;
             clipTimer.Dispose(); reminderTimer.Dispose();
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerMode;
             Snippets.Stop();
             ActivityMonitor.Stop();
             if (Recorder.Active) Recorder.Stop(true);

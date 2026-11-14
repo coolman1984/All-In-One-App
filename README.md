@@ -1,6 +1,8 @@
-# Sticky Notes Pro
+# All in One
 
-A tiny Windows app (about 150 KB, no installs) with three tools in one: sticky notes, a prompt and snippet library, and clipboard history.
+A small Windows tray app (no installs) that puts many daily tools in one window: tasks and reminders, sticky notes, prompts and
+snippets, clipboard history, a multi-pane file explorer, Chrome bookmarks and extensions, a system monitor with a deep uninstaller,
+screen capture and recording, power tools and a shortcut manager. Start it with `All in One.lnk`.
 Built with the C# compiler that ships with Windows.
 
 ## Shortcuts (work in any app, change them in Settings)
@@ -15,6 +17,10 @@ Built with the C# compiler that ships with Windows.
 | Ctrl+Alt+W | Paste queue: paste the next item, in the order copied |
 | Ctrl+Alt+H | Show / hide all open notes |
 | Ctrl+Alt+S | Open the main window |
+| Ctrl+Alt+J | New task / reminder ("call Ali tomorrow 3pm !high #work every week") |
+| Ctrl+Alt+G | Quick run box: apps, folders, web, `=` math, `?` web search, `>` command |
+| Ctrl+Alt+U | Pin the window you are in "always on top" (press again to unpin) |
+| (your keys) | Launch shortcuts: Shortcuts page > My launch shortcuts |
 
 Popup keys: Enter paste (always plain text), Ctrl+Enter or right-click "Paste as" (UPPERCASE, lowercase, Title Case,
 Sentence case, trim spaces, remove empty lines, join into one line), Shift+Enter copy only, Ctrl+1..9 quick paste,
@@ -30,6 +36,23 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Clipboard: text, images and files; folders and color labels; pinned or foldered items are never auto-deleted;
   "Copy as" text actions; multi-select copy; paste queue; skips copies marked private by password managers.
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
+
+## New in this version
+- **Top bar**: colorful chips for CPU, RAM, disks, top app, tasks, clips, prompts and more (click to open the page); theme,
+  keep-awake and Wi-Fi switches; clock (click = date and time menu). Right-click for themes and copy values.
+- **Tasks & reminders** (Ctrl+9): smart lists (Today, Upcoming, Overdue, Reminders, Completed), your own lists, priorities,
+  due dates, repeats, steps, notes; reminder pop-ups with snooze; typed dates are understood.
+- **Explorer**: 1, 2, 3 or 4 panes side by side or 2 x 2. F5 copy / F6 move to the next pane, drag and drop, Ctrl+C/X/V
+  (also with Windows Explorer), F2 rename, F7 new folder, Del to the Recycle Bin, right-click menu.
+- **Chrome**: all bookmarks of every profile (search, open, add, edit, move, delete, export, find duplicates; saving needs
+  Chrome closed and makes a backup first) and an Extensions tab.
+- **Uninstall** (System monitor tab): all programs including Store apps; after the uninstaller runs, a leftover scan of
+  folders, registry keys, shortcuts and startup entries; registry keys are exported and files go to the Recycle Bin.
+- **Quick launch bar** on the right: drop files on it, add apps, folders, web pages, commands; right-click to manage.
+- **Power tools**: always on top / see-through for any window, quick actions (awake, Wi-Fi, lock, sleep, flush DNS,
+  restart Explorer, clear temp), hosts file editor (backup first, admin to save), "what is using this file".
+- **Shortcuts** page: edit every app key, make your own global launch keys, reference lists of in-app and Windows keys.
+- **Settings**: 6 color themes, light/dark, app font and size, quick launch on/off, keep awake.
 
 ## System monitor (main window > System monitor, or a floating card)
 - Processes: live CPU, memory (private working set, same as Task Manager), disk I/O; group by app; Delete key = End task.
