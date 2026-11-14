@@ -75,6 +75,8 @@ foreach ($dark in @($false, $true)) {
         $bitmap = New-Object Drawing.Bitmap(760, 420)
         try {
             $panel.DrawToBitmap($bitmap, (New-Object Drawing.Rectangle(0, 0, 760, 420)))
+            if ($dark -and ($bitmap.GetPixel(500, 130).GetBrightness() -gt 0.5 -or $bitmap.GetPixel(725, 200).GetBrightness() -gt 0.5)) { throw 'Native combo face or trailing list header rendered white in dark mode.' }
+            if ($combo.Text -ne 'All notes') { throw 'Combo painting changed the selected value.' }
             $name = if ($dark) { 'controls-dark.png' } else { 'controls-light.png' }
             $bitmap.Save((Join-Path $root ('build-test\' + $name)), [Drawing.Imaging.ImageFormat]::Png)
         } finally { $bitmap.Dispose() }

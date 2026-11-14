@@ -842,6 +842,7 @@ $stream.Dispose()
         {
             if (rendered != null) rendered.Dispose();
             baseImg.Dispose();
+            Ui.ClearItems(tools.Items);
             base.OnFormClosed(e);
             Ui.Later(1500, App.I.Trim);
         }

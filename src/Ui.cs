@@ -33,6 +33,7 @@ namespace StickyPro
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ComboBox, ComboFrame> comboFrames = new System.Runtime.CompilerServices.ConditionalWeakTable<ComboBox, ComboFrame>();
 
         // ---------- Theme ----------
         public static bool Dark;
@@ -188,6 +189,7 @@ namespace StickyPro
                         cb.DrawMode = DrawMode.OwnerDrawFixed;
                         cb.ItemHeight = cb.Font.Height + S(SpaceSmall);
                         cb.DrawItem -= DrawCombo; cb.DrawItem += DrawCombo;
+                        comboFrames.GetValue(cb, cbox => new ComboFrame(cbox));
                     }
                 }
                 var check = c as CheckBox;
@@ -218,6 +220,51 @@ namespace StickyPro
             var dir = IsRtl(text) ? TextFormatFlags.RightToLeft | TextFormatFlags.Right : TextFormatFlags.Left;
             TextRenderer.DrawText(e.Graphics, text, combo.Font, r, combo.Enabled ? Text : Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | dir);
             if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
+        }
+
+        class ComboFrame : NativeWindow
+        {
+            readonly ComboBox combo;
+            public ComboFrame(ComboBox combo)
+            {
+                this.combo = combo;
+                combo.HandleCreated += delegate { AssignHandle(combo.Handle); };
+                combo.HandleDestroyed += delegate { ReleaseHandle(); };
+                combo.Disposed += delegate { ReleaseHandle(); };
+                if (combo.IsHandleCreated) AssignHandle(combo.Handle);
+            }
+            protected override void WndProc(ref Message m)
+            {
+                base.WndProc(ref m);
+                bool printing = m.Msg == 0x317 || m.Msg == 0x318;
+                if ((!printing && m.Msg != 0xF) || combo.DropDownStyle == ComboBoxStyle.Simple) return;
+                IntPtr dc = printing ? m.WParam : Native.GetWindowDC(Handle);
+                if (dc == IntPtr.Zero) return;
+                try
+                {
+                    using (var g = Graphics.FromHdc(dc))
+                    using (var fill = new SolidBrush(combo.Enabled ? Field : Bg))
+                    {
+                        int arrow = Math.Max(S(24), SystemInformation.VerticalScrollBarWidth);
+                        var r = new Rectangle(0, 0, combo.Width - 1, combo.Height - 1);
+                        if (combo.DropDownStyle == ComboBoxStyle.DropDownList)
+                        {
+                            g.FillRectangle(fill, new Rectangle(0, 0, combo.Width, combo.Height));
+                            var text = new Rectangle(S(6), 0, Math.Max(0, r.Width - arrow - S(8)), r.Height);
+                            var dir = combo.RightToLeft == RightToLeft.Yes || IsRtl(combo.Text) ? TextFormatFlags.RightToLeft | TextFormatFlags.Right : TextFormatFlags.Left;
+                            TextRenderer.DrawText(g, combo.Text, combo.Font, text, combo.Enabled ? Text : Muted, TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | dir);
+                        }
+                        // Editable combos retain their native edit child and selection.
+                        g.FillRectangle(fill, Math.Max(0, r.Right - arrow), 0, arrow + 1, r.Height + 1);
+                        int cx = r.Right - arrow / 2, cy = r.Height / 2;
+                        using (var ink = new SolidBrush(combo.Enabled ? Text : Muted)) g.FillPolygon(ink, new[] { new Point(cx - S(4), cy - S(1)), new Point(cx + S(4), cy - S(1)), new Point(cx, cy + S(3)) });
+                        g.SmoothingMode = SmoothingMode.AntiAlias;
+                        using (var path = Round(r, S(SpaceSmall)))
+                        using (var pen = new Pen(combo.ContainsFocus ? Accent : Line)) g.DrawPath(pen, path);
+                    }
+                }
+                finally { if (!printing) Native.ReleaseDC(Handle, dc); }
+            }
         }
 
         public static void DarkTitle(Form f)
