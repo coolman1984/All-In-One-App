@@ -8,7 +8,7 @@ namespace StickyPro
 {
     class SettingsForm : Form
     {
-        readonly ComboBox theme, fontName, copyMode, colorTheme, uiFont;
+        readonly ComboBox theme, fontName, copyMode, colorTheme, uiFont, design;
         readonly NumericUpDown fontSize, maxClips, uiSize;
         readonly CheckBox snippets, startup, autoSave, autoCopy, activity, dockVisible, keepAwake;
         readonly TextBox snipFolder;
@@ -44,9 +44,13 @@ namespace StickyPro
             theme = new ComboBox(); theme.DropDownStyle = ComboBoxStyle.DropDownList; theme.Items.AddRange(new object[] { "Light", "Dark" });
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
             Row(t, "Light or dark mode", theme);
+            design = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            design.Items.AddRange(new object[] { "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)" });
+            design.SelectedIndex = Store.Settings.Design == "classic" ? 1 : 0;
+            Row(t, "Design", design);
             colorTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(22) };
             colorTheme.Items.AddRange(Ui.ThemeNames);
-            colorTheme.SelectedIndex = Math.Max(0, Math.Min(5, Store.Settings.Theme));
+            colorTheme.SelectedIndex = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, Store.Settings.Theme));
             colorTheme.DrawItem += (s, e) =>
             {
                 if (e.Index < 0) return;
@@ -176,6 +180,7 @@ namespace StickyPro
             var s = Store.Settings;
             s.Dark = theme.SelectedIndex == 1;
             s.Theme = colorTheme.SelectedIndex;
+            s.Design = design.SelectedIndex == 1 ? "classic" : "nexus";
             s.UiFont = uiFont.SelectedIndex > 0 ? (string)uiFont.SelectedItem : "";
             s.UiFontSize = (float)uiSize.Value;
             s.DockVisible = dockVisible.Checked;

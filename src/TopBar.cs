@@ -29,7 +29,7 @@ namespace StickyPro
         readonly Timer clock = new Timer { Interval = 1000 };
         readonly Action update, redraw;
         Bitmap logo;
-        Rectangle brandRect, clockRect, moreRect;
+        Rectangle brandRect, clockRect, moreRect, searchRect;
         bool compact;
         List<Chip> hidden = new List<Chip>();
         object hover;
@@ -40,7 +40,7 @@ namespace StickyPro
         {
             this.brandWidth = brandWidth;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            Dock = DockStyle.Top; Height = Ui.S(58); BackColor = Ui.Sidebar; ForeColor = Color.White;
+            Dock = DockStyle.Top; Height = Ui.S(Ui.Nexus ? 64 : 58); BackColor = Ui.Nexus ? Ui.Card : Ui.Sidebar; ForeColor = Ui.Nexus ? Ui.Text : Color.White;
             Add("cpu", "", "CPU", "#3B82F6", "system:procs");
             Add("ram", "", "RAM", "#8B5CF6", "system:procs");
             Add("c", "", "C:", "#14B8A6", "system:drives");
@@ -132,7 +132,17 @@ namespace StickyPro
                 if (!t.Visible) continue;
                 t.Bounds = new Rectangle(right - d, (h - d) / 2, d, d); right -= d + Ui.S(6);
             }
-            int left = bw + Ui.S(12), gap = Ui.S(6), avail = right - Ui.S(8) - left;
+            int left = bw + Ui.S(12), gap = Ui.S(Ui.Nexus ? 8 : 6);
+            searchRect = Rectangle.Empty;
+            if (Ui.Nexus)
+            {
+                // Search pill (full when there is room, icon-only when narrow).
+                int sh = Ui.S(40), room = right - left;
+                int sw = room > Ui.S(900) ? Ui.S(280) : room > Ui.S(560) ? Ui.S(200) : sh;
+                searchRect = new Rectangle(left + Ui.S(8), (h - sh) / 2, sw, sh);
+                left = searchRect.Right + Ui.S(14);
+            }
+            int avail = right - Ui.S(8) - left;
             var shown = chips.Where(c => c.Visible).ToList();
             hidden = new List<Chip>();
             compact = false;
@@ -158,6 +168,7 @@ namespace StickyPro
         // ---------- Paint ----------
         protected override void OnPaint(PaintEventArgs e)
         {
+            if (Ui.Nexus) { PaintNexus(e); return; }
             var g = e.Graphics;
             g.Clear(Ui.Sidebar);
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -179,6 +190,105 @@ namespace StickyPro
             var top = new Rectangle(clockRect.X, clockRect.Y + Ui.S(10), clockRect.Width, Ui.S(20));
             TextRenderer.DrawText(g, now.ToString("HH:mm"), Ui.Bold, top, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             TextRenderer.DrawText(g, now.ToString("ddd d MMM"), Ui.Small, new Rectangle(clockRect.X, top.Bottom, clockRect.Width, Ui.S(18)), Color.FromArgb(215, 255, 255, 255), TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
+        }
+
+        // ---------- Nexus paint: white bar, search pill, soft chips, outline toggles ----------
+        void PaintNexus(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Ui.Card);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            using (var b = new SolidBrush(Ui.Sidebar)) g.FillRectangle(b, brandRect);
+            using (var p = new Pen(Ui.Line))
+            {
+                g.DrawLine(p, 0, Height - 1, Width, Height - 1);
+                g.DrawLine(p, brandRect.Right - 1, 0, brandRect.Right - 1, Height);
+            }
+            // Brand
+            if (logo == null) logo = Ui.Logo(Ui.S(30));
+            bool wide = brandRect.Width >= Ui.S(150);
+            int lx = wide ? Ui.S(20) : (brandRect.Width - logo.Width) / 2;
+            g.DrawImage(logo, lx, (Height - logo.Height) / 2);
+            if (wide)
+                TextRenderer.DrawText(g, App.Name, Ui.Title, new Rectangle(lx + logo.Width + Ui.S(10), 0, brandRect.Width - lx - logo.Width - Ui.S(14), Height), Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            // Search
+            if (!searchRect.IsEmpty)
+            {
+                bool hot = hover as string == "search";
+                using (var path = Ui.Round(searchRect, Ui.S(10)))
+                {
+                    using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Bg)) g.FillPath(b, path);
+                    using (var p = new Pen(hot ? Ui.Accent : Ui.Line)) g.DrawPath(p, path);
+                }
+                var ir = new Rectangle(searchRect.X + Ui.S(4), searchRect.Y, Ui.S(32), searchRect.Height);
+                TextRenderer.DrawText(g, "", Ui.Icon(11f), ir, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                if (searchRect.Width > Ui.S(120))
+                {
+                    string key = "Ctrl+K";
+                    int kw = TextRenderer.MeasureText(key, Ui.Small).Width + Ui.S(6);
+                    var kr = new Rectangle(searchRect.Right - kw - Ui.S(8), searchRect.Y + Ui.S(9), kw, searchRect.Height - Ui.S(18));
+                    using (var path = Ui.Round(kr, Ui.S(5))) { using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path); using (var p = new Pen(Ui.Line)) g.DrawPath(p, path); }
+                    TextRenderer.DrawText(g, key, Ui.Small, kr, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "Search everything", Ui.Base, new Rectangle(ir.Right, searchRect.Y, kr.Left - ir.Right - Ui.S(4), searchRect.Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                }
+            }
+            foreach (var c in chips) if (!c.Bounds.IsEmpty && c.Bounds.IntersectsWith(e.ClipRectangle)) DrawChipNexus(g, c);
+            if (!moreRect.IsEmpty)
+            {
+                using (var path = Ui.Round(moreRect, Ui.S(10)))
+                {
+                    using (var b = new SolidBrush(hover as string == "more" ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
+                    using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
+                }
+                TextRenderer.DrawText(g, "+" + hidden.Count, Ui.Bold, moreRect, Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            }
+            foreach (var t in toggles)
+            {
+                if (!t.Visible) continue;
+                bool on = ToggleOn(t), hot = ReferenceEquals(hover, t);
+                var r = Rectangle.Inflate(t.Bounds, -1, -1);
+                using (var b = new SolidBrush(on ? Ui.Accent : hot ? Ui.HoverBg : Ui.Card)) g.FillEllipse(b, r);
+                if (!on) using (var p = new Pen(Ui.Line)) g.DrawEllipse(p, r);
+                var fore = on ? Color.White : Ui.Muted;
+                if (t.Key == "wifi" && WiFi.Busy) fore = Color.FromArgb(120, fore);
+                TextRenderer.DrawText(g, ToggleGlyph(t), Ui.Icon(12f), t.Bounds, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            }
+            var now = DateTime.Now;
+            if (hover as string == "clock") using (var path = Ui.Round(Rectangle.Inflate(clockRect, 0, -Ui.S(10)), Ui.S(8))) using (var b = new SolidBrush(Ui.HoverBg)) g.FillPath(b, path);
+            var top = new Rectangle(clockRect.X, clockRect.Y + Ui.S(12), clockRect.Width, Ui.S(20));
+            TextRenderer.DrawText(g, now.ToString("HH:mm"), Ui.Bold, top, Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, now.ToString("ddd d MMM"), Ui.Small, new Rectangle(clockRect.X, top.Bottom, clockRect.Width, Ui.S(18)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
+        }
+
+        void DrawChipNexus(Graphics g, Chip c)
+        {
+            var r = c.Bounds;
+            bool hot = ReferenceEquals(hover, c);
+            using (var path = Ui.Round(r, Ui.S(10)))
+            {
+                using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
+                using (var p = new Pen(hot ? Color.FromArgb(140, c.Tint) : Ui.Line)) g.DrawPath(p, path);
+            }
+            int gd = Ui.S(26);
+            var gr = new Rectangle(r.X + Ui.S(6), r.Y + (r.Height - gd) / 2, gd, gd);
+            using (var path = Ui.Round(gr, Ui.S(7))) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 60 : 30, c.Tint))) g.FillPath(b, path);
+            TextRenderer.DrawText(g, c.Glyph, Ui.Icon(10.5f), gr, c.Tint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            int tx = gr.Right + Ui.S(8), tw = r.Right - tx - Ui.S(10);
+            var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+            if (compact)
+                TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y, tw, r.Height), Ui.Text, flags | TextFormatFlags.VerticalCenter);
+            else
+            {
+                TextRenderer.DrawText(g, c.Label, Ui.Small, new Rectangle(tx, r.Y + Ui.S(3), tw, Ui.S(15)), Ui.Muted, flags);
+                TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y + Ui.S(17), tw, Ui.S(18)), Ui.Text, flags);
+            }
+            if (c.Bar >= 0 && (c.Spark == null || c.Spark.Length < 2))
+            {
+                int bx = r.X + Ui.S(10), bwid = r.Width - Ui.S(20), by = r.Bottom - Ui.S(4);
+                using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bx, by, bwid, Ui.S(2));
+                using (var b = new SolidBrush(c.Tint)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
+            }
         }
 
         void DrawPill(Graphics g, Rectangle r, Color fill, bool hot, string text, Font font)
@@ -250,6 +360,7 @@ namespace StickyPro
             if (brandRect.Contains(p)) return "brand";
             if (clockRect.Contains(p)) return "clock";
             if (moreRect.Contains(p)) return "more";
+            if (searchRect.Contains(p)) return "search";
             foreach (var c in chips) if (c.Bounds.Contains(p)) return c;
             foreach (var t in toggles) if (t.Visible && t.Bounds.Contains(p)) return t;
             return null;
@@ -272,6 +383,7 @@ namespace StickyPro
             if (t != null) return t.Key == "theme" ? (Ui.Dark ? "Switch to light mode" : "Switch to dark mode") : t.Key == "awake" ? "Keep screen awake (no sleep / screensaver): " + (Awake.On ? "on" : "off") : "Wi-Fi: " + (WiFi.Busy ? "working..." : WiFi.State);
             var s = h as string;
             if (s == "brand") return "Home";
+            if (s == "search") return "Search notes, prompts, clips, tasks and pages";
             if (s == "clock") return DateTime.Now.ToString("dddd d MMMM yyyy") + "\nClick: date & time tools";
             if (s == "more") return string.Join("\n", hidden.Select(x => x.Label + ": " + x.Value));
             return null;
@@ -295,6 +407,7 @@ namespace StickyPro
             }
             var s = h as string;
             if (s == "brand") App.I.ShowMain("dashboard");
+            else if (s == "search") GlobalSearch.Open(FindForm());
             else if (s == "clock") { var m = DateTimeTools.Menu(); m.Show(this, new Point(clockRect.Left, clockRect.Bottom)); }
             else if (s == "more")
             {

@@ -890,6 +890,7 @@ namespace StickyPro
             Func<BigFile> big = () => lvBig.SelectedItems.Count > 0 ? lvBig.SelectedItems[0].Tag as BigFile : null;
             var mb = Ui.Menu();
             mb.Items.Add("Show in folder", null, delegate { var b = big(); if (b != null) Reveal(b.Path); });
+            Term.AddMenu(mb.Items, () => { var b = big(); return b == null ? null : b.Path; });
             mb.Items.Add("Copy path", null, delegate
             {
                 var paths = lvBig.SelectedItems.Cast<ListViewItem>().Select(i => ((BigFile)i.Tag).Path).ToList();
@@ -904,6 +905,7 @@ namespace StickyPro
             var mf = Ui.Menu();
             mf.Items.Add("Open folder", null, delegate { var f = folder(); if (f != null) try { Process.Start("explorer.exe", "\"" + f + "\""); } catch { } });
             mf.Items.Add("Copy path", null, delegate { var f = folder(); if (f != null) App.I.CopyText(f); });
+            Term.AddMenu(mf.Items, folder);
             Ui.ThemeMenu(mf); lvFolders.ContextMenuStrip = mf;
         }
     }

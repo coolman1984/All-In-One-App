@@ -152,6 +152,8 @@ namespace StickyPro
             new[] { "run",       "Quick run box",                    "Ctrl+Alt+G", "Quick run" },
             new[] { "ontop",     "Pin the current window on top",    "Ctrl+Alt+U", "Always on top" },
             new[] { "awake",     "Keep awake on / off",              "",           "Keep awake" },
+            new[] { "pwshhere",  "PWSH in the File Explorer folder", "Ctrl+Alt+E", "PWSH here" },
+            new[] { "terminals", "Launch my terminals workspace",    "Ctrl+Alt+L", "Terminals" },
         };
 
         public static string Get(string action)

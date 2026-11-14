@@ -20,6 +20,8 @@ Built with the C# compiler that ships with Windows.
 | Ctrl+Alt+J | New task / reminder ("call Ali tomorrow 3pm !high #work every week") |
 | Ctrl+Alt+G | Quick run box: apps, folders, web, `=` math, `?` web search, `>` command |
 | Ctrl+Alt+U | Pin the window you are in "always on top" (press again to unpin) |
+| Ctrl+Alt+L | Launch your terminals workspace (for example 4 PWSH / Claude terminals side by side) |
+| Ctrl+Alt+E | PWSH in the folder open (or selected) in File Explorer |
 | (your keys) | Launch shortcuts: Shortcuts page > My launch shortcuts |
 
 Popup keys: Enter paste (always plain text), Ctrl+Enter or right-click "Paste as" (UPPERCASE, lowercase, Title Case,
@@ -38,6 +40,16 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
 
 ## New in this version
+- **Nexus design** (default): white sidebar grouped into General / Tools / System / Support, soft grey canvas, white rounded
+  cards, top bar with a search pill (Ctrl+K). Home is a dashboard with KPI cards, a live CPU & RAM bar chart, clipboard
+  week bars, a top-memory-apps table and a library donut. Settings > Design switches back to Classic (blue sidebar).
+- **Terminals** page: open 1, 2, 3, 4, 2 x 2, 5, 6, 3 x 2 or 4 x 2 terminals at once. Each pane has its own folder, shell
+  (PWSH 7, Windows PowerShell, cmd) and start command (`claude`, `claude --continue`, `codex`, ...). "Separate windows" tiles
+  real Windows Terminal windows side by side on the screen under the mouse; "One window, split panes" uses Windows Terminal
+  panes. Save several workspaces (one per project).
+- **PWSH here everywhere**: every folder menu in the app (Explorer panes and bar, quick launch bar, Tagged files, File
+  activity, Uninstall, Drives & cleanup, Snip & record) has "PWSH here", "Claude here (in PWSH)" and "Add to my terminals
+  workspace". Explorer also has "Terminal per pane". The tray menu has a Terminals submenu.
 - **Top bar**: colorful chips for CPU, RAM, disks, top app, tasks, clips, prompts and more (click to open the page); theme,
   keep-awake and Wi-Fi switches; clock (click = date and time menu). Right-click for themes and copy values.
 - **Tasks & reminders** (Ctrl+9): smart lists (Today, Upcoming, Overdue, Reminders, Completed), your own lists, priorities,

@@ -55,6 +55,7 @@ namespace StickyPro
             var m = Ui.Menu();
             m.Items.Add("Open", null, delegate { OpenSel(); });
             m.Items.Add("Open folder", null, delegate { OpenFolderSel(); });
+            Term.AddMenu(m.Items, () => { var t = Targets().FirstOrDefault(); return t == null ? null : t.Path; });
             m.Items.Add("Copy path", null, delegate { var t = Targets(); if (t.Count > 0) App.I.CopyText(string.Join("\r\n", t.Select(x => x.Path))); });
             m.Items.Add("Note...", null, delegate
             {

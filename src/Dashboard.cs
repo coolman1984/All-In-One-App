@@ -127,7 +127,7 @@ namespace StickyPro
     class TaskHome : Control
     {
         class Task { public string Glyph, Title, Desc; public Action Run; public Rectangle Bounds; }
-        class Section { public string Title; public int Column; public List<Task> Tasks = new List<Task>(); public Rectangle Header; }
+        class Section { public string Title; public int Column; public List<Task> Tasks = new List<Task>(); public Rectangle Header, Card; }
         static readonly Font TitleFont = MakeTitleFont();
         static readonly Font HeaderFont = new Font(Ui.FontName, 12f, FontStyle.Bold);
         readonly List<Section> sections = new List<Section>();
@@ -185,6 +185,8 @@ namespace StickyPro
             s.Tasks.Add(T("", "File activity", "Office files you opened and closed", () => App.I.ShowMain("activity")));
             s.Tasks.Add(T("", "Tagged files", "Files you marked as Urgent, Review ...", () => App.I.ShowMain("tagged")));
             s = Add("Tools", 1);
+            s.Tasks.Add(T("\uE756", "Terminals", "4+ PWSH / Claude panes side by side  (" + Key("terminals") + ")", () => App.I.ShowMain("terminals")));
+            s.Tasks.Add(T("\uE99A", "PWSH here", "PowerShell in the File Explorer folder  (" + Key("pwshhere") + ")", () => Term.OpenFromExplorer("")));
             s.Tasks.Add(T("\uE73A", "Tasks & reminders", "Lists, due dates, repeats  (Ctrl+9)", () => App.I.ShowMain("tasks")));
             s.Tasks.Add(T("\uEC50", "Explorer", "Up to 4 folder panes, fast copy", () => App.I.ShowMain("explorer")));
             s.Tasks.Add(T("\uE774", "Chrome bookmarks", "Manage, search, open in Chrome", () => App.I.ShowMain("chrome")));
@@ -210,6 +212,23 @@ namespace StickyPro
             if (ShowWelcome) { welcome = new Rectangle(0, top, width, Ui.S(64)); welcomeClose = new Rectangle(width - Ui.S(84), top + Ui.S(16), Ui.S(72), Ui.S(32)); top += Ui.S(80); }
             else welcome = welcomeClose = Rectangle.Empty;
             var y = new[] { top, top, top };
+            if (Ui.Nexus)
+            {
+                // White rounded cards, one per section.
+                gap = Ui.S(16); colW = (width - gap * (columns - 1)) / columns;
+                foreach (var s in sections)
+                {
+                    int c = columns == 3 ? s.Column : columns == 2 ? (s.Column == 0 ? 0 : 1) : 0, x = c * (colW + gap);
+                    int cy = y[c], ix = x + Ui.S(10), iw = colW - Ui.S(20);
+                    s.Header = new Rectangle(x + Ui.S(20), cy + Ui.S(10), colW - Ui.S(40), Ui.S(34));
+                    int ty = cy + Ui.S(50);
+                    foreach (var t in s.Tasks) { t.Bounds = new Rectangle(ix, ty, iw, Ui.S(54)); ty += Ui.S(56); }
+                    s.Card = new Rectangle(x, cy, colW, ty - cy + Ui.S(8));
+                    y[c] = s.Card.Bottom + gap;
+                }
+                dividers.Clear();
+                return Math.Max(y[0], Math.Max(y[1], y[2]));
+            }
             foreach (var s in sections)
             {
                 int c = columns == 3 ? s.Column : columns == 2 ? (s.Column == 0 ? 0 : 1) : 0, x = c * (colW + gap);
@@ -231,7 +250,19 @@ namespace StickyPro
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
             var clip = e.ClipRectangle;
             var titleRect = new Rectangle(0, 0, Width, Ui.S(50));
-            if (titleRect.IntersectsWith(clip)) TextRenderer.DrawText(g, "Pick a task...", TitleFont, titleRect, Ui.Text, flags);
+            if (titleRect.IntersectsWith(clip))
+            {
+                if (Ui.Nexus) TextRenderer.DrawText(g, "Quick actions", Ui.Title, titleRect, Ui.Text, flags);
+                else TextRenderer.DrawText(g, "Pick a task...", TitleFont, titleRect, Ui.Text, flags);
+            }
+            if (Ui.Nexus)
+                foreach (var s in sections)
+                    if (s.Card.IntersectsWith(clip))
+                        using (var path = Ui.Round(new Rectangle(s.Card.X, s.Card.Y, s.Card.Width - 1, s.Card.Height - 1), Ui.S(14)))
+                        {
+                            using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path);
+                            using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
+                        }
             if (welcome.Width > 0 && welcome.IntersectsWith(clip))
             {
                 using (var path = Ui.Round(welcome, Ui.S(8))) { using (var b = new SolidBrush(Ui.SelBg)) g.FillPath(b, path); }
@@ -245,8 +276,8 @@ namespace StickyPro
             {
                 if (s.Header.IntersectsWith(clip))
                 {
-                    TextRenderer.DrawText(g, s.Title, HeaderFont, s.Header, Ui.Header, flags);
-                    using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, s.Header.X, s.Header.Bottom - 1, s.Header.Width, 1);
+                    TextRenderer.DrawText(g, s.Title, Ui.Nexus ? Ui.Bold : HeaderFont, s.Header, Ui.Header, flags);
+                    if (!Ui.Nexus) using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, s.Header.X, s.Header.Bottom - 1, s.Header.Width, 1);
                 }
                 foreach (var t in s.Tasks)
                 {
@@ -259,7 +290,13 @@ namespace StickyPro
                             using (var b = new SolidBrush(Ui.HoverBg)) g.FillPath(b, path);
                             if (focused) using (var p = new Pen(Ui.Accent)) g.DrawPath(p, path);
                         }
-                    TextRenderer.DrawText(g, t.Glyph, Ui.Icon(20f), new Rectangle(r.X + Ui.S(8), r.Y, Ui.S(36), r.Height), Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                    if (Ui.Nexus)
+                    {
+                        var ir = new Rectangle(r.X + Ui.S(8), r.Y + (r.Height - Ui.S(36)) / 2, Ui.S(36), Ui.S(36));
+                        using (var path = Ui.Round(ir, Ui.S(10))) using (var b = new SolidBrush(Ui.SelBg)) g.FillPath(b, path);
+                        TextRenderer.DrawText(g, t.Glyph, Ui.Icon(13f), ir, Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                    }
+                    else TextRenderer.DrawText(g, t.Glyph, Ui.Icon(20f), new Rectangle(r.X + Ui.S(8), r.Y, Ui.S(36), r.Height), Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
                     int tx = r.X + Ui.S(56), tw = r.Width - Ui.S(60);
                     TextRenderer.DrawText(g, t.Title, Ui.Bold, new Rectangle(tx, r.Y + Ui.S(7), tw, Ui.S(22)), Ui.Text, flags);
                     TextRenderer.DrawText(g, t.Desc, Ui.Small, new Rectangle(tx, r.Y + Ui.S(29), tw, Ui.S(20)), Ui.Muted, flags);
@@ -305,8 +342,9 @@ namespace StickyPro
         readonly TaskHome tasks;
         readonly Label liveHead;
         readonly TileGrid grid;
+        readonly NexusBoard board;
         bool laying, lastWelcome;
-        int lastTaskWidth = -1, lastTaskHeight;
+        int lastTaskWidth = -1, lastTaskHeight, lastBoardWidth = -1, boardHeight;
         public DashboardPanel()
         {
             Dock = DockStyle.Fill; AutoScroll = true; BackColor = Ui.Bg;
@@ -317,9 +355,10 @@ namespace StickyPro
             Add("cpu", "CPU", "system:procs"); Add("ram", "RAM", "system:procs"); Add("C", "Disk C", "system:drives"); Add("D", "Disk D", "system:drives");
             Add("apps", "Top 3 memory apps", "system:procs"); Add("clips", "Clipboard items today", "clips"); Add("prompts", "Prompts", "prompts");
             Add("notes", "Reminders due today", "notes"); Add("activity", "Files opened today", "activity"); Add("tagged", "Tagged Urgent", "tagged"); Add("record", "Screen recorder", "snip");
-            Controls.Add(tasks); Controls.Add(liveHead); Controls.Add(grid);
+            if (Ui.Nexus) { board = new NexusBoard(); Controls.Add(tasks); Controls.Add(board); }
+            else { Controls.Add(tasks); Controls.Add(liveHead); Controls.Add(grid); }
             update = () => { if (Live) RefreshMetrics(); };
-            ProcessSampler.Updated += update; Store.ClipsChanged += update; Store.PromptsChanged += update; Store.NotesChanged += update; Store.ActivityChanged += update; Store.TaggedChanged += update; Recorder.Finished += update;
+            ProcessSampler.Updated += update; Store.ClipsChanged += update; Store.PromptsChanged += update; Store.NotesChanged += update; Store.ActivityChanged += update; Store.TaggedChanged += update; Recorder.Finished += update; Store.TasksChanged += update;
         }
         void Add(string key, string title, string page) { var tile = new MetricTile(title, () => App.I.ShowMain(page)); tiles[key] = tile; grid.Controls.Add(tile); }
         protected override void OnLayout(LayoutEventArgs e)
@@ -329,8 +368,17 @@ namespace StickyPro
             laying = true;
             try
             {
-                int pad = Ui.S(20), w = Math.Max(Ui.S(240), ClientSize.Width - pad * 2);
+                int pad = Ui.S(Ui.Nexus ? 6 : 20), w = Math.Max(Ui.S(240), ClientSize.Width - pad * 2);
                 int y = AutoScrollPosition.Y + Ui.S(12);
+                if (board != null)
+                {
+                    if (w != lastBoardWidth) { lastBoardWidth = w; boardHeight = board.Measure(w); board.Invalidate(); }
+                    var bb = new Rectangle(pad, y, w, boardHeight);
+                    if (board.Bounds != bb) board.Bounds = bb;
+                    y += boardHeight + Ui.S(4);
+                }
+                else
+                {
                 // Live data first so it is always in view, then the PicPick-style task list.
                 var headBounds = new Rectangle(pad, y, w, Ui.S(36));
                 if (liveHead.Bounds != headBounds) liveHead.Bounds = headBounds;
@@ -339,6 +387,7 @@ namespace StickyPro
                 var gridBounds = new Rectangle(pad, y, w, gh);
                 if (grid.Bounds != gridBounds) grid.Bounds = gridBounds;
                 y += gh + Ui.S(8);
+                }
                 bool welcomeShown = !Store.Settings.WelcomeHidden;
                 if (w != lastTaskWidth || welcomeShown != lastWelcome)
                 {
@@ -359,6 +408,7 @@ namespace StickyPro
         protected override void OnLive(bool on) { ProcessSampler.Watch(this, on); if (on) RefreshMetrics(); }
         void RefreshMetrics()
         {
+            if (board != null) { board.RefreshData(); return; }
             var facts = DashboardFacts.Read(Store.Now());
             tiles["cpu"].Value = ProcessSampler.CpuTotal.ToString("0") + "%"; tiles["cpu"].Trend = ProcessSampler.CpuHistory.ToArray();
             tiles["ram"].Value = ProcessSampler.MemLoad + "%"; tiles["ram"].Trend = ProcessSampler.RamHistory.ToArray();
@@ -372,7 +422,7 @@ namespace StickyPro
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { ProcessSampler.Updated -= update; Store.ClipsChanged -= update; Store.PromptsChanged -= update; Store.NotesChanged -= update; Store.ActivityChanged -= update; Store.TaggedChanged -= update; Recorder.Finished -= update; }
+            if (disposing) { ProcessSampler.Updated -= update; Store.ClipsChanged -= update; Store.PromptsChanged -= update; Store.NotesChanged -= update; Store.ActivityChanged -= update; Store.TaggedChanged -= update; Recorder.Finished -= update; Store.TasksChanged -= update; }
             base.Dispose(disposing);
         }
     }

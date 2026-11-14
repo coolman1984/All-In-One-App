@@ -19,3 +19,10 @@
 - [x] Big-file delete goes to the Recycle Bin (plan rule 8) instead of permanent delete.
 - [x] Zero compiler warnings (removed two dead fields).
 - [x] README updated; regressions OK.
+
+# Terminals + Nexus redesign
+- [x] Terminals page: layouts 1..4x2, tiled windows or wt split panes, per-pane folder/shell/command, workspaces.
+- [x] PWSH here / Claude here / Add to workspace on every folder menu; Ctrl+Alt+E and Ctrl+Alt+L; tray submenu.
+- [x] Nexus design: grouped light sidebar, top bar search pill, dashboard cards and charts, Settings > Design.
+- [x] BUILD OK, zero warnings, regressions OK, wt command line checked by reflection.
+- [ ] Owner check in the running app (tiling and wt behaviour not live-tested by Claude).

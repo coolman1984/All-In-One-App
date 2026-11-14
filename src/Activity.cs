@@ -347,6 +347,7 @@ namespace StickyPro
             var m = Ui.Menu();
             m.Items.Add("Open file", null, delegate { var r = Sel().FirstOrDefault(); if (r != null) OpenFile(r.Path); });
             m.Items.Add("Open folder", null, delegate { OpenDir(); });
+            Term.AddMenu(m.Items, () => { var r = Sel().FirstOrDefault(); return r == null ? null : r.Path; });
             m.Items.Add("Back up now", null, delegate { BackupRecs(Sel()); });
             m.Items.Add("Open the backup", null, delegate { var r = Sel().FirstOrDefault(x => x.Backup != null); if (r != null && File.Exists(r.Backup)) try { Process.Start("explorer.exe", "/select,\"" + r.Backup + "\""); } catch { } });
             m.Items.Add("Favorite on/off", null, delegate { ToggleFav(Sel()); });

@@ -29,6 +29,8 @@ namespace StickyPro
         readonly ShortcutsPage shortcuts;
         readonly TopBar topBar;
         readonly QuickDock dock;
+        readonly NavItem navTerminals;
+        readonly TerminalPage terminals;
 
         Panel PageWith(string title, Control inner)
         {
@@ -70,7 +72,7 @@ namespace StickyPro
 
             content = new Panel();
             content.Dock = DockStyle.Fill;
-            content.Padding = new Padding(Ui.S(12), Ui.S(10), Ui.S(12), Ui.S(4));
+            content.Padding = Ui.Nexus ? new Padding(Ui.S(22), Ui.S(16), Ui.S(22), Ui.S(6)) : new Padding(Ui.S(12), Ui.S(10), Ui.S(12), Ui.S(4));
             home = new DashboardPanel { Visible = false };
             content.Controls.Add(home);
             notes = new NotesPage(this);
@@ -102,6 +104,8 @@ namespace StickyPro
             content.Controls.Add(chrome);
             content.Controls.Add(power);
             content.Controls.Add(shortcuts);
+            terminals = new TerminalPage { Visible = false };
+            content.Controls.Add(terminals);
             Controls.Add(content);
 
             status = new Label();
@@ -120,9 +124,9 @@ namespace StickyPro
             var nav = new Panel();
             nav.Dock = DockStyle.Left;
             nav.Width = Ui.S(230);
-            nav.BackColor = Ui.Sidebar; nav.ForeColor = Color.White;
+            nav.BackColor = Ui.Sidebar; nav.ForeColor = Ui.SidebarText;
             nav.Padding = new Padding(0, Ui.S(6), 0, Ui.S(6));
-            var navigation = new Panel { Dock = DockStyle.Fill, AutoScroll = true, AutoScrollMinSize = Ui.S(0, 336) };
+            var navigation = new Panel { Dock = DockStyle.Fill, AutoScroll = true, AutoScrollMinSize = Ui.S(0, 336), BackColor = Ui.Sidebar };
             Ui.DarkScroll(navigation);
             nav.Controls.Add(navigation);
 
@@ -178,7 +182,22 @@ namespace StickyPro
             navHome = new NavItem("", "Home");
             navHome.Click += delegate { ShowPage("dashboard"); };
             navigation.Controls.Add(navHome);
-            navigation.AutoScrollMinSize = Ui.S(0, 42 * 13 + 6);
+            navTerminals = new NavItem("", "Terminals") { Badge = "NEW" };
+            navTerminals.Click += delegate { ShowPage("terminals"); };
+            // Grouped sidebar (Dock Top stacks in reverse, so add bottom-up).
+            navigation.Controls.Clear();
+            var order = new List<Control>();
+            Func<string, Control> grp = t => (Control)new NavGroup(t);
+            if (Ui.Nexus) order.Add(grp("General"));
+            order.AddRange(new Control[] { navHome, navTasks, navNotes, navPrompts, navClips });
+            if (Ui.Nexus) order.Add(grp("Tools"));
+            order.AddRange(new Control[] { navTerminals, navExplorer, navSnip, navChrome, navPower });
+            if (Ui.Nexus) order.Add(grp("System"));
+            order.AddRange(new Control[] { navSystem, navCards, navActivity, navTagged });
+            int navH = 0;
+            for (int oi = order.Count - 1; oi >= 0; oi--) { order[oi].Dock = DockStyle.Top; navigation.Controls.Add(order[oi]); navH += order[oi].Height; }
+            navigation.AutoScrollMinSize = new Size(0, navH + Ui.S(6));
+            if (Ui.Nexus) { var support = new NavGroup("Support") { Dock = DockStyle.Bottom }; nav.Controls.Add(support); nav.Controls.SetChildIndex(support, 1); }
 
             Controls.Add(nav);
             topBar = new TopBar(() => nav.Width);
@@ -192,6 +211,7 @@ namespace StickyPro
             };
             nav.SizeChanged += delegate { topBar.Invalidate(); topBar.PerformLayout(); };
             navGrip.BackColor = Ui.Sidebar;
+            if (Ui.Nexus) navGrip.Paint += (s, e) => { using (var pen = new Pen(Ui.Line)) e.Graphics.DrawLine(pen, 0, 0, 0, navGrip.Height); };
             Resize += adaptNav; adaptNav(this, EventArgs.Empty);
 
             Ui.Theme(this);
@@ -275,6 +295,7 @@ namespace StickyPro
                 navChrome.Selected = target == "chrome"; chrome.Visible = target == "chrome";
                 navPower.Selected = target == "power"; power.Visible = target == "power";
                 navKeys.Selected = target == "shortcuts"; shortcuts.Visible = target == "shortcuts";
+                navTerminals.Selected = target == "terminals"; terminals.Visible = target == "terminals";
             });
             RefreshCurrent();
             FocusSearch();
@@ -291,7 +312,7 @@ namespace StickyPro
         // page only has to paint. Each step is small; stops as soon as the window hides.
         void PrewarmPages()
         {
-            var pages = new List<Control> { tasks, notes, prompts, clips, system, cards, snipPage, activityPage, taggedPage, chrome, power };
+            var pages = new List<Control> { tasks, notes, prompts, clips, system, cards, snipPage, activityPage, taggedPage, chrome, power, terminals };
             int i = 0;
             var t = new Timer { Interval = 250 };
             t.Tick += delegate
@@ -319,6 +340,7 @@ namespace StickyPro
 
         public void SelectTask(TaskItem t) { ShowPage("tasks"); tasks.Select(t); }
         public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); }
+        public void AddTerminalFolder(string folder) { ShowPage("terminals"); terminals.UseFolder(folder); }
         public void RefreshLaunchers() { shortcuts.RefreshLaunchers(); }
         public void SetDockVisible(bool v) { dock.Visible = v; }
 
@@ -392,8 +414,8 @@ namespace StickyPro
             var l = new Label();
             l.Text = text;
             l.UseMnemonic = false;
-            l.Font = Ui.Big;
-            l.ForeColor = Ui.Header; // PicPick-style blue page headers
+            l.Font = Ui.Nexus ? Ui.Title : Ui.Big;
+            l.ForeColor = Ui.Header; // PicPick-style blue page headers (dark text in Nexus)
             l.AutoSize = true;
             l.Margin = new Padding(0, 0, Ui.S(14), 0);
             return l;

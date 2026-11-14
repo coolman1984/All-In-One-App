@@ -47,6 +47,7 @@ namespace StickyPro
             Store.Load();
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
+            Ui.Nexus = Store.Settings.Design != "classic";
             Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
@@ -151,6 +152,8 @@ namespace StickyPro
                 case "newtask": QuickTaskForm.Open(); break;
                 case "run": QuickRunForm.Open(); break;
                 case "ontop": PowerTools.ToggleForeground(); break;
+                case "pwshhere": Term.OpenFromExplorer(""); break;
+                case "terminals": Term.LaunchCurrent(); break;
                 case "awake": Awake.Set(!Awake.On); Balloon(Awake.On ? "Keep awake: ON" : "Keep awake: OFF", Awake.On ? "The PC will not sleep." : "Normal sleep settings."); break;
             }
         }
@@ -402,9 +405,16 @@ namespace StickyPro
             capture.DropDownItems.Add("Record screen", null, delegate { StartRecord("rect"); });
             menu.Items.Add(capture);
             menu.Items.Add(Accessories.MenuItem());
+            var terms = new ToolStripMenuItem("Terminals");
+            terms.DropDownItems.Add("Launch my terminals workspace", null, delegate { Term.LaunchCurrent(); });
+            terms.DropDownItems.Add("PWSH here (File Explorer folder)", null, delegate { Term.OpenFromExplorer(""); });
+            terms.DropDownItems.Add("Claude here (File Explorer folder)", null, delegate { Term.OpenFromExplorer("claude"); });
+            terms.DropDownItems.Add("Terminals page...", null, delegate { ShowMain("terminals"); });
+            menu.Items.Add(terms);
             menu.Items.Add(new ToolStripSeparator());
             var open = new ToolStripMenuItem("Open page");
             open.DropDownItems.Add("Home", null, delegate { ShowMain("dashboard"); });
+            open.DropDownItems.Add("Terminals", null, delegate { ShowMain("terminals"); });
             open.DropDownItems.Add("Tasks & reminders", null, delegate { ShowMain("tasks"); });
             open.DropDownItems.Add("Sticky notes", null, delegate { ShowMain("notes"); });
             open.DropDownItems.Add("Prompts & snippets", null, delegate { ShowMain("prompts"); });
@@ -493,16 +503,19 @@ namespace StickyPro
             bool fontChanged = Ui.Base.Size != Store.Settings.UiFontSize || (Store.Settings.UiFont.Length > 0 && Ui.FontName != Store.Settings.UiFont);
             if (fontChanged) Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
             if (main != null && !main.IsDisposed) main.SetDockVisible(Store.Settings.DockVisible);
-            if (Ui.Dark != Store.Settings.Dark || Ui.ThemeIndex != Store.Settings.Theme || fontChanged) ApplyTheme();
+            bool designChanged = Ui.Nexus != (Store.Settings.Design != "classic");
+            if (Ui.Dark != Store.Settings.Dark || Ui.ThemeIndex != Store.Settings.Theme || fontChanged || designChanged) ApplyTheme();
         }
 
         public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }
-        public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(5, i)); Store.MarkSettings(); ApplyTheme(); }
+        public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, i)); Store.MarkSettings(); ApplyTheme(); }
+        public void SetDesign(string d) { Store.Settings.Design = d == "classic" ? "classic" : "nexus"; Store.MarkSettings(); ApplyTheme(); }
 
         void ApplyTheme()
         {
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
+            Ui.Nexus = Store.Settings.Design != "classic";
             Ui.ThemeMenu(tray.ContextMenuStrip);
             string page = null;
             bool wasVisible = false;
@@ -922,6 +935,12 @@ namespace StickyPro
             main.Activate();
             main.BringToFront();
             main.FocusSearch();
+        }
+
+        public void AddTerminalFolder(string folder)
+        {
+            ShowMain("terminals");
+            main.AddTerminalFolder(folder);
         }
 
         void ShowQuick(string mode)

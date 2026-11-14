@@ -369,7 +369,7 @@ namespace StickyPro
             m.Items.Add("Open\tEnter", null, delegate { OpenSelected(); });
             m.Items.Add("Open with...", null, delegate { var f = FirstSel(); if (f != null && !f.Dir) Hidden.Open("rundll32.exe", "shell32.dll,OpenAs_RunDLL " + f.Path); });
             m.Items.Add("Open in Windows Explorer", null, delegate { var f = FirstSel(); Hidden.Open("explorer.exe", f == null ? "\"" + Current + "\"" : "/select,\"" + f.Path + "\""); });
-            m.Items.Add("Open terminal here", null, delegate { if (Current.Length > 0) { try { Process.Start(new ProcessStartInfo("wt.exe", "-d \"" + Current + "\"") { UseShellExecute = true }); } catch { Process.Start(new ProcessStartInfo("powershell.exe") { WorkingDirectory = Current, UseShellExecute = true }); } } });
+            Term.AddMenu(m.Items, () => Current);
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Copy\tCtrl+C", null, delegate { ClipCopy(false); });
             m.Items.Add("Cut\tCtrl+X", null, delegate { ClipCopy(true); });
@@ -427,6 +427,16 @@ namespace StickyPro
             bar.Controls.Add(Ui.Btn("Copy to next  F5", delegate { if (active != null) CopyNext(active, false); }, true));
             bar.Controls.Add(Ui.Btn("Move to next  F6", delegate { if (active != null) CopyNext(active, true); }));
             bar.Controls.Add(Ui.Btn("Same folder in all", delegate { if (active != null) foreach (var p in panes) if (p != active) p.Navigate(active.Current); }));
+            bar.Controls.Add(Ui.Btn("PWSH here", delegate { var p = active ?? panes.FirstOrDefault(); if (p != null) Term.Open(p.Current, ""); }));
+            bar.Controls.Add(Ui.Btn("Claude here", delegate { var p = active ?? panes.FirstOrDefault(); if (p != null) Term.Open(p.Current, "claude"); }));
+            bar.Controls.Add(Ui.Btn("Terminal per pane", delegate
+            {
+                string l = Layouts[Math.Max(0, layout.SelectedIndex)];
+                int count = Math.Min(panes.Count, l == "2x2" ? 4 : int.Parse(l));
+                var ws = new TermWorkspace { Name = "Explorer panes", Layout = l, Mode = "tiled" };
+                for (int i = 0; i < count; i++) ws.Panes.Add(new TermPane { Folder = panes[i].Current, Shell = Store.Settings.TermShell });
+                Term.Launch(ws);
+            }));
             var hint = new Label { AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(0, Ui.S(9), 0, 0), Text = "Drag files between panes · Ctrl+C / X / V · F2 rename · F7 new folder · Del = Recycle Bin" };
             bar.Controls.Add(hint);
             Controls.Add(bar);
@@ -576,6 +586,7 @@ namespace StickyPro
                     m.Items.Add("Open", null, delegate { Launch(it); });
                     m.Items.Add("Run as administrator", null, delegate { try { Process.Start(new ProcessStartInfo(it.Path, it.Args) { UseShellExecute = true, Verb = "runas" }); } catch { } });
                     m.Items.Add("Open file location", null, delegate { if (File.Exists(it.Path) || Directory.Exists(it.Path)) Hidden.Open("explorer.exe", "/select,\"" + it.Path + "\""); });
+                    Term.AddMenu(m.Items, () => it.Path);
                     m.Items.Add("Rename...", null, delegate { var n = Ui.Ask("Rename", "Name", it.Name, FindForm()); if (!string.IsNullOrEmpty(n)) { it.Name = n; Store.MarkSettings(); Rebuild(); } });
                     m.Items.Add("Edit arguments...", null, delegate { var a = Ui.Ask("Arguments", "Arguments", it.Args, FindForm()); if (a != null) { it.Args = a; Store.MarkSettings(); Rebuild(); } });
                     m.Items.Add("Give it a global shortcut...", null, delegate { ShortcutsPage.AddLauncherFor(it.Name, it.Path, it.Args, FindForm()); });

@@ -31,6 +31,8 @@ namespace StickyPro
         public static Font Small = new Font(FontName, 8.5f);
         public static Font Big = new Font(FontName, 14f, FontStyle.Bold);
         public static Font Metric = new Font(FontName, 24f, FontStyle.Bold);
+        public static Font Title = new Font(FontName, 17f, FontStyle.Bold);
+        public static Font Kpi = new Font(FontName, 20f, FontStyle.Bold);
         // Interface font and size from Settings. Old fonts are not disposed (open windows may still use them).
         public static void InitFonts(string name, float size)
         {
@@ -41,13 +43,30 @@ namespace StickyPro
             FontName = family;
             Base = new Font(family, size); Bold = new Font(family, size, FontStyle.Bold); Small = new Font(family, 8.5f * k);
             Big = new Font(family, 14f * k, FontStyle.Bold); Metric = new Font(family, 24f * k, FontStyle.Bold);
+            Title = new Font(family, 17f * k, FontStyle.Bold); Kpi = new Font(family, 20f * k, FontStyle.Bold);
         }
 
-        // Six colour themes: the sidebar / top bar colour and the accent follow the theme.
-        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose" };
-        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94) };
+        // Colour themes: the accent (and the classic sidebar colour) follow the theme.
+        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo" };
+        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230) };
         public static int ThemeIndex;
-        public static Color ThemeColor(int i) { return themeBase[Math.Max(0, Math.Min(5, i))]; }
+        public static Color ThemeColor(int i) { return themeBase[Math.Max(0, Math.Min(themeBase.Length - 1, i))]; }
+        // Nexus design (clean white sidebar, soft grey canvas, white cards) or the classic solid-colour sidebar.
+        public static bool Nexus = true;
+        static Color H(string hex) { return ColorTranslator.FromHtml(hex); }
+        // Chart / KPI palette (Nexus): accent, teal, light accent, light teal, amber, rose.
+        public static Color Series(int i)
+        {
+            switch (i % 6)
+            {
+                case 0: return Accent;
+                case 1: return H("#22C3B4");
+                case 2: return Mix(AccentFill, Color.White, 0.42);
+                case 3: return H("#7FE3D8");
+                case 4: return H("#F59E0B");
+                default: return H("#F43F5E");
+            }
+        }
         public static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
         static Color TB { get { return ThemeColor(ThemeIndex); } }
         public static Font NoteFont = new Font("Segoe UI", 11f);
@@ -59,27 +78,29 @@ namespace StickyPro
         public static bool Dark;
         public static Color Accent { get { return Dark ? Mix(TB, Color.White, 0.45) : Mix(TB, Color.Black, 0.08); } }
         public static Color AccentFill { get { return Mix(TB, Color.Black, 0.08); } }
-        public static Color Bg { get { return Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
-        public static Color Card { get { return Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
-        public static Color Field { get { return Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
+        public static Color Bg { get { return Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
+        public static Color Card { get { return Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
+        public static Color Field { get { return Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
         public static Color Nav { get { return Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
-        // PicPick-style solid blue sidebar with white text.
-        public static Color Sidebar { get { return Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
-        public static Color SidebarSel { get { return Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
-        public static Color SidebarHover { get { return Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
-        public static Color Header { get { return Dark ? Mix(TB, Color.White, 0.5) : TB; } }
-        public static Color Line { get { return Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
-        public static Color Text { get { return Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
-        public static Color Muted { get { return Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
-        public static Color SelBg { get { return Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
-        public static Color HoverBg { get { return Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
-        public static Color PressBg { get { return Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
+        // Nexus: white sidebar with dark text; classic: PicPick-style solid colour sidebar with white text.
+        public static Color Sidebar { get { return Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
+        public static Color SidebarSel { get { return Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
+        public static Color SidebarHover { get { return Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
+        public static Color SidebarText { get { return Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
+        public static Color SidebarMuted { get { return Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
+        public static Color Header { get { return Nexus ? Text : Dark ? Mix(TB, Color.White, 0.5) : TB; } }
+        public static Color Line { get { return Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
+        public static Color Text { get { return Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
+        public static Color Muted { get { return Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
+        public static Color SelBg { get { return Nexus ? (Dark ? Mix(TB, H("#171A21"), 0.72) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
+        public static Color HoverBg { get { return Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
+        public static Color PressBg { get { return Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
         public static Color AccentHover { get { return Mix(TB, Color.Black, 0.2); } }
         public static Color AccentPressed { get { return Mix(TB, Color.Black, 0.3); } }
         public static Color Success { get { return Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
         public static Color Danger { get { return Dark ? Color.FromArgb(255, 143, 143) : Color.FromArgb(196, 43, 48); } }
         public static Color Warning { get { return Dark ? Color.FromArgb(249, 202, 101) : Color.FromArgb(151, 98, 0); } }
-        public static Color Track { get { return Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
+        public static Color Track { get { return Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
         public static Color Canvas { get { return Dark ? Color.FromArgb(28, 28, 28) : Color.FromArgb(225, 225, 225); } }
         public static Color Overlay { get { return Color.FromArgb(36, 36, 36); } }
         public static Color OverlayField { get { return Color.FromArgb(60, 60, 60); } }
@@ -411,6 +432,7 @@ namespace StickyPro
 
         // Icons everywhere: buttons get a Segoe Fluent/MDL2 icon chosen from their text.
         static readonly string[][] glyphWords = {
+            new[] { "pwsh", "" }, new[] { "claude", "" }, new[] { "launch", "" }, new[] { "terminal", "" }, new[] { "workspace", "" }, new[] { "apply", "" },
             new[] { "run as admin", "" }, new[] { "end task", "" }, new[] { "pop out", "" }, new[] { "copy path", "" },
             new[] { "copy", "" }, new[] { "paste", "" }, new[] { "save swatch", "" }, new[] { "save", "" }, new[] { "back up", "" },
             new[] { "restore", "" }, new[] { "delete", "" }, new[] { "remove", "" }, new[] { "clear", "" }, new[] { "clean", "" },
@@ -958,7 +980,7 @@ namespace StickyPro
             using (var bg = new SolidBrush(back)) g.FillRectangle(bg, bounds);
             var r = new Rectangle(bounds.X + Ui.S(6), bounds.Y + Ui.S(3), bounds.Width - Ui.S(13), bounds.Height - Ui.S(6));
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var path = Ui.Round(r, Ui.S(6)))
+            using (var path = Ui.Round(r, Ui.S(Ui.Nexus ? 10 : 6)))
             {
                 using (var b = new SolidBrush(ci.Back)) g.FillPath(b, path);
                 if (ci.Strip != Color.Empty)
@@ -1079,12 +1101,13 @@ namespace StickyPro
         bool selected, hover;
         public bool Selected { get { return selected; } set { selected = value; Invalidate(); } }
 
+        public string Badge;     // small pill on the right ("NEW", a count); null = none
         public NavItem(string glyph, string text)
         {
             TabStop = true;
             AccessibleRole = AccessibleRole.PageTab;
             Glyph = glyph; Text = text;
-            Height = Ui.S(46);
+            Height = Ui.Nexus ? Ui.S(40) : Ui.S(46);
             Dock = DockStyle.Top;
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -1099,6 +1122,7 @@ namespace StickyPro
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
+            if (Ui.Nexus) { PaintNexus(g); return; }
             // PicPick look: full-width darker band for the selected page on a solid blue sidebar.
             g.Clear(selected ? Ui.SidebarSel : hover ? Ui.SidebarHover : Ui.Sidebar);
             var r = new Rectangle(Ui.S(8), 0, Width - Ui.S(16), Height);
@@ -1107,6 +1131,52 @@ namespace StickyPro
             TextRenderer.DrawText(g, Glyph, Ui.Icon(13f), new Rectangle(r.X + Ui.S(6), r.Y, Ui.S(30), r.Height), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if (Width < Ui.S(100)) return;
             TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(r.X + Ui.S(46), r.Y, r.Width - Ui.S(46), r.Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        }
+
+        // Nexus look: white sidebar, soft rounded pill for the selected / hovered page, grey icons, accent icon when selected.
+        void PaintNexus(Graphics g)
+        {
+            g.Clear(Ui.Sidebar);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            bool narrow = Width < Ui.S(100);
+            var pill = new Rectangle(Ui.S(10), Ui.S(2), Width - Ui.S(20), Height - Ui.S(4));
+            if (selected || hover || Focused)
+                using (var path = Ui.Round(pill, Ui.S(8)))
+                {
+                    using (var b = new SolidBrush(selected ? Ui.SidebarSel : Ui.SidebarHover)) g.FillPath(b, path);
+                    if (Focused && !selected) using (var p = new Pen(Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(p, path);
+                }
+            var iconRect = narrow ? new Rectangle(0, 0, Width, Height) : new Rectangle(pill.X + Ui.S(8), 0, Ui.S(26), Height);
+            TextRenderer.DrawText(g, Glyph, Ui.Icon(12f), iconRect, selected ? Ui.Accent : Ui.SidebarMuted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            if (narrow) return;
+            int tx = pill.X + Ui.S(42), right = pill.Right - Ui.S(8);
+            if (!string.IsNullOrEmpty(Badge))
+            {
+                var size = TextRenderer.MeasureText(Badge, Ui.Small, Size.Empty, TextFormatFlags.NoPadding);
+                var br = new Rectangle(right - size.Width - Ui.S(14), (Height - Ui.S(20)) / 2, size.Width + Ui.S(14), Ui.S(20));
+                using (var path = Ui.Round(br, Ui.S(6)))
+                using (var b = new SolidBrush(Ui.SelBg)) g.FillPath(b, path);
+                TextRenderer.DrawText(g, Badge, Ui.Small, br, Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                right = br.Left - Ui.S(6);
+            }
+            TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(tx, 0, Math.Max(1, right - tx), Height), Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        }
+    }
+
+    // Small upper-case group title in the sidebar ("GENERAL", "TOOLS"...); a thin line when the sidebar is narrow.
+    public class NavGroup : Control
+    {
+        public NavGroup(string text)
+        {
+            Text = text.ToUpperInvariant(); Dock = DockStyle.Top; Height = Ui.S(34); TabStop = false;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Ui.Sidebar);
+            if (Width < Ui.S(100)) { using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, Ui.S(14), Height / 2, Width - Ui.S(28), 1); return; }
+            TextRenderer.DrawText(g, Text, Ui.Small, new Rectangle(Ui.S(22), Ui.S(10), Width - Ui.S(30), Height - Ui.S(10)), Ui.SidebarMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
     }
 }

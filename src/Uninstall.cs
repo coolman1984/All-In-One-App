@@ -379,6 +379,7 @@ namespace StickyPro
             lv.ItemCheck += (s, e) => { var l = (Leftover)lv.Items[e.Index].Tag; if (l.InfoOnly) e.NewValue = CheckState.Unchecked; };
             var m = Ui.Menu();
             m.Items.Add("Open location", null, delegate { OpenSel(); });
+            Term.AddMenu(m.Items, () => { if (lv.SelectedItems.Count == 0) return null; var p = ((Leftover)lv.SelectedItems[0].Tag).Path; return p != null && (Directory.Exists(p) || File.Exists(p)) ? p : null; });
             m.Items.Add("Copy path", null, delegate { if (lv.SelectedItems.Count > 0) App.I.CopyText(((Leftover)lv.SelectedItems[0].Tag).Text); });
             Ui.ThemeMenu(m); lv.ContextMenuStrip = m;
             lv.DoubleClick += delegate { OpenSel(); };
@@ -592,6 +593,7 @@ namespace StickyPro
             m.Items.Add("Scan leftovers", null, delegate { var a = Sel().FirstOrDefault(); if (a != null) ScanLeftovers(a, false); });
             m.Items.Add(new ToolStripSeparator());
             var openF = m.Items.Add("Open install folder", null, delegate { var a = Sel().FirstOrDefault(); if (a != null && Directory.Exists(a.Location)) Hidden.Open("explorer.exe", "\"" + a.Location + "\""); });
+            Term.AddMenu(m.Items, () => { var a = Sel().FirstOrDefault(); return a != null && Directory.Exists(a.Location) ? a.Location : null; });
             var reg = m.Items.Add("Open in Registry Editor", null, delegate { var a = Sel().FirstOrDefault(); if (a != null && a.KeyPath.Length > 0) RegEdit.Open(a.KeyPath); });
             m.Items.Add("Search the web", null, delegate { var a = Sel().FirstOrDefault(); if (a != null) Hidden.Open("https://www.bing.com/search?q=" + Uri.EscapeDataString(a.Name + " uninstall")); });
             m.Items.Add(new ToolStripSeparator());

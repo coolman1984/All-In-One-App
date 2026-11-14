@@ -166,7 +166,16 @@ namespace StickyPro
         public List<string> Swatches = new List<string>();
         public bool WelcomeHidden;
         public Dictionary<string, int> PaneSizes = new Dictionary<string, int>();
+        public string Design = "";           // "" (not chosen yet -> nexus) | nexus | classic
+        public List<TermWorkspace> TermWorkspaces = new List<TermWorkspace>();
+        public int TermLast;
+        public List<string> TermRecent = new List<string>();
+        public string TermShell = "pwsh";    // shell for "PWSH here": pwsh | powershell | cmd
     }
+
+    // Terminals page: one pane = folder + shell + optional start command (e.g. claude).
+    public class TermPane { public string Folder = ""; public string Shell = "pwsh"; public string Command = ""; }
+    public class TermWorkspace { public string Name = "My terminals"; public string Layout = "4"; public string Mode = "tiled"; public List<TermPane> Panes = new List<TermPane>(); }
 
     static class Store
     {
@@ -272,6 +281,13 @@ namespace StickyPro
             if (Settings.ColorHistory == null) Settings.ColorHistory = new List<string>();
             if (Settings.Swatches == null) Settings.Swatches = new List<string>();
             if (Settings.PaneSizes == null) Settings.PaneSizes = new Dictionary<string, int>();
+            if (Settings.TermWorkspaces == null) Settings.TermWorkspaces = new List<TermWorkspace>();
+            Settings.TermWorkspaces.RemoveAll(w => w == null);
+            foreach (var w in Settings.TermWorkspaces) { if (w.Panes == null) w.Panes = new List<TermPane>(); w.Panes.RemoveAll(p => p == null); }
+            if (Settings.TermRecent == null) Settings.TermRecent = new List<string>();
+            if (string.IsNullOrEmpty(Settings.TermShell)) Settings.TermShell = "pwsh";
+            // New design: switch once to the Nexus look with its indigo accent; "classic" stays available in Settings.
+            if (string.IsNullOrEmpty(Settings.Design)) { Settings.Design = "nexus"; Settings.Theme = 6; }
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
             if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
 
