@@ -133,7 +133,8 @@ namespace StickyPro
         readonly List<Section> sections = new List<Section>();
         readonly List<Task> all = new List<Task>();
         Task hover; int focus = -1;
-        Rectangle welcome, welcomeClose, divider;
+        Rectangle welcome, welcomeClose;
+        readonly List<Rectangle> dividers = new List<Rectangle>();
         int columns = 2;
 
         static Font MakeTitleFont()
@@ -170,13 +171,13 @@ namespace StickyPro
             s.Tasks.Add(T("", "Screen Recorder", "Record an area to MP4  (" + Key("record") + ")", () => App.I.StartRecord("rect")));
             foreach (var a in Accessories.List) { string id = a[0]; s.Tasks.Add(T(a[3], a[1], a[2], () => Accessories.Open(id))); }
 
-            s = Add("Notes & prompts", 1);
+            s = Add("Notes & prompts", 2);
             s.Tasks.Add(T("", "Clipboard history", "Everything you copied  (" + Key("clips") + ")", () => App.I.ShowMain("clips")));
             s.Tasks.Add(T("", "Prompts & snippets", "Your prompt library  (" + Key("prompts") + ")", () => App.I.ShowMain("prompts")));
             s.Tasks.Add(T("", "Sticky notes", "All notes, reminders and archive", () => App.I.ShowMain("notes")));
             s.Tasks.Add(T("", "Floating cards", "Tools that stay on top of other apps", () => App.I.ShowMain("cards")));
 
-            s = Add("System", 1);
+            s = Add("System", 2);
             s.Tasks.Add(T("", "System monitor", "Live processes, CPU and memory", () => App.I.ShowMain("system:procs")));
             s.Tasks.Add(T("", "Cleanup", "Free space on C and D", () => App.I.ShowMain("system:drives")));
             s.Tasks.Add(T("", "Startup apps", "Choose what starts with Windows", () => App.I.ShowMain("system:startup")));
@@ -193,21 +194,23 @@ namespace StickyPro
         // Lays out for a width and returns the height needed.
         public int Measure(int width)
         {
-            columns = width >= Ui.S(720) ? 2 : 1;
-            int gap = Ui.S(40), colW = columns == 2 ? (width - gap) / 2 : width;
+            columns = width >= Ui.S(1380) ? 3 : width >= Ui.S(720) ? 2 : 1;
+            int gap = Ui.S(40), colW = (width - gap * (columns - 1)) / columns;
             int top = Ui.S(58);
             if (ShowWelcome) { welcome = new Rectangle(0, top, width, Ui.S(64)); welcomeClose = new Rectangle(width - Ui.S(84), top + Ui.S(16), Ui.S(72), Ui.S(32)); top += Ui.S(80); }
             else welcome = welcomeClose = Rectangle.Empty;
-            var y = new[] { top, top };
+            var y = new[] { top, top, top };
             foreach (var s in sections)
             {
-                int c = columns == 2 ? s.Column : 0, x = c == 1 ? colW + gap : 0;
+                int c = columns == 3 ? s.Column : columns == 2 ? (s.Column == 0 ? 0 : 1) : 0, x = c * (colW + gap);
                 s.Header = new Rectangle(x, y[c], colW, Ui.S(34)); y[c] += Ui.S(42);
                 foreach (var t in s.Tasks) { t.Bounds = new Rectangle(x, y[c], colW, Ui.S(56)); y[c] += Ui.S(58); }
                 y[c] += Ui.S(24);
             }
-            divider = columns == 2 ? new Rectangle(colW + gap / 2, top, 1, Math.Max(y[0], y[1]) - top - Ui.S(24)) : Rectangle.Empty;
-            return Math.Max(y[0], y[1]);
+            int bottom = Math.Max(y[0], Math.Max(y[1], y[2]));
+            dividers.Clear();
+            for (int d = 1; d < columns; d++) dividers.Add(new Rectangle(d * (colW + gap) - gap / 2, top, 1, bottom - top - Ui.S(24)));
+            return bottom;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -227,7 +230,7 @@ namespace StickyPro
                 using (var path = Ui.Round(welcomeClose, Ui.S(6))) { using (var b = new SolidBrush(Ui.AccentFill)) g.FillPath(b, path); }
                 TextRenderer.DrawText(g, "Got it", Ui.Bold, welcomeClose, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             }
-            if (divider.Width > 0) using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, divider);
+            foreach (var dv in dividers) if (dv.IntersectsWith(clip)) using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, dv);
             foreach (var s in sections)
             {
                 if (s.Header.IntersectsWith(clip))
@@ -300,7 +303,7 @@ namespace StickyPro
             tasks = new TaskHome();
             liveHead = new Label { Text = "Live dashboard", Font = new Font(Ui.FontName, 12f, FontStyle.Bold), ForeColor = Ui.Header, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
             liveHead.Disposed += delegate { liveHead.Font.Dispose(); };
-            grid = new TileGrid(Ui.S(220), Ui.S(136), 4) { Dock = DockStyle.None, AutoSize = false };
+            grid = new TileGrid(Ui.S(220), Ui.S(136), 6) { Dock = DockStyle.None, AutoSize = false };
             Add("cpu", "CPU", "system:procs"); Add("ram", "RAM", "system:procs"); Add("C", "Disk C", "system:drives"); Add("D", "Disk D", "system:drives");
             Add("apps", "Top 3 memory apps", "system:procs"); Add("clips", "Clipboard items today", "clips"); Add("prompts", "Prompts", "prompts");
             Add("notes", "Reminders due today", "notes"); Add("activity", "Files opened today", "activity"); Add("tagged", "Tagged Urgent", "tagged"); Add("record", "Screen recorder", "snip");
