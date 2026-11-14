@@ -173,9 +173,21 @@ namespace StickyPro
             GDelete = "", GNote = "", GPrompt = "", GClip = "", GCopy = "", GSearch = "",
             GClock = "", GSettings = "";
 
+        static readonly System.Reflection.PropertyInfo doubleBufferedProp =
+            typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        // Flicker-free resizing: containers paint off-screen. (Panel covers FlowLayoutPanel and TableLayoutPanel.)
+        public static void Smooth(Control c)
+        {
+            if (doubleBufferedProp == null) return;
+            if (c is Panel || c is UserControl || c is TabPage || c is SplitContainer || c is Form)
+                try { doubleBufferedProp.SetValue(c, true, null); } catch { }
+        }
+
         // Applies theme colors to inputs (which do not inherit colors) and dark scrollbars / title bar.
         public static void Theme(Control root)
         {
+            Smooth(root);
             var menu = root.ContextMenuStrip as OwnedMenu;
             if (menu != null && !menu.Bound)
             {
@@ -203,6 +215,7 @@ namespace StickyPro
                 var date = c as DateTimePicker;
                 if (date != null) { date.CalendarMonthBackground = Field; date.CalendarForeColor = Text; }
                 if (c is TextBox || c is ListBox || c is RichTextBox || c is ComboBox || c is ListView || c is NumericUpDown) DarkScroll(c);
+                Smooth(c);
                 if (c.HasChildren) Theme(c);
             }
         }
