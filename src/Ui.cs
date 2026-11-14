@@ -18,7 +18,7 @@ namespace StickyPro
         public NoteColor(string name, Color header, Color body, Color text) { Name = name; Header = header; Body = body; Text = text; }
     }
 
-    static class Ui
+    static partial class Ui
     {
         public static float Scale = 1f;
         public static int S(int v) { return (int)Math.Round(v * Scale); }
@@ -920,11 +920,21 @@ namespace StickyPro
         {
             if (e.Index < 0 || e.Index >= Items.Count || Info == null) return;
             var g = e.Graphics;
-            using (var bg = new SolidBrush(BackColor)) g.FillRectangle(bg, e.Bounds);
             CardInfo ci;
-            try { ci = Info(Items[e.Index]); } catch { return; }
+            try { ci = Info(Items[e.Index]); }
+            catch { using (var bg = new SolidBrush(BackColor)) g.FillRectangle(bg, e.Bounds); return; }
             bool sel = (e.State & DrawItemState.Selected) != 0;
-            var r = new Rectangle(e.Bounds.X + Ui.S(6), e.Bounds.Y + Ui.S(3), e.Bounds.Width - Ui.S(13), e.Bounds.Height - Ui.S(6));
+            Ui.DrawCard(g, e.Bounds, ci, sel, BackColor);
+        }
+    }
+
+    static partial class Ui
+    {
+        // Paints one card (background, colour strip, border, thumbnail, title, meta, sub text) inside 'bounds'.
+        public static void DrawCard(Graphics g, Rectangle bounds, CardInfo ci, bool sel, Color back)
+        {
+            using (var bg = new SolidBrush(back)) g.FillRectangle(bg, bounds);
+            var r = new Rectangle(bounds.X + Ui.S(6), bounds.Y + Ui.S(3), bounds.Width - Ui.S(13), bounds.Height - Ui.S(6));
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using (var path = Ui.Round(r, Ui.S(6)))
             {
