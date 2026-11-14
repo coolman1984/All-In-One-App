@@ -18,6 +18,7 @@ namespace StickyPro
         readonly Action<string> status;
         readonly Action onChange;
         bool stale = true, filling;
+        string categoryKey = "";
 
         public TaggedPanel(Action<string> status)
         {
@@ -94,17 +95,18 @@ namespace StickyPro
             var hint = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, Text = "Drag files or folders here, or select them in Explorer and press " + Hotkeys.Get("tagfile") + ". Tick items, then Move to a category." };
             Controls.Add(hint);
 
-            onChange = () => { if (Live) Fill(); else stale = true; };
+            onChange = () => { if (Live) { RefreshCategories(); Fill(); } else stale = true; };
             Store.TaggedChanged += onChange;
             Ui.Theme(this);
             BuildMoveBar();
         }
 
-        protected override void OnLive(bool on) { if (on && stale) Fill(); }
+        protected override void OnLive(bool on) { if (on && stale) { RefreshCategories(); Fill(); } }
         protected override void Dispose(bool disposing) { if (disposing) Store.TaggedChanged -= onChange; base.Dispose(disposing); }
 
         void BuildMoveBar()
         {
+            categoryKey = CategoryKey();
             Ui.ClearControls(moveBar.Controls);
             moveBar.Controls.Add(new Label { Text = "Move selected to:", AutoSize = true, Margin = new Padding(0, Ui.S(9), Ui.S(6), 0) });
             foreach (var c in Store.TagCats)
@@ -122,6 +124,9 @@ namespace StickyPro
                 moveBar.Controls.Add(b);
             }
         }
+
+        static string CategoryKey() { return string.Join("\0", Store.TagCats.Select(c => c.Name + "\u0001" + c.Color)); }
+        void RefreshCategories() { if (categoryKey != CategoryKey()) BuildMoveBar(); }
 
         void Fill()
         {

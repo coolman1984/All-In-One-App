@@ -921,6 +921,10 @@ $stream.Dispose()
         public static bool Paused;
         static string ffmpeg, audioDevice;
         static bool mic;
+        static bool starting, changing, stopRequested, keepRequested;
+        static int session;
+        static string recordDevice;
+        static readonly object audioGate = new object();
 
         public static string FindFfmpeg()
         {
@@ -945,6 +949,8 @@ $stream.Dispose()
 
         static string FindMic(string exe)
         {
+            lock (audioGate)
+            {
             if (audioDevice != null) return audioDevice.Length == 0 ? null : audioDevice;
             audioDevice = "";
             try
@@ -966,6 +972,7 @@ $stream.Dispose()
             }
             catch { }
             return audioDevice.Length == 0 ? null : audioDevice;
+            }
         }
 
         public static void Start(Rectangle r, bool withMic)
@@ -981,6 +988,8 @@ $stream.Dispose()
             area.Width -= area.Width % 2;
             area.Height -= area.Height % 2;
             mic = withMic;
+            int currentSession = ++session;
+            recordDevice = null;
             segs.Clear();
             outPath = Path.Combine(Shot.VideoFolder, "Recording " + DateTime.Now.ToString("yyyy-MM-dd HHmmssfff") + " " + Guid.NewGuid().ToString("N").Substring(0, 8) + ".mp4");
             Paused = false;
@@ -989,9 +998,25 @@ $stream.Dispose()
             border.Show();
             bar = new RecordBar(area);
             bar.Show();
+            starting = withMic;
+            if (withMic)
+            {
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    string device = FindMic(exe);
+                    Post(() => { if (currentSession != session || !Active) return; recordDevice = device; starting = false; BeginSegment(); });
+                });
+            }
+            else BeginSegment();
+        }
+
+        static void BeginSegment()
+        {
             try { StartSegment(); }
             catch (Exception ex) { Stop(false); App.I.Balloon("Could not start recording", ex.Message); }
         }
+
+        static void Post(Action action) { try { App.I.Sync.BeginInvoke(action); } catch { } }
 
         static void StartSegment()
         {
@@ -1001,7 +1026,7 @@ $stream.Dispose()
             var args = new StringBuilder("-hide_banner -loglevel error -y ");
             args.AppendFormat("-f gdigrab -framerate {0} -offset_x {1} -offset_y {2} -video_size {3}x{4} -draw_mouse 1 -i desktop ",
                 Math.Max(5, Math.Min(60, Store.Settings.RecordFps)), area.X, area.Y, area.Width, area.Height);
-            string dev = mic ? FindMic(exe) : null;
+            string dev = mic ? recordDevice : null;
             if (dev != null) args.AppendFormat("-f dshow -i audio=\"{0}\" ", dev);
             args.Append("-c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p ");
             if (dev != null) args.Append("-c:a aac -b:a 128k ");
@@ -1013,40 +1038,60 @@ $stream.Dispose()
             watch.Start();
         }
 
-        static void StopSegment()
+        static bool StopSegment(Process segment)
         {
-            watch.Stop();
-            if (ff == null) return;
-            try { ff.StandardInput.Write("q"); ff.StandardInput.Flush(); } catch { }
-            try { if (!ff.WaitForExit(6000)) { try { ff.Kill(); ff.WaitForExit(2000); } catch { } } }
-            finally { ff.Dispose(); ff = null; }
+            if (segment == null) return true;
+            try
+            {
+                try { segment.StandardInput.Write("q"); segment.StandardInput.Flush(); } catch { }
+                if (!segment.WaitForExit(6000)) { try { segment.Kill(); segment.WaitForExit(2000); } catch { } return false; }
+                return segment.ExitCode == 0;
+            }
+            finally { segment.Dispose(); }
         }
 
         public static TimeSpan Elapsed { get { return watch.Elapsed; } }
 
         public static void TogglePause()
         {
-            if (!Active) return;
+            if (!Active || starting || changing) return;
             if (Paused) { try { StartSegment(); Paused = false; } catch (Exception ex) { App.I.Balloon("Could not resume recording", ex.Message); } }
-            else { Paused = true; StopSegment(); }
+            else
+            {
+                Paused = true; changing = true; watch.Stop();
+                var segment = ff; ff = null;
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try { StopSegment(segment); } catch (Exception ex) { App.Log("Recording pause: " + ex.Message); }
+                    finally { Post(() => { changing = false; if (stopRequested) { stopRequested = false; Stop(keepRequested); } }); }
+                });
+            }
         }
 
         public static void Stop(bool keep)
         {
             if (!Active) return;
-            if (!Paused) StopSegment();
+            if (changing) { stopRequested = true; keepRequested = keep; return; }
+            starting = false; session++;
+            watch.Stop();
+            var segment = ff; ff = null;
             var b = bar; bar = null;
             if (b != null) b.Close();
             if (border != null) { border.Close(); border = null; }
-            var parts = segs.Where(File.Exists).ToList();
-            if (!keep || parts.Count == 0) { foreach (var s in parts) try { File.Delete(s); } catch { } NotifyFinished(); return; }
+            var paths = segs.ToList();
             Saving = true;
             string final = outPath;
             uint copySequence = Native.GetClipboardSequenceNumber();
             ThreadPool.QueueUserWorkItem(delegate
             {
+                var parts = new List<string>();
                 try
                 {
+                    bool complete = StopSegment(segment);
+                    parts = paths.Where(File.Exists).ToList();
+                    if (!keep) { foreach (var s in parts) try { File.Delete(s); } catch { } return; }
+                    if (!complete) throw new IOException("Recording did not finish cleanly; source segments were kept in the temporary folder.");
+                    if (parts.Count == 0) return;
                     if (parts.Count == 1) File.Move(parts[0], final);
                     else
                     {
@@ -1075,7 +1120,7 @@ $stream.Dispose()
                 }
                 catch (Exception ex)
                 {
-                    App.Log("Recording save failed: " + ex.Message + " Segments: " + string.Join(", ", parts));
+                    App.Log("Recording save failed: " + ex.Message + " Segments: " + string.Join(", ", paths));
                     try { App.I.Sync.BeginInvoke(new Action(() => App.I.Balloon("Recording save failed", ex.Message))); } catch { }
                 }
                 finally { try { App.I.Sync.BeginInvoke(new Action(NotifyFinished)); } catch { Saving = false; } }
@@ -1130,6 +1175,11 @@ $stream.Dispose()
         }
 
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ExStyle |= 0x80; return cp; } }
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (e.CloseReason == CloseReason.UserClosing && Recorder.Active) { e.Cancel = true; Ui.Later(1, () => Recorder.Stop(true)); }
+            base.OnFormClosing(e);
+        }
         protected override void OnMouseDown(MouseEventArgs e) { Native.ReleaseCapture(); Native.SendMessage(Handle, Native.WM_NCLBUTTONDOWN, (IntPtr)Native.HTCAPTION, IntPtr.Zero); }
         protected override void OnFormClosed(FormClosedEventArgs e) { t.Dispose(); base.OnFormClosed(e); }
     }
