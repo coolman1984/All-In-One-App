@@ -533,6 +533,7 @@ namespace StickyPro
             lvFolders.Columns.Add("Change since last scan", Ui.S(160), HorizontalAlignment.Right);
             lvFolders.DoubleClick += delegate { if (lvFolders.SelectedItems.Count > 0) try { Process.Start("explorer.exe", "\"" + (string)lvFolders.SelectedItems[0].Tag + "\""); } catch { } };
 
+            BuildMenus();
             Controls.Add(lvClean);
             Controls.Add(lvBig);
             Controls.Add(lvFolders);
@@ -821,7 +822,7 @@ namespace StickyPro
             long total = cleanSel.Sum(t => Math.Max(0, t.Size)) + bigSel.Sum(b => b.Size);
             string msg = "Delete " + Fmt.Bytes(total) + "?\n\n";
             if (cleanSel.Count > 0) msg += "Cleanup: " + string.Join(", ", cleanSel.Select(t => t.Name)) + "\n";
-            if (bigSel.Count > 0) msg += "\n" + bigSel.Count + " big file(s) will be deleted PERMANENTLY (not to the Recycle Bin).\n";
+            if (bigSel.Count > 0) msg += "\n" + bigSel.Count + " big file(s) go to the Recycle Bin (empty it to free the space).\n";
             msg += "\nFiles that are in use are skipped.";
             if (MessageBox.Show(FindForm(), msg, App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             cancel = false;
@@ -842,9 +843,8 @@ namespace StickyPro
                     if (cancel) break;
                     try
                     {
-                        File.SetAttributes(b.Path, FileAttributes.Normal);
-                        File.Delete(b.Path);
-                        freed += b.Size; removed.Add(b);
+                        if (!File.Exists(b.Path) || Leftovers.Recycle(b.Path)) { freed += b.Size; removed.Add(b); }
+                        else bigFailed++;
                     }
                     catch { bigFailed++; }
                 }
@@ -853,7 +853,7 @@ namespace StickyPro
                     bigFiles.RemoveAll(removed.Contains);
                     FillBig();
                     SetBusy(false, null);
-                    status("Freed " + Fmt.Bytes(freed) + "." + (bigFailed > 0 ? " " + bigFailed + " file(s) could not be deleted (in use or protected)." : ""));
+                    status("Cleaned " + Fmt.Bytes(freed) + (removed.Count > 0 ? " (big files are in the Recycle Bin)." : ".") + (bigFailed > 0 ? " " + bigFailed + " file(s) could not be deleted (in use or protected)." : ""));
                     measured = false;
                     MeasureAll();
                 });
@@ -863,6 +863,48 @@ namespace StickyPro
         static void Reveal(string path)
         {
             try { Process.Start("explorer.exe", "/select,\"" + path + "\""); } catch { }
+        }
+
+        static void CheckAll(FastList lv, bool on)
+        {
+            lv.BeginUpdate();
+            foreach (ListViewItem i in lv.Items) i.Checked = on;
+            lv.EndUpdate();
+        }
+
+        // Right-click menus for the three lists (Part 9: right-click functions everywhere).
+        void BuildMenus()
+        {
+            var mc = Ui.Menu();
+            mc.Items.Add("Tick all", null, delegate { CheckAll(lvClean, true); });
+            mc.Items.Add("Untick all", null, delegate { CheckAll(lvClean, false); });
+            mc.Items.Add(new ToolStripSeparator());
+            mc.Items.Add("Copy details", null, delegate
+            {
+                var t = lvClean.SelectedItems.Count > 0 ? lvClean.SelectedItems[0].Tag as CleanTarget : null;
+                if (t != null) App.I.CopyText(t.Name + " - " + (t.Size < 0 ? "?" : Fmt.Bytes(t.Size)) + " - " + t.Desc);
+            });
+            mc.Items.Add("Refresh sizes", null, delegate { MeasureAll(); });
+            Ui.ThemeMenu(mc); lvClean.ContextMenuStrip = mc;
+
+            Func<BigFile> big = () => lvBig.SelectedItems.Count > 0 ? lvBig.SelectedItems[0].Tag as BigFile : null;
+            var mb = Ui.Menu();
+            mb.Items.Add("Show in folder", null, delegate { var b = big(); if (b != null) Reveal(b.Path); });
+            mb.Items.Add("Copy path", null, delegate
+            {
+                var paths = lvBig.SelectedItems.Cast<ListViewItem>().Select(i => ((BigFile)i.Tag).Path).ToList();
+                if (paths.Count > 0) App.I.CopyText(string.Join(Environment.NewLine, paths));
+            });
+            mb.Items.Add(new ToolStripSeparator());
+            mb.Items.Add("Tick selected", null, delegate { foreach (ListViewItem i in lvBig.SelectedItems) i.Checked = true; });
+            mb.Items.Add("Untick all", null, delegate { CheckAll(lvBig, false); });
+            Ui.ThemeMenu(mb); lvBig.ContextMenuStrip = mb;
+
+            Func<string> folder = () => lvFolders.SelectedItems.Count > 0 ? lvFolders.SelectedItems[0].Tag as string : null;
+            var mf = Ui.Menu();
+            mf.Items.Add("Open folder", null, delegate { var f = folder(); if (f != null) try { Process.Start("explorer.exe", "\"" + f + "\""); } catch { } });
+            mf.Items.Add("Copy path", null, delegate { var f = folder(); if (f != null) App.I.CopyText(f); });
+            Ui.ThemeMenu(mf); lvFolders.ContextMenuStrip = mf;
         }
     }
 

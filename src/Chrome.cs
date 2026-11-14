@@ -380,7 +380,7 @@ namespace StickyPro
     }
 
     // ===================== Extensions =====================
-    class ExtInfo { public string Id, Name, Version, Desc, Folder, Profile; public bool Enabled; public string Icon; }
+    class ExtInfo { public string Id, Name, Version, Desc, Folder, Profile; public bool Enabled; }
 
     class ExtensionsPanel : LivePanel
     {

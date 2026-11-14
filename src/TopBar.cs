@@ -20,7 +20,7 @@ namespace StickyPro
             public Rectangle Bounds;
             public bool Visible;
         }
-        class Toggle { public string Key, Tip; public Rectangle Bounds; public bool Visible = true; }
+        class Toggle { public string Key; public Rectangle Bounds; public bool Visible = true; }
 
         readonly Func<int> brandWidth;
         readonly List<Chip> chips = new List<Chip>();

@@ -60,7 +60,8 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Startup apps: registry, startup folders and Store apps; enable/disable the same way Task Manager does.
 - Drives & cleanup: live C:/D: free space with change since the previous day; cleanup list (temp, browser and app caches,
   crash dumps, Windows Update downloads, Recycle Bin, developer caches) with sizes and change since last check;
-  Deep scan lists files of 100 MB+ and the biggest folders with growth since the last deep scan. Tick, then Delete selected.
+  Deep scan lists files of 100 MB+ and the biggest folders with growth since the last deep scan. Tick, then Delete selected
+  (big files go to the Recycle Bin). Right-click any list for tick all, copy path, show in folder.
   Windows-owned items need "Run as admin".
 
 ## Floating cards (main window > Floating cards, Ctrl+Alt+C)

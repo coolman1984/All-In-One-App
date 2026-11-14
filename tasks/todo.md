@@ -4,9 +4,18 @@
 - [x] 2. Responsive pages/cards/dialogs at 700/1000/1600; BUILD OK; hidden-layout checks and original regressions pass.
 - [x] 3. Dashboard, System KPIs, floating dashboard; BUILD OK; model/history/hidden-sampling and 323 layout checks pass.
 - [x] 4a. Fixed region, child control, repeat capture; geometry/native-layout/mode tests and BUILD OK.
-- [ ] 4b. Scrolling capture, stitching, cancellation; verify/build/commit.
-- [ ] 4c. Color picker, palette, magnifier; verify/build/commit.
-- [ ] 4d. Ruler, crosshair, protractor, whiteboard; verify/build/commit.
-- [ ] 4e. Blank/open/print/copy-file/reveal editor actions; verify/build/commit.
-- [ ] 5. PicPick sidebar, task sections, shared styling; visual QA/build/commit.
-- [ ] Final constraint audit, regressions, README, clean tracked tree, commit log.
+- [x] 4b. Scrolling capture, stitching, cancellation (cb28700).
+- [x] 4c. Color picker, palette, magnifier (939a9dc).
+- [x] 4d. Ruler, crosshair, protractor, whiteboard (939a9dc).
+- [x] 4e. Blank/open/print/copy-file/reveal editor actions (939a9dc).
+- [x] 5. PicPick sidebar, task sections, shared styling (939a9dc).
+- [x] Final constraint audit, regressions, README, clean tracked tree, commit log.
+
+# Job 3 (tools/SPEC-3-finish-and-polish.md)
+- [x] Welcome on Home, Ctrl+K global search, folder backup/restore, grouped tray menu with accessories (939a9dc).
+
+# Master plan part 9 (tools/PLAN-allinone.md)
+- [x] Right-click menus on Drives & cleanup lists (Cleanup, Big files, Biggest folders).
+- [x] Big-file delete goes to the Recycle Bin (plan rule 8) instead of permanent delete.
+- [x] Zero compiler warnings (removed two dead fields).
+- [x] README updated; regressions OK.
