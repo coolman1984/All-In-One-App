@@ -75,7 +75,28 @@ namespace StickyPro
             base.OnHandleCreated(e);
             IntPtr hwnd = Native.SendMessage(Handle, 0x101F /* LVM_GETHEADER */, IntPtr.Zero, IntPtr.Zero);
             if (hwnd != IntPtr.Zero) header.AssignHandle(hwnd);
+            try { BeginInvoke(new Action(FillLastColumn)); } catch { }
         }
+
+        // The last column stretches to fill the free width (never narrower than its designed width).
+        bool filling; ColumnHeader minFor; int minWidth;
+        void FillLastColumn()
+        {
+            if (filling || Columns.Count == 0 || !IsHandleCreated || View != View.Details) return;
+            filling = true;
+            try
+            {
+                var last = Columns[Columns.Count - 1];
+                if (!ReferenceEquals(last, minFor)) { minFor = last; minWidth = last.Width; }
+                int used = 0;
+                for (int i = 0; i < Columns.Count - 1; i++) used += Columns[i].Width;
+                int w = Math.Max(minWidth, ClientSize.Width - used - 1);
+                if (last.Width != w) last.Width = w;
+            }
+            finally { filling = false; }
+        }
+        protected override void OnResize(EventArgs e) { base.OnResize(e); FillLastColumn(); }
+        protected override void OnColumnWidthChanged(ColumnWidthChangedEventArgs e) { base.OnColumnWidthChanged(e); if (e.ColumnIndex < Columns.Count - 1) FillLastColumn(); }
         protected override void OnHandleDestroyed(EventArgs e) { header.ReleaseHandle(); base.OnHandleDestroyed(e); }
 
         // Native headers leave their unused trailing area white in dark mode.
