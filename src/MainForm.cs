@@ -252,6 +252,34 @@ namespace StickyPro
             FocusSearch();
         }
 
+        bool prewarmStarted;
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (!prewarmStarted) { prewarmStarted = true; Ui.Later(1500, PrewarmPages); }
+        }
+
+        // Creates the native handles of hidden pages one at a time after the window is shown, so the first visit of a
+        // page only has to paint. Each step is small; stops as soon as the window hides.
+        void PrewarmPages()
+        {
+            var pages = new List<Control> { notes, prompts, clips, system, cards, snipPage, activityPage, taggedPage };
+            int i = 0;
+            var t = new Timer { Interval = 250 };
+            t.Tick += delegate
+            {
+                if (IsDisposed || !Visible || i >= pages.Count) { t.Stop(); t.Dispose(); return; }
+                try { CreateHandles(pages[i++]); } catch (Exception ex) { App.Log("Prewarm: " + ex.Message); }
+            };
+            t.Start();
+        }
+
+        static void CreateHandles(Control c)
+        {
+            var unused = c.Handle;            // forces the handle even while hidden
+            foreach (Control child in c.Controls) CreateHandles(child);
+        }
+
         public void FocusSearch()
         {
             if (page == "notes") notes.FocusSearch();
