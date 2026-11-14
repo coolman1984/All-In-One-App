@@ -99,7 +99,7 @@ namespace StickyPro
             var nav = new Panel();
             nav.Dock = DockStyle.Left;
             nav.Width = Ui.S(230);
-            nav.BackColor = Ui.Nav;
+            nav.BackColor = Ui.Sidebar; nav.ForeColor = Color.White;
             nav.Padding = new Padding(0, Ui.S(6), 0, Ui.S(6));
             var navigation = new Panel { Dock = DockStyle.Fill, AutoScroll = true, AutoScrollMinSize = Ui.S(0, 336) };
             Ui.DarkScroll(navigation);
@@ -142,7 +142,7 @@ namespace StickyPro
             navigation.Controls.Add(navClips);
             navigation.Controls.Add(navPrompts);
             navigation.Controls.Add(navNotes);
-            navHome = new NavItem("", "Home / Dashboard");
+            navHome = new NavItem("", "Home");
             navHome.Click += delegate { ShowPage("dashboard"); };
             navigation.Controls.Add(navHome);
             navigation.AutoScrollMinSize = Ui.S(0, 378);
@@ -151,7 +151,7 @@ namespace StickyPro
             title.Dock = DockStyle.Top;
             title.Height = Ui.S(52);
             title.Text = "        " + App.Name;
-            title.Font = Ui.Big;
+            title.Font = Ui.Big; title.ForeColor = Color.White; title.BackColor = Ui.SidebarSel;
             title.TextAlign = ContentAlignment.MiddleLeft;
             title.Image = Ui.Logo(Ui.S(26));
             title.Disposed += delegate { if (title.Image != null) title.Image.Dispose(); };
@@ -245,6 +245,7 @@ namespace StickyPro
             else if (page == "cards") cards.FocusSearch();
         }
 
+        public void StartNewPrompt() { ShowPage("prompts"); prompts.NewPrompt(); }
         public void UpdatePaused() { clips.UpdatePaused(); }
         public void CommitEdits() { prompts.Commit(); }
 
@@ -269,6 +270,7 @@ namespace StickyPro
                 else if (e.KeyCode == Keys.D7) { ShowPage("activity"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D8) { ShowPage("tagged"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.F) { FocusSearch(); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.K) { GlobalSearch.Open(this); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.N && !e.Shift)
                 {
                     e.SuppressKeyPress = true;
@@ -313,6 +315,7 @@ namespace StickyPro
             l.Text = text;
             l.UseMnemonic = false;
             l.Font = Ui.Big;
+            l.ForeColor = Ui.Header; // PicPick-style blue page headers
             l.AutoSize = true;
             l.Margin = new Padding(0, 0, Ui.S(14), 0);
             return l;

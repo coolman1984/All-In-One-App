@@ -44,6 +44,11 @@ namespace StickyPro
         public static Color Card { get { return Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
         public static Color Field { get { return Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
         public static Color Nav { get { return Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
+        // PicPick-style solid blue sidebar with white text.
+        public static Color Sidebar { get { return Dark ? Color.FromArgb(22, 58, 102) : Color.FromArgb(26, 110, 194); } }
+        public static Color SidebarSel { get { return Dark ? Color.FromArgb(12, 36, 68) : Color.FromArgb(14, 78, 148); } }
+        public static Color SidebarHover { get { return Dark ? Color.FromArgb(33, 74, 124) : Color.FromArgb(46, 128, 210); } }
+        public static Color Header { get { return Dark ? Color.FromArgb(110, 180, 255) : Color.FromArgb(26, 110, 194); } }
         public static Color Line { get { return Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
         public static Color Text { get { return Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
         public static Color Muted { get { return Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
@@ -932,7 +937,7 @@ namespace StickyPro
             TabStop = true;
             AccessibleRole = AccessibleRole.PageTab;
             Glyph = glyph; Text = text;
-            Height = Ui.S(42);
+            Height = Ui.S(46);
             Dock = DockStyle.Top;
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -947,19 +952,14 @@ namespace StickyPro
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent != null ? Parent.BackColor : Ui.Nav);
-            var r = new Rectangle(Ui.S(8), Ui.S(3), Width - Ui.S(16), Height - Ui.S(6));
-            if (selected || hover || Focused)
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var path = Ui.Round(r, Ui.S(6)))
-                using (var b = new SolidBrush(selected ? Ui.SelBg : Ui.HoverBg))
-                    g.FillPath(b, path);
-                if (selected) using (var b = new SolidBrush(Ui.Accent)) g.FillRectangle(b, r.X, r.Y + Ui.S(10), Ui.S(3), r.Height - Ui.S(20));
-            }
-            TextRenderer.DrawText(g, Glyph, Ui.Icon(12f), new Rectangle(r.X + Ui.S(8), r.Y, Ui.S(28), r.Height), Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            // PicPick look: full-width darker band for the selected page on a solid blue sidebar.
+            g.Clear(selected ? Ui.SidebarSel : hover ? Ui.SidebarHover : Ui.Sidebar);
+            var r = new Rectangle(Ui.S(8), 0, Width - Ui.S(16), Height);
+            if (selected) using (var b = new SolidBrush(Color.White)) g.FillRectangle(b, 0, Ui.S(8), Ui.S(4), Height - Ui.S(16));
+            if (Focused && !selected) using (var p = new Pen(Color.FromArgb(180, 255, 255, 255)) { DashStyle = DashStyle.Dot }) g.DrawRectangle(p, 2, 2, Width - 5, Height - 5);
+            TextRenderer.DrawText(g, Glyph, Ui.Icon(13f), new Rectangle(r.X + Ui.S(6), r.Y, Ui.S(30), r.Height), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if (Width < Ui.S(100)) return;
-            TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(r.X + Ui.S(44), r.Y, r.Width - Ui.S(44), r.Height), Ui.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(r.X + Ui.S(46), r.Y, r.Width - Ui.S(46), r.Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
     }
 }

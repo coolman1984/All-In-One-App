@@ -124,6 +124,7 @@ namespace StickyPro
                 case "cards": ToggleCards(); break;
                 case "snip": StartSnip("rect", 0, false); break;
                 case "repeat": StartSnip("repeat", 0, false); break;
+                case "picker": case "magnifier": case "whiteboard": Accessories.Open(Hotkeys.Actions[id - 1][0]); break;
                 case "ocr": StartSnip("rect", 0, true); break;
                 case "record": StartRecord("rect"); break;
                 case "tagfile": TagExplorerSelection(); break;
@@ -365,11 +366,28 @@ namespace StickyPro
             menu.Items.Add("Open " + Name, null, delegate { ShowMain(null); }).Font = Ui.Bold;
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("New note", null, delegate { NewNote(null); });
+            menu.Items.Add("New snip", null, delegate { StartSnip("rect", 0, false); });
+            var capture = new ToolStripMenuItem("Screen capture");
+            foreach (var m in CaptureCommands.Modes) { string mode = m[0]; capture.DropDownItems.Add(m[1], null, delegate { StartSnip(mode, 0, false); }); }
+            capture.DropDownItems.Add("Scrolling Window", null, delegate { StartSnip("scroll", 0, false); });
+            capture.DropDownItems.Add("Repeat Last Capture", null, delegate { StartSnip("repeat", 0, false); });
+            capture.DropDownItems.Add(new ToolStripSeparator());
+            capture.DropDownItems.Add("Text from screen (OCR)", null, delegate { StartSnip("rect", 0, true); });
+            capture.DropDownItems.Add("Record screen", null, delegate { StartRecord("rect"); });
+            menu.Items.Add(capture);
+            menu.Items.Add(Accessories.MenuItem());
+            menu.Items.Add(new ToolStripSeparator());
+            var open = new ToolStripMenuItem("Open page");
+            open.DropDownItems.Add("Home", null, delegate { ShowMain("dashboard"); });
+            open.DropDownItems.Add("Sticky notes", null, delegate { ShowMain("notes"); });
+            open.DropDownItems.Add("Prompts & snippets", null, delegate { ShowMain("prompts"); });
+            open.DropDownItems.Add("Clipboard history", null, delegate { ShowMain("clips"); });
+            open.DropDownItems.Add("System monitor", null, delegate { ShowMain("system"); });
+            open.DropDownItems.Add("Snip & record", null, delegate { ShowMain("snip"); });
+            open.DropDownItems.Add("File activity", null, delegate { ShowMain("activity"); });
+            open.DropDownItems.Add("Tagged files", null, delegate { ShowMain("tagged"); });
+            menu.Items.Add(open);
             menu.Items.Add("Show / hide notes", null, delegate { ToggleNotes(); });
-            menu.Items.Add("Notes list", null, delegate { ShowMain("notes"); });
-            menu.Items.Add("Prompts", null, delegate { ShowMain("prompts"); });
-            menu.Items.Add("Clipboard history", null, delegate { ShowMain("clips"); });
-            menu.Items.Add("System monitor", null, delegate { ShowMain("system"); });
             menu.Items.Add("Show / hide floating cards", null, delegate { ToggleCards(); });
             menu.Items.Add(new ToolStripSeparator());
             miQueue = new ToolStripMenuItem("Paste queue: collect what I copy");
@@ -765,6 +783,23 @@ namespace StickyPro
         }
 
         // ---------- Windows ----------
+
+        // Starts a fresh copy (it waits for this one to exit) and closes this one. Used by data restore.
+        public void RestartNow()
+        {
+            Ui.Later(300, () =>
+            {
+                try { FlushAll(); Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--elevated") { UseShellExecute = false }); }
+                catch (Exception ex) { Log("Restart failed: " + ex.Message); Balloon("Restart failed", "Close and start the app again to finish the restore."); return; }
+                Exit();
+            });
+        }
+
+        public void NewPrompt()
+        {
+            ShowMain("prompts");
+            if (main != null && !main.IsDisposed) main.StartNewPrompt();
+        }
 
         public void ShowMain(string page)
         {

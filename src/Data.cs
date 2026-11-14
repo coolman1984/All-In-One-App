@@ -130,6 +130,9 @@ namespace StickyPro
         public int RecordFps = 30;
         public bool ActivityOn = true;
         public bool ActivityAutoBackupFav;
+        public List<string> ColorHistory = new List<string>();
+        public List<string> Swatches = new List<string>();
+        public bool WelcomeHidden;
     }
 
     static class Store
@@ -177,6 +180,7 @@ namespace StickyPro
             ImgDir = Path.Combine(Dir, "images");
             Directory.CreateDirectory(Dir);
             Directory.CreateDirectory(ImgDir);
+            Backup.ApplyPending(Dir);
             Notes = Read<List<Note>>("notes.json") ?? new List<Note>();
             Prompts = Read<List<Prompt>>("prompts.json") ?? new List<Prompt>();
             Clips = Read<List<Clip>>("clips.json") ?? new List<Clip>();
@@ -208,6 +212,8 @@ namespace StickyPro
             foreach (var p in Prompts) { NormalizePrompt(p); }
             foreach (var c in Clips) { if (c.Id == null) c.Id = NewId(); if (c.Text == null) c.Text = ""; if (c.Source == null) c.Source = ""; if (c.Folder == null) c.Folder = ""; if (c.Label == null) c.Label = ""; }
             if (Settings.Hotkeys == null) Settings.Hotkeys = new Dictionary<string, string>();
+            if (Settings.ColorHistory == null) Settings.ColorHistory = new List<string>();
+            if (Settings.Swatches == null) Settings.Swatches = new List<string>();
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
             if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
 

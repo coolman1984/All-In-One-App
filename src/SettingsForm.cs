@@ -77,6 +77,12 @@ namespace StickyPro
             activity = new CheckBox { Text = "Log the files I open and close", AutoSize = true, Checked = Store.Settings.ActivityOn };
             Row(t, "File activity", activity);
 
+            Section(t, "Your data");
+            var dataBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+            dataBar.Controls.Add(Ui.Btn("Back up all data...", delegate { Backup.Export(this); }));
+            dataBar.Controls.Add(Ui.Btn("Restore a backup...", delegate { if (Backup.Import(this)) DialogResult = DialogResult.Cancel; }));
+            Row(t, "Notes, prompts, clips, cards, settings", dataBar);
+
             Section(t, "Shortcuts  (click a box, press the keys; Backspace = off)");
             foreach (var a in Hotkeys.Actions)
             {
@@ -160,6 +166,77 @@ namespace StickyPro
                 if (s.ActivityOn) ActivityMonitor.Start(); else ActivityMonitor.Stop();
             }
             DialogResult = DialogResult.OK;
+        }
+    }
+
+    // Full data backup to a plain folder (JSON + images) and restore on the next start.
+    static class Backup
+    {
+        public static void Export(IWin32Window owner)
+        {
+            using (var d = new FolderBrowserDialog { Description = "Choose where to put the backup folder", ShowNewFolderButton = true })
+            {
+                if (d.ShowDialog(owner) != DialogResult.OK) return;
+                try
+                {
+                    Store.SaveNow();
+                    string target = System.IO.Path.Combine(d.SelectedPath, "StickyNotesPro backup " + DateTime.Now.ToString("yyyy-MM-dd HHmm"));
+                    CopyData(Store.Dir, target);
+                    MessageBox.Show(owner, "Backup saved to:\n" + target, App.Name);
+                    try { System.Diagnostics.Process.Start("explorer.exe", "\"" + target + "\""); } catch { }
+                }
+                catch (Exception ex) { MessageBox.Show(owner, "Backup failed: " + ex.Message, App.Name); }
+            }
+        }
+
+        public static bool Import(IWin32Window owner)
+        {
+            using (var d = new FolderBrowserDialog { Description = "Choose a StickyNotesPro backup folder (it contains notes.json)" })
+            {
+                if (d.ShowDialog(owner) != DialogResult.OK) return false;
+                if (!System.IO.File.Exists(System.IO.Path.Combine(d.SelectedPath, "notes.json")) && !System.IO.File.Exists(System.IO.Path.Combine(d.SelectedPath, "settings.json")))
+                { MessageBox.Show(owner, "That folder is not a backup (no notes.json or settings.json).", App.Name); return false; }
+                if (MessageBox.Show(owner, "Replace all current data with this backup?\n\nYour current data is kept in data\\before-restore first. The app restarts.", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return false;
+                try
+                {
+                    string pending = System.IO.Path.Combine(Store.Dir, "restore-pending");
+                    if (System.IO.Directory.Exists(pending)) System.IO.Directory.Delete(pending, true);
+                    CopyData(d.SelectedPath, pending);
+                    App.I.RestartNow();
+                    return true;
+                }
+                catch (Exception ex) { MessageBox.Show(owner, "Restore failed: " + ex.Message, App.Name); return false; }
+            }
+        }
+
+        // Copies *.json and the images folder only.
+        public static void CopyData(string from, string to)
+        {
+            System.IO.Directory.CreateDirectory(to);
+            foreach (var f in System.IO.Directory.GetFiles(from, "*.json")) System.IO.File.Copy(f, System.IO.Path.Combine(to, System.IO.Path.GetFileName(f)), true);
+            string img = System.IO.Path.Combine(from, "images");
+            if (System.IO.Directory.Exists(img))
+            {
+                string imgTo = System.IO.Path.Combine(to, "images");
+                System.IO.Directory.CreateDirectory(imgTo);
+                foreach (var f in System.IO.Directory.GetFiles(img)) System.IO.File.Copy(f, System.IO.Path.Combine(imgTo, System.IO.Path.GetFileName(f)), true);
+            }
+        }
+
+        // Called by Store.Load before reading: applies a restore chosen in Settings.
+        public static void ApplyPending(string dir)
+        {
+            string pending = System.IO.Path.Combine(dir, "restore-pending");
+            if (!System.IO.Directory.Exists(pending)) return;
+            try
+            {
+                CopyData(dir, System.IO.Path.Combine(dir, "before-restore " + DateTime.Now.ToString("yyyy-MM-dd HHmmss")));
+                foreach (var f in System.IO.Directory.GetFiles(dir, "*.json")) System.IO.File.Delete(f);
+                foreach (var f in System.IO.Directory.GetFiles(dir, "*.json.bak")) System.IO.File.Delete(f);
+                CopyData(pending, dir);
+                System.IO.Directory.Delete(pending, true);
+            }
+            catch (Exception ex) { App.Log("Restore failed: " + ex.Message); }
         }
     }
 

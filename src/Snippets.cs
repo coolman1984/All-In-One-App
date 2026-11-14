@@ -145,6 +145,9 @@ namespace StickyPro
             new[] { "record",    "Start / stop screen recording",    "Ctrl+Alt+R", "Record screen" },
             new[] { "tagfile",   "Tag files selected in Explorer",   "Ctrl+Alt+F", "Tag Explorer files" },
             new[] { "main",      "Open main window",                 "Ctrl+Alt+S", "This window" },
+            new[] { "picker",    "Color Picker",                     "Ctrl+Alt+K", "Color picker" },
+            new[] { "magnifier", "Magnifier",                        "Ctrl+Alt+M", "Magnifier" },
+            new[] { "whiteboard","WhiteBoard (draw on the screen)",  "Ctrl+Alt+B", "WhiteBoard" },
         };
 
         public static string Get(string action)

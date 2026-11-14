@@ -493,6 +493,11 @@ $stream.Dispose()
                 string id = m[0];
                 snip.DropDownItems.Add(m[1], null, delegate { Close(); App.I.StartSnip(id, 0, false); });
             }
+            snip.DropDownItems.Add("Scrolling Window", null, delegate { Close(); App.I.StartSnip("scroll", 0, false); });
+            snip.DropDownItems.Add("Repeat Last Capture", null, delegate { Close(); App.I.StartSnip("repeat", 0, false); });
+            snip.DropDownItems.Add(new ToolStripSeparator());
+            snip.DropDownItems.Add("New blank image...", null, delegate { NewBlank(); });
+            snip.DropDownItems.Add("Open image file...", null, delegate { OpenFile(this); });
             Ui.ThemeMenu(snip.DropDown);
             tools.Items.Add(snip);
             tools.Items.Add(new ToolStripSeparator());
@@ -528,7 +533,9 @@ $stream.Dispose()
             tools.Items.Add(new ToolStripButton("Save", null, delegate { Save(false); }) { ToolTipText = "Ctrl+S" });
             tools.Items.Add(new ToolStripButton("Save as", null, delegate { Save(true); }) { ToolTipText = "Ctrl+Shift+S" });
             tools.Items.Add(new ToolStripButton("Pin", null, delegate { new PinnedImage(Render()).Show(); }) { ToolTipText = "Keep this picture on top of the screen (Ctrl+P)" });
-            tools.Items.Add(new ToolStripButton("Folder", null, delegate { OpenFolder(); }));
+            tools.Items.Add(new ToolStripButton("Copy file", null, delegate { CopyFile(); }) { ToolTipText = "Copy the picture file, to paste into mail, chat or a folder" });
+            tools.Items.Add(new ToolStripButton("Print", null, delegate { Print(); }) { ToolTipText = "Print the picture fitted to the page" });
+            tools.Items.Add(new ToolStripButton("Show in folder", null, delegate { OpenFolder(); }));
             foreach (ToolStripItem i in tools.Items) i.ForeColor = Ui.Text;
             Controls.Add(tools);
             LayoutKit.FlowTools(tools, this);
@@ -795,6 +802,86 @@ $stream.Dispose()
         {
             if ((string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
             if (App.I.CopyText(Path.GetFullPath(filePath))) info.Text = "File path copied.";
+        }
+
+        void CopyFile()
+        {
+            if ((string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
+            try
+            {
+                App.I.Suppress();
+                Clipboard.SetFileDropList(new System.Collections.Specialized.StringCollection { Path.GetFullPath(filePath) });
+                info.Text = "File copied. Paste it into a mail, chat or folder.";
+            }
+            catch (Exception ex) { info.Text = "Copy failed: " + ex.Message; }
+        }
+
+        void Print()
+        {
+            Bitmap img = null;
+            try
+            {
+                img = Render();
+                using (var doc = new System.Drawing.Printing.PrintDocument())
+                using (var dlg = new PrintDialog { Document = doc, UseEXDialog = true })
+                {
+                    doc.DocumentName = Text;
+                    if (img.Width > img.Height) doc.DefaultPageSettings.Landscape = true;
+                    var pic = img;
+                    doc.PrintPage += (s, e) =>
+                    {
+                        var m = e.MarginBounds;
+                        float k = Math.Min(1f, Math.Min(m.Width / (float)pic.Width, m.Height / (float)pic.Height));
+                        float w = pic.Width * k, h = pic.Height * k;
+                        e.Graphics.DrawImage(pic, m.Left + (m.Width - w) / 2, m.Top + (m.Height - h) / 2, w, h);
+                    };
+                    if (dlg.ShowDialog(this) == DialogResult.OK) { doc.Print(); info.Text = "Sent to the printer."; }
+                }
+            }
+            catch (Exception ex) { MessageBox.Show(this, "Could not print: " + ex.Message, App.Name); }
+            finally { if (img != null) img.Dispose(); }
+        }
+
+        public static void NewBlank()
+        {
+            using (var f = Ui.Dialog("New blank image", 360, 230))
+            {
+                var fields = LayoutKit.Fields();
+                var w = new NumericUpDown { Minimum = 16, Maximum = 8000, Value = 800 };
+                var h = new NumericUpDown { Minimum = 16, Maximum = 8000, Value = 600 };
+                LayoutKit.Add(fields, new WrapLabel { Text = "Width in pixels" }, false); LayoutKit.Add(fields, w, false);
+                LayoutKit.Add(fields, new WrapLabel { Text = "Height in pixels" }, false); LayoutKit.Add(fields, h, false);
+                var ok = Ui.Btn("Create", null, true); ok.DialogResult = DialogResult.OK;
+                var cancel = Ui.Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
+                f.Controls.Add(fields); f.Controls.Add(LayoutKit.Actions(DockStyle.Bottom, ok, cancel)); f.AcceptButton = ok; f.CancelButton = cancel; Ui.Theme(f);
+                if (f.ShowDialog() != DialogResult.OK) return;
+                var img = new Bitmap((int)w.Value, (int)h.Value, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(img)) g.Clear(Color.White);
+                var ed = new SnipEditor(img, null); ed.Show(); ed.Activate();
+            }
+        }
+
+        public static void OpenFile(IWin32Window owner)
+        {
+            using (var d = new OpenFileDialog())
+            {
+                d.Filter = "Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*";
+                d.InitialDirectory = Shot.SnipFolder;
+                if (d.ShowDialog(owner) != DialogResult.OK) return;
+                try
+                {
+                    Bitmap img;
+                    // Copy into memory so the file is not kept locked while editing.
+                    using (var fs = new FileStream(d.FileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (var src = Image.FromStream(fs))
+                    {
+                        img = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
+                        using (var g = Graphics.FromImage(img)) { g.Clear(Color.White); g.DrawImage(src, 0, 0, src.Width, src.Height); }
+                    }
+                    var ed = new SnipEditor(img, d.FileName); ed.Show(); ed.Activate();
+                }
+                catch (Exception ex) { MessageBox.Show("Could not open the picture: " + ex.Message, App.Name); }
+            }
         }
 
         void OpenFolder()
