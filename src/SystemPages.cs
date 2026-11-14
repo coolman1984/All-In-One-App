@@ -33,7 +33,7 @@ namespace StickyPro
         }
         protected void UI(Action a)
         {
-            try { if (IsHandleCreated && !IsDisposed) BeginInvoke(a); } catch { }
+            try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => { if (!IsDisposed && !Disposing) a(); })); } catch { }
         }
     }
 

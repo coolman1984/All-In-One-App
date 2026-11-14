@@ -18,6 +18,8 @@ namespace StickyPro
     {
         static Thread worker;
         static volatile bool running;
+        static bool startPending;
+        static int generation;
         static FileSystemWatcher recentWatcher;
         static readonly object gate = new object();
         static readonly Queue<string> recentQueue = new Queue<string>();
@@ -30,6 +32,8 @@ namespace StickyPro
         public static void Start()
         {
             if (running || !Store.Settings.ActivityOn) return;
+            if (worker != null) { startPending = true; return; }
+            startPending = false;
             running = true;
             try
             {
@@ -48,12 +52,16 @@ namespace StickyPro
 
         public static void Stop()
         {
+            startPending = false;
             running = false;
+            generation++;
             if (recentWatcher != null) { recentWatcher.EnableRaisingEvents = false; recentWatcher.Dispose(); recentWatcher = null; }
         }
 
         static void Loop()
         {
+            try
+            {
             bool first = true;
             while (running)
             {
@@ -67,6 +75,17 @@ namespace StickyPro
                 first = false;
                 for (int i = 0; i < 30 && running; i++) Thread.Sleep(100); // every 3 s
             }
+            }
+            finally
+            {
+                try { App.I.Sync.BeginInvoke(new Action(() =>
+                {
+                    worker = null;
+                    officeOpen.Clear(); officeProc.Clear(); otherOpen.Clear(); otherOpenedAt.Clear();
+                    lock (gate) recentQueue.Clear();
+                    if (startPending && Store.Settings.ActivityOn) Start();
+                })); } catch { }
+            }
         }
 
         // ---------- Office through COM ----------
@@ -75,7 +94,7 @@ namespace StickyPro
         {
             var now = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var p in Process.GetProcesses()) { names.Add(p.ProcessName); p.Dispose(); }
+            foreach (var p in Process.GetProcesses()) { using (p) { try { names.Add(p.ProcessName); } catch { } } }
             if (names.Contains("EXCEL")) ReadOffice("Excel.Application", "Workbooks", "Excel", now);
             if (names.Contains("WINWORD")) ReadOffice("Word.Application", "Documents", "Word", now);
             if (names.Contains("POWERPNT")) ReadOffice("PowerPoint.Application", "Presentations", "PowerPoint", now);
@@ -89,6 +108,7 @@ namespace StickyPro
                     Add(proc ?? "Office", f, "Closed");
                 }
             officeOpen = now;
+            foreach (var path in officeProc.Keys.Where(p => !now.Contains(p)).ToList()) officeProc.Remove(path);
         }
 
         static void ReadOffice(string progId, string collection, string label, HashSet<string> into)
@@ -116,14 +136,12 @@ namespace StickyPro
                     finally { if (item != null) Marshal.ReleaseComObject(item); }
                 }
             }
-            catch (COMException ex)
+            catch (Exception ex)
             {
-                // Busy (call rejected) -> keep what we knew, so nothing is reported as closed by mistake.
-                if ((uint)ex.ErrorCode == 0x8001010A || (uint)ex.ErrorCode == 0x80010001)
-                    foreach (var kv in officeProc.Where(kv => kv.Value == label && officeOpen.Contains(kv.Key))) into.Add(kv.Key);
-                else LogOnce(label + " COM: " + ex.Message);
+                // Reflection wraps COM errors. A failed read is not evidence of closure.
+                foreach (var kv in officeProc.Where(kv => kv.Value == label && officeOpen.Contains(kv.Key))) into.Add(kv.Key);
+                LogOnce(label + " read: " + (ex.InnerException ?? ex).Message);
             }
-            catch (Exception ex) { LogOnce(label + " read: " + (ex.InnerException ?? ex).Message); }
             finally
             {
                 if (coll != null) Marshal.ReleaseComObject(coll);
@@ -132,7 +150,7 @@ namespace StickyPro
         }
 
         static readonly HashSet<string> logged = new HashSet<string>();
-        static void LogOnce(string msg) { if (logged.Add(msg)) App.Log("Activity " + msg); }
+        static void LogOnce(string msg) { if (logged.Count < 128 && logged.Add(msg)) App.Log("Activity " + msg); }
 
         // ---------- Other apps through Recent items ----------
 
@@ -156,6 +174,7 @@ namespace StickyPro
                 otherOpen[target] = false;
                 Add(kind, target, "Opened");
             }
+            foreach (var path in otherOpenedAt.Keys.Where(p => !otherOpen.ContainsKey(p) && (DateTime.Now - otherOpenedAt[p]).TotalMinutes > 5).ToList()) otherOpenedAt.Remove(path);
         }
 
         static void PollTitles()
@@ -197,18 +216,18 @@ namespace StickyPro
         {
             for (int i = 0; i < 3; i++)
             {
+                object shell = null, sc = null;
                 try
                 {
                     if (!File.Exists(lnk)) return null;
                     var t = Type.GetTypeFromProgID("WScript.Shell");
-                    object shell = Activator.CreateInstance(t);
-                    object sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
+                    shell = Activator.CreateInstance(t);
+                    sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
                     string target = (string)sc.GetType().InvokeMember("TargetPath", System.Reflection.BindingFlags.GetProperty, null, sc, null);
-                    Marshal.FinalReleaseComObject(sc);
-                    Marshal.FinalReleaseComObject(shell);
                     return target;
                 }
                 catch { Thread.Sleep(150); }
+                finally { if (sc != null) Marshal.ReleaseComObject(sc); if (shell != null) Marshal.ReleaseComObject(shell); }
             }
             return null;
         }
@@ -233,11 +252,14 @@ namespace StickyPro
 
         static void Add(string process, string path, string ev)
         {
+            if (!running) return;
+            int run = generation;
             long size = -1;
             if (ev == "Opened") { try { var fi = new FileInfo(path); if (fi.Exists) size = fi.Length; } catch { } }
             var rec = new ActivityRecord { Id = Store.NewId(), Process = process, Path = path, Event = ev, Time = Store.Now(), Size = size };
             App.I.Sync.BeginInvoke(new Action(() =>
             {
+                if (!running || run != generation) return;
                 rec.Fav = Store.Activity.Any(a => a.Fav && string.Equals(a.Path, path, StringComparison.OrdinalIgnoreCase));
                 Store.Activity.Insert(0, rec);
                 if (Store.Activity.Count > 20000)
@@ -257,13 +279,13 @@ namespace StickyPro
             string path = rec.Path;
             if (!File.Exists(path)) { if (done != null) done("File not found: " + path); return null; }
             string dir = Path.Combine(Store.Dir, "backups", DateTime.Now.ToString("yyyy-MM-dd"));
-            string dest = Path.Combine(dir, DateTime.Now.ToString("HHmmss") + "_" + Path.GetFileName(path));
+            string dest = Path.Combine(dir, DateTime.Now.ToString("HHmmssfff") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + "_" + Path.GetFileName(path));
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string err = null;
-                try { Directory.CreateDirectory(dir); File.Copy(path, dest, true); }
+                try { Directory.CreateDirectory(dir); File.Copy(path, dest, false); }
                 catch (Exception ex) { err = ex.Message; }
-                App.I.Sync.BeginInvoke(new Action(() =>
+                try { App.I.Sync.BeginInvoke(new Action(() =>
                 {
                     if (err == null)
                     {
@@ -272,7 +294,7 @@ namespace StickyPro
                         Store.RaiseActivity();
                     }
                     if (done != null) done(err == null ? "Backup saved: " + dest : "Backup failed: " + err);
-                }));
+                })); } catch { }
             });
             return dest;
         }
@@ -430,7 +452,7 @@ namespace StickyPro
             it.SubItems.Add(Path.GetFileName(a.Path), Ui.Text, Ui.Card, Ui.Bold);
             it.SubItems.Add(Path.GetDirectoryName(a.Path) ?? "");
             it.SubItems.Add(a.Event, a.Event == "Opened" ? Color.FromArgb(40, 160, 90) : Ui.Muted, Ui.Card, Ui.Bold);
-            it.SubItems.Add(new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss"));
+            it.SubItems.Add(a.Time > 0 && a.Time <= DateTime.MaxValue.Ticks ? new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss") : "");
             it.SubItems.Add(a.Size >= 0 ? Fmt.Bytes(a.Size) : "-");
             if (a.Backup != null) it.SubItems.Add("✓ " + Ui.Ago(a.BackupTime), Color.FromArgb(40, 160, 90), Ui.Card, Ui.Base);
             else it.SubItems.Add("⚠ SAVE!", Color.FromArgb(230, 150, 20), Ui.Card, Ui.Bold);

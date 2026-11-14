@@ -178,8 +178,7 @@ namespace StickyPro
         {
             Icons.ColorDepth = System.Windows.Forms.ColorDepth.Depth32Bit;
             Icons.ImageSize = new Size(Ui.S(16), Ui.S(16));
-            var blank = new Bitmap(Ui.S(16), Ui.S(16));
-            Icons.Images.Add(blank);
+            using (var blank = new Bitmap(Ui.S(16), Ui.S(16))) Icons.Images.Add(blank);
         }
 
         public static void Fill(List<ProcInfo> list)
@@ -217,6 +216,8 @@ namespace StickyPro
         public static string Describe(string path, string fallback)
         {
             if (string.IsNullOrEmpty(path)) return fallback;
+            lock (descByPath)
+            {
             string d;
             if (descByPath.TryGetValue(path, out d)) return d ?? fallback;
             try
@@ -225,8 +226,10 @@ namespace StickyPro
                 d = string.IsNullOrWhiteSpace(vi.FileDescription) ? null : vi.FileDescription.Trim();
             }
             catch { d = null; }
+            if (descByPath.Count >= 1024) descByPath.Clear();
             descByPath[path] = d;
             return d ?? fallback;
+            }
         }
 
         public static string Company(string path)
@@ -240,6 +243,7 @@ namespace StickyPro
             if (string.IsNullOrEmpty(path)) return 0;
             int i;
             if (iconIndex.TryGetValue(path, out i)) return i;
+            if (Icons.Images.Count >= 256 || iconIndex.Count >= 1024) return 0;
             i = 0;
             try
             {
@@ -247,7 +251,7 @@ namespace StickyPro
                     using (var ic = Icon.ExtractAssociatedIcon(path))
                     using (var bmp = ic.ToBitmap())
                     {
-                        Icons.Images.Add(new Bitmap(bmp, Icons.ImageSize));
+                        using (var scaled = new Bitmap(bmp, Icons.ImageSize)) Icons.Images.Add(scaled);
                         i = Icons.Images.Count - 1;
                     }
             }
@@ -441,17 +445,17 @@ namespace StickyPro
 
         static string ShortcutTarget(string lnk)
         {
+            object shell = null, sc = null;
             try
             {
                 var t = Type.GetTypeFromProgID("WScript.Shell");
-                object shell = Activator.CreateInstance(t);
-                object sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
+                shell = Activator.CreateInstance(t);
+                sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
                 string target = (string)sc.GetType().InvokeMember("TargetPath", System.Reflection.BindingFlags.GetProperty, null, sc, null);
-                Marshal.FinalReleaseComObject(sc);
-                Marshal.FinalReleaseComObject(shell);
                 return string.IsNullOrEmpty(target) ? null : target;
             }
             catch { return null; }
+            finally { if (sc != null) Marshal.ReleaseComObject(sc); if (shell != null) Marshal.ReleaseComObject(shell); }
         }
     }
 
