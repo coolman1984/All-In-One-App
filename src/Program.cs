@@ -34,6 +34,7 @@ namespace StickyPro
             }
 
             bool elevated = Array.Exists(args, a => a.ToLowerInvariant() == "--elevated");
+            bool perf = Array.Exists(args, a => a.ToLowerInvariant() == "--perf");
             var mutex = new Mutex(false, MutexName);
             bool created;
             try { created = mutex.WaitOne(elevated ? 15000 : 0); }
@@ -57,6 +58,7 @@ namespace StickyPro
             var exitEv = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
             var app = new App(startup);
             if (page != null) app.ShowMain(page);
+            if (perf) Ui.Later(2500, Perf.Run);
             ThreadPool.RegisterWaitForSingleObject(showEv, delegate
             {
                 try { app.Sync.BeginInvoke(new Action(() => app.ShowMain(null))); } catch { }
