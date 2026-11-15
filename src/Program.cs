@@ -71,6 +71,7 @@ namespace StickyPro
             if (page != null) app.ShowMain(page);
             try { AppApi.Start(); } catch (Exception ex) { App.Log("App API: " + ex.Message); }
             if (Store.Settings.OverlayOn) Ui.Later(1500, () => { try { Overlay.Set(true); } catch (Exception ex) { App.Log("Overlay: " + ex.Message); } });
+            else if (Store.Settings.OverlayTaskbarHidden) try { Taskbar.Restore(); } catch (Exception ex) { App.Log("Taskbar restore: " + ex.Message); }   // after a crash
             if (perf) Ui.Later(2500, Perf.Run);
             ThreadPool.RegisterWaitForSingleObject(showEv, delegate
             {

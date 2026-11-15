@@ -15,7 +15,7 @@ namespace StickyPro
         readonly ComboBox headFont, monoFont, corner;
         readonly NumericUpDown headScale, monoSize;
         readonly CheckBox shadows;
-        readonly CheckBox ovOn, ovDock, ovBar, ovMagnify, ovAutoHide, ovAnim;
+        readonly CheckBox ovOn, ovDock, ovBar, ovMagnify, ovAutoHide, ovAnim, ovTaskbar;
         readonly ComboBox ovCorner;
         readonly NumericUpDown ovSize;
         static readonly string[] ovCorners = { "off", "topleft", "topright", "bottomleft", "bottomright" };
@@ -156,9 +156,10 @@ namespace StickyPro
             ovBar = new CheckBox { Text = "Menu bar at the top", AutoSize = true, Checked = Store.Settings.OverlayMenuBar };
             ovMagnify = new CheckBox { Text = "Magnify icons", AutoSize = true, Checked = Store.Settings.OverlayMagnify };
             ovAutoHide = new CheckBox { Text = "Auto-hide the dock", AutoSize = true, Checked = Store.Settings.OverlayAutoHide };
-            ovParts.Controls.AddRange(new Control[] { ovDock, ovBar, ovMagnify, ovAutoHide });
+            ovTaskbar = new CheckBox { Text = "Hide the Windows taskbar", AutoSize = true, Checked = Store.Settings.OverlayHideTaskbar };
+            ovParts.Controls.AddRange(new Control[] { ovDock, ovBar, ovTaskbar, ovMagnify, ovAutoHide });
             Row(t, "Parts", ovParts);
-            ovSize = new NumericUpDown { Minimum = 32, Maximum = 96, Increment = 4, Value = Math.Max(32, Math.Min(96, Store.Settings.OverlayDockSize)) };
+            ovSize = new NumericUpDown { Minimum = 20, Maximum = 96, Increment = 4, Value = Math.Max(20, Math.Min(96, Store.Settings.OverlayDockSize)) };
             Row(t, "Dock icon size (px)", ovSize);
             ovCorner = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             ovCorner.Items.AddRange(new object[] { "Off", "Top left", "Top right", "Bottom left", "Bottom right" });
@@ -322,7 +323,7 @@ namespace StickyPro
             s.UserName = userName.Text.Trim();
             s.DockVisible = dockVisible.Checked;
             if (keepAwake.Checked != Awake.On) Awake.Set(keepAwake.Checked);
-            s.OverlayDock = ovDock.Checked; s.OverlayMenuBar = ovBar.Checked; s.OverlayMagnify = ovMagnify.Checked; s.OverlayAutoHide = ovAutoHide.Checked;
+            s.OverlayDock = ovDock.Checked; s.OverlayMenuBar = ovBar.Checked; s.OverlayHideTaskbar = ovTaskbar.Checked; s.OverlayMagnify = ovMagnify.Checked; s.OverlayAutoHide = ovAutoHide.Checked;
             s.OverlayDockSize = (int)ovSize.Value; s.Animations = ovAnim.Checked;
             s.OverlayHotCorner = ovCorner.SelectedIndex > 0;
             if (ovCorner.SelectedIndex > 0) s.OverlayCorner = ovCorners[ovCorner.SelectedIndex];

@@ -26,6 +26,9 @@ namespace StickyPro
         static OverlayMenuBar bar;
         static Timer corner;
         static OverviewForm overview;
+        static Timer guard;
+        static IntPtr hook;
+        static readonly N.WinEventProc hookProc = OnForeground;   // kept alive: the hook calls it from native code
         static long cornerSince;
         static bool cornerArmed = true;
 
@@ -51,6 +54,14 @@ namespace StickyPro
         {
             var s = Store.Settings;
             bool wantDock = On && s.OverlayDock, wantBar = On && s.OverlayMenuBar, wantCorner = On && s.OverlayHotCorner && s.OverlayCorner != "off";
+            // Full-screen mode: the Windows taskbar hides while the overlay's own bars are on.
+            bool hideTaskbar = On && s.OverlayHideTaskbar && (wantDock || wantBar);
+            if (hideTaskbar) Taskbar.Hide(); else Taskbar.Restore();
+            if (hideTaskbar && guard == null) { guard = new Timer { Interval = 500 }; guard.Tick += delegate { Taskbar.Enforce(); }; guard.Start(); }
+            else if (!hideTaskbar && guard != null) { guard.Stop(); guard.Dispose(); guard = null; }
+            // The menu bar and the dock react the moment another window becomes active.
+            if (On && hook == IntPtr.Zero) hook = N.SetWinEventHook(3, 3, IntPtr.Zero, hookProc, 0, 0, 0);   // EVENT_SYSTEM_FOREGROUND, out of context
+            else if (!On && hook != IntPtr.Zero) { N.UnhookWinEvent(hook); hook = IntPtr.Zero; }
             if (wantBar && (bar == null || bar.IsDisposed)) { bar = new OverlayMenuBar(); bar.Show(); }
             else if (!wantBar && bar != null) { bar.Close(); bar.Dispose(); bar = null; }
             else if (bar != null) bar.Invalidate();
@@ -59,6 +70,16 @@ namespace StickyPro
             else if (dock != null) dock.Reload();
             if (wantCorner && corner == null) { corner = new Timer { Interval = 90 }; corner.Tick += delegate { CheckCorner(); }; corner.Start(); }
             else if (!wantCorner && corner != null) { corner.Stop(); corner.Dispose(); corner = null; }
+        }
+
+        static void OnForeground(IntPtr h, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time)
+        {
+            try
+            {
+                if (bar != null && !bar.IsDisposed) bar.Sample();
+                if (dock != null && !dock.IsDisposed) dock.RefreshWindows(false);
+            }
+            catch (Exception ex) { App.Log("Overlay foreground: " + ex.Message); }
         }
 
         public static void ShowOverview()
@@ -311,22 +332,94 @@ namespace StickyPro
         }
     }
 
+    // ---------- Windows taskbar (hidden while the overlay is on) ----------
+    // Hidden with the taskbar's own auto-hide state so its strip is given back to windows; the user's own state is saved
+    // first and put back when the overlay goes off, when the app exits, or on the next start after a crash.
+    static class Taskbar
+    {
+        static IntPtr Main { get { return N.FindWindow("Shell_TrayWnd", null); } }
+
+        static List<IntPtr> Bars()
+        {
+            var l = new List<IntPtr>();
+            N.EnumWindows((h, p) =>
+            {
+                var c = new StringBuilder(64); N.GetClassName(h, c, 64);
+                string s = c.ToString();
+                if (s == "Shell_TrayWnd" || s == "Shell_SecondaryTrayWnd") l.Add(h);
+                return true;
+            }, IntPtr.Zero);
+            return l;
+        }
+
+        static N.APPBARDATA Abd(IntPtr h) { var a = new N.APPBARDATA(); a.cbSize = Marshal.SizeOf(typeof(N.APPBARDATA)); a.hWnd = h; return a; }
+
+        public static void Hide()
+        {
+            IntPtr tray = Main;
+            if (tray == IntPtr.Zero) return;
+            var s = Store.Settings;
+            if (!s.OverlayTaskbarHidden)
+            {
+                var a = Abd(tray);
+                s.OverlayTaskbarState = (int)N.SHAppBarMessage(4 /*ABM_GETSTATE*/, ref a);
+                s.OverlayTaskbarHidden = true;
+                Store.MarkSettings();
+                try { Store.SaveNow(); } catch { }   // so a crash can still put the taskbar back on the next start
+            }
+            var b = Abd(tray); b.lParam = (IntPtr)1;   // ABS_AUTOHIDE
+            N.SHAppBarMessage(10 /*ABM_SETSTATE*/, ref b);
+            foreach (var h in Bars()) N.ShowWindow(h, 0);
+        }
+
+        // Explorer restarts or the auto-hide reveal can show it again.
+        public static void Enforce()
+        {
+            if (!Store.Settings.OverlayTaskbarHidden) return;
+            foreach (var h in Bars()) if (N.IsWindowVisible(h)) N.ShowWindow(h, 0);
+        }
+
+        public static void Restore()
+        {
+            var s = Store.Settings;
+            if (!s.OverlayTaskbarHidden) return;
+            IntPtr tray = Main;
+            if (tray != IntPtr.Zero) { var b = Abd(tray); b.lParam = (IntPtr)s.OverlayTaskbarState; N.SHAppBarMessage(10, ref b); }
+            foreach (var h in Bars()) N.ShowWindow(h, 5);
+            s.OverlayTaskbarHidden = false;
+            Store.MarkSettings();
+        }
+    }
+
     // ---------- Dock ----------
+    // Drawn straight into one DIB section that the layered window shows (no per-frame bitmap copies); easing is time based
+    // so motion stays smooth whatever the timer does. While it is not auto-hidden it reserves its strip at the bottom of
+    // the screen like the taskbar does, so maximized windows end above it instead of under it.
     class OverlayDock : Form
     {
-        class Item { public string Path = "", Args = "", Name = "", Match = "", Special; public bool Pinned; public List<WinInfo> Windows = new List<WinInfo>(); public RectangleF Rect; public float Scale = 1f; public long BounceUntil; }
+        class Item { public string Path = "", Args = "", Name = "", Match = "", Special; public bool Pinned; public List<WinInfo> Windows = new List<WinInfo>(); public RectangleF Rect; public float Scale = 1f; public long BounceStart; }
 
         readonly List<Item> items = new List<Item>();
-        readonly Timer anim = new Timer { Interval = 15 }, refresh = new Timer { Interval = 1000 }, edge = new Timer { Interval = 120 };
+        readonly Timer anim = new Timer { Interval = 10 }, refresh = new Timer { Interval = 1000 }, edge = new Timer { Interval = 80 };
+        readonly Stopwatch clock = Stopwatch.StartNew();
         float mouseX = -1, hoverAmount, hideOffset;
-        bool mouseIn, hidden;
+        bool mouseIn, hidden, fastTimer, appbar;
         int hot = -1;
-        long leftAt;
-        Bitmap frame;
+        long leftAt, lastFrame;
+        uint callback;
         string lastSignature = "";
+        RectangleF panelRect;
+        IntPtr memDC, dib, oldBmp, bits;
+        Bitmap surface;
+        const int BounceMs = 1100;
 
-        int Base { get { return Ui.S(Math.Max(32, Math.Min(128, Store.Settings.OverlayDockSize))); } }
-        float MaxScale { get { return Store.Settings.OverlayMagnify && Overlay.Animate ? 1.65f : 1f; } }
+        int Base { get { return Ui.S(Math.Max(20, Math.Min(96, Store.Settings.OverlayDockSize))); } }
+        float MaxScale { get { return Store.Settings.OverlayMagnify && Overlay.Animate ? 1.5f : 1f; } }
+        int Pad { get { return Math.Max(Ui.S(4), Base / 5); } }
+        int DotSpace { get { return Ui.S(5); } }
+        int PanelH { get { return Base + Pad * 2 + DotSpace; } }
+        int Reserve { get { return PanelH + Ui.S(6); } }
+        int Headroom { get { return (int)Math.Ceiling(Base * (MaxScale - 1)) + Base / 2 + Ui.S(34); } }
 
         public OverlayDock()
         {
@@ -354,17 +447,24 @@ namespace StickyPro
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            callback = N.RegisterWindowMessage("AllInOneOverlayDock");
             if (Store.Settings.OverlayApps.Count == 0) SeedApps();
             Place();
             RefreshWindows(true);
             refresh.Start(); edge.Start();
         }
 
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            SetAppBar(false);
+            base.OnHandleDestroyed(e);
+        }
+
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            anim.Stop(); refresh.Stop(); edge.Stop();
+            StopAnim(); refresh.Stop(); edge.Stop();
             anim.Dispose(); refresh.Dispose(); edge.Dispose();
-            if (frame != null) frame.Dispose();
+            FreeSurface();
             base.OnFormClosed(e);
         }
 
@@ -382,18 +482,42 @@ namespace StickyPro
 
         public void Reload() { Place(); RefreshWindows(true); }
 
+        // ---------- Position and the reserved strip ----------
+        N.APPBARDATA Abd() { var a = new N.APPBARDATA(); a.cbSize = Marshal.SizeOf(typeof(N.APPBARDATA)); a.hWnd = Handle; return a; }
+
+        void SetAppBar(bool on)
+        {
+            if (!IsHandleCreated || on == appbar) return;
+            var a = Abd();
+            if (on) { a.uCallbackMessage = callback; appbar = N.SHAppBarMessage(0 /*ABM_NEW*/, ref a) != 0; }
+            else { N.SHAppBarMessage(1 /*ABM_REMOVE*/, ref a); appbar = false; }
+        }
+
         void Place()
         {
-            var wa = Screen.PrimaryScreen.WorkingArea;
-            int b = Base;
-            int w = Math.Min(wa.Width, (Store.Settings.OverlayApps.Count + 14) * (b + Ui.S(10)) + b * 3);
-            int h = (int)(b * MaxScale) + b / 2 + Ui.S(48);
-            Bounds = new Rectangle(wa.Left + (wa.Width - w) / 2, wa.Bottom - h, w, h);
+            if (!IsHandleCreated) return;
+            var scr = Screen.PrimaryScreen.Bounds;
+            SetAppBar(!Store.Settings.OverlayAutoHide);
+            int bottom;
+            if (appbar)
+            {
+                var a = Abd();
+                a.uEdge = 3;   // ABE_BOTTOM
+                a.rc = new N.RECT { Left = scr.Left, Right = scr.Right, Top = scr.Bottom - Reserve, Bottom = scr.Bottom };
+                N.SHAppBarMessage(2 /*ABM_QUERYPOS*/, ref a);
+                a.rc.Top = a.rc.Bottom - Reserve;
+                N.SHAppBarMessage(3 /*ABM_SETPOS*/, ref a);
+                bottom = a.rc.Bottom;
+            }
+            else bottom = Store.Settings.OverlayTaskbarHidden ? scr.Bottom : Screen.PrimaryScreen.WorkingArea.Bottom;
+            int h = Reserve + Headroom;
+            N.SetWindowPos(Handle, new IntPtr(-1), scr.Left, bottom - h, scr.Width, h, 0x0010);
         }
 
         // Pinned apps first, then running apps that are not pinned, then All windows and the Recycle Bin.
-        void RefreshWindows(bool force)
+        public void RefreshWindows(bool force)
         {
+            if (IsDisposed) return;
             var wins = Wins.List();
             var list = new List<Item>();
             foreach (var d in Store.Settings.OverlayApps)
@@ -410,46 +534,58 @@ namespace StickyPro
             list.Add(new Item { Special = "overview", Name = "All windows" });
             list.Add(new Item { Special = "trash", Path = "::{645FF040-5081-101B-9F08-00AA002F954E}", Name = "Recycle Bin" });
             string sig = string.Join("|", list.Select(x => x.Path + ":" + x.Windows.Count + ":" + x.Pinned));
-            // Keep animation state (scale, bounce) of items that stay.
-            foreach (var x in list) { var old = items.FirstOrDefault(o => o.Path == x.Path && o.Special == x.Special); if (old != null) { x.Scale = old.Scale; x.BounceUntil = x.Windows.Count > 0 ? 0 : old.BounceUntil; } }
+            foreach (var x in list) { var old = items.FirstOrDefault(o => o.Path == x.Path && o.Special == x.Special); if (old != null) { x.Scale = old.Scale; x.BounceStart = x.Windows.Count > 0 && old.Windows.Count == 0 ? 0 : old.BounceStart; } }
             items.Clear(); items.AddRange(list);
+            if (hot >= items.Count) hot = -1;
             if (force || sig != lastSignature) { lastSignature = sig; Render(); }
         }
 
-        // ---------- Auto-hide and full-screen apps ----------
-        void CheckEdge()
+        // ---------- Hover, auto-hide and full-screen apps ----------
+        RectangleF HoverZone()
         {
-            bool full = Wins.ForegroundIsFullscreen();
-            bool wantHidden = full || (Store.Settings.OverlayAutoHide && !mouseIn && Environment.TickCount - leftAt > 700);
-            if (Store.Settings.OverlayAutoHide && !full && !mouseIn)
-            {
-                var p = Cursor.Position; var scr = Screen.PrimaryScreen.Bounds;
-                if (p.Y >= scr.Bottom - 2 && p.X >= Left && p.X <= Right) wantHidden = false;
-                if (p.Y >= scr.Bottom - 2 && p.X >= Left && p.X <= Right) leftAt = Environment.TickCount;
-            }
-            if (wantHidden != hidden) { hidden = wantHidden; anim.Start(); }
+            float top = panelRect.Top;
+            foreach (var it in items) top = Math.Min(top, it.Rect.Top);
+            return new RectangleF(Left + panelRect.Left, Top + top - Ui.S(4), panelRect.Width, panelRect.Bottom - top + Ui.S(8));
         }
 
-        // ---------- Mouse ----------
+        void CheckEdge()
+        {
+            var p = Cursor.Position;
+            if (mouseIn)
+            {
+                // Mouse messages stop over transparent pixels, so the hover ends here, not on MouseLeave.
+                if (!HoverZone().Contains(p)) { mouseIn = false; hot = -1; leftAt = Environment.TickCount; StartAnim(); }
+            }
+            bool full = Wins.ForegroundIsFullscreen();
+            bool wantHidden = full;
+            if (!full && Store.Settings.OverlayAutoHide && !mouseIn)
+            {
+                bool atEdge = p.Y >= Bottom - 2 && p.X >= Left + panelRect.Left && p.X <= Left + panelRect.Right;
+                if (atEdge) leftAt = Environment.TickCount;
+                wantHidden = Environment.TickCount - leftAt > 600;
+            }
+            if (wantHidden != hidden) { hidden = wantHidden; StartAnim(); }
+        }
+
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == 0x21) { m.Result = (IntPtr)3; return; }   // WM_MOUSEACTIVATE -> MA_NOACTIVATE
+            if (appbar && callback != 0 && m.Msg == callback)
+            {
+                if (m.WParam.ToInt32() == 1) { Place(); Render(); }   // ABN_POSCHANGED
+                return;
+            }
             base.WndProc(ref m);
         }
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
             mouseIn = true; mouseX = e.X;
-            int h = HitTest(e.Location);
-            if (h != hot) hot = h;
-            anim.Start();
+            hot = HitTest(e.Location);
+            if (hoverAmount < 1f || anim.Enabled) StartAnim(); else Render();   // follow the mouse in the same frame
         }
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            base.OnMouseLeave(e);
-            mouseIn = false; hot = -1; leftAt = Environment.TickCount;
-            anim.Start();
-        }
+
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
@@ -465,7 +601,7 @@ namespace StickyPro
         {
             for (int i = 0; i < items.Count; i++)
             {
-                var r = items[i].Rect; r.Inflate(Ui.S(4), Ui.S(8));
+                var r = items[i].Rect; r.Inflate(Base * 0.12f, Pad);
                 if (r.Contains(p)) return i;
             }
             return -1;
@@ -476,10 +612,10 @@ namespace StickyPro
             if (it.Special == "overview") { Overlay.ShowOverview(); return; }
             if (it.Special == "trash") { Wins.Launch(it.Path, null); return; }
             var live = it.Windows;
-            if (live.Count == 0) { if (Wins.Launch(it.Path, it.Args)) { it.BounceUntil = Environment.TickCount + 2400; anim.Start(); } return; }
+            if (live.Count == 0) { if (Wins.Launch(it.Path, it.Args)) { it.BounceStart = clock.ElapsedMilliseconds; StartAnim(); } return; }
             IntPtr fg = N.GetForegroundWindow();
             int at = live.FindIndex(w => w.Hwnd == fg);
-            // Click the active app again to cycle through its windows.
+            // Click the active app again to cycle through its windows (one window: minimize it).
             var target = at >= 0 && live.Count > 1 ? live[(at + 1) % live.Count] : live[0];
             if (at >= 0 && live.Count == 1) { Wins.Minimize(target.Hwnd); return; }
             Wins.Activate(target.Hwnd);
@@ -511,39 +647,63 @@ namespace StickyPro
                 m.Items.Add(new ToolStripSeparator());
             }
             m.Items.Add("Show all windows", null, delegate { Overlay.ShowOverview(); });
-            m.Items.Add(Store.Settings.OverlayAutoHide ? "Turn hiding off" : "Turn hiding on", null, delegate { Store.Settings.OverlayAutoHide = !Store.Settings.OverlayAutoHide; Store.MarkSettings(); });
+            var size = new ToolStripMenuItem("Icon size");
+            foreach (int px in new[] { 24, 28, 32, 40, 48, 64 })
+            {
+                int v = px;
+                size.DropDownItems.Add(new ToolStripMenuItem(v + " px", null, delegate { Store.Settings.OverlayDockSize = v; Store.MarkSettings(); Reload(); }) { Checked = Store.Settings.OverlayDockSize == v });
+            }
+            m.Items.Add(size);
+            m.Items.Add(Store.Settings.OverlayAutoHide ? "Turn hiding off" : "Turn hiding on", null, delegate { Store.Settings.OverlayAutoHide = !Store.Settings.OverlayAutoHide; Store.MarkSettings(); Reload(); });
             m.Items.Add(Store.Settings.OverlayMagnify ? "Turn magnification off" : "Turn magnification on", null, delegate { Store.Settings.OverlayMagnify = !Store.Settings.OverlayMagnify; Store.MarkSettings(); Reload(); });
             m.Items.Add("Overlay settings...", null, delegate { App.I.ShowSettings(null); });
             m.Items.Add("Turn the overlay off", null, delegate { Overlay.Set(false); });
             m.Show(Cursor.Position);
         }
 
-        // ---------- Animation and drawing ----------
-        void Step()
+        // ---------- Animation ----------
+        void StartAnim()
         {
-            bool busy = false;
-            float targetHover = mouseIn ? 1f : 0f;
-            float dh = targetHover - hoverAmount;
-            if (Math.Abs(dh) > 0.01f) { hoverAmount += dh * (Overlay.Animate ? 0.25f : 1f); busy = true; } else hoverAmount = targetHover;
-            float panelH = Base + Ui.S(16) + Ui.S(10);
-            float targetOff = hidden ? panelH + Ui.S(8) : 0f;
-            float doff = targetOff - hideOffset;
-            if (Math.Abs(doff) > 0.5f) { hideOffset += doff * (Overlay.Animate ? 0.3f : 1f); busy = true; } else hideOffset = targetOff;
-            if (items.Any(i => i.BounceUntil > Environment.TickCount)) busy = true;
-            Render();
-            if (!busy && !mouseIn) anim.Stop();
+            if (anim.Enabled) return;
+            lastFrame = clock.ElapsedMilliseconds - 10;
+            if (!fastTimer) { N.timeBeginPeriod(1); fastTimer = true; }   // ~100 ticks a second instead of 64 while moving
+            anim.Start();
         }
 
-        void Arrange(out RectangleF panel)
+        void StopAnim()
         {
-            int b = Base; float gap = b * 0.16f, pad = Ui.S(8), sep = Ui.S(14);
+            anim.Stop();
+            if (fastTimer) { N.timeEndPeriod(1); fastTimer = false; }
+        }
+
+        void Step()
+        {
+            long now = clock.ElapsedMilliseconds;
+            float dt = Math.Max(1, Math.Min(48, now - lastFrame));
+            lastFrame = now;
+            bool moving = Overlay.Animate, busy = false;
+            float kHover = moving ? 1f - (float)Math.Exp(-dt / 45f) : 1f, kSlide = moving ? 1f - (float)Math.Exp(-dt / 55f) : 1f;
+            float th = mouseIn && !hidden ? 1f : 0f;
+            hoverAmount += (th - hoverAmount) * kHover;
+            if (Math.Abs(th - hoverAmount) < 0.004f) hoverAmount = th; else busy = true;
+            float to = hidden ? PanelH + Ui.S(10) : 0f;
+            hideOffset += (to - hideOffset) * kSlide;
+            if (Math.Abs(to - hideOffset) < 0.5f) hideOffset = to; else busy = true;
+            foreach (var it in items) if (it.BounceStart > 0) { if (now - it.BounceStart < BounceMs) busy = true; else it.BounceStart = 0; }
+            Render();
+            if (!busy) StopAnim();
+        }
+
+        // ---------- Layout ----------
+        void Arrange()
+        {
+            int b = Base; float gap = b * 0.22f, sep = Ui.S(12);
             int n = items.Count;
-            float max = MaxScale, range = b * 2.6f;
-            // Base positions (no magnification) to measure the distance to the mouse.
+            float max = MaxScale, range = b * 3f;
             float baseTotal = 0;
             for (int i = 0; i < n; i++) baseTotal += b + gap + (IsSepBefore(i) ? sep : 0);
             baseTotal -= gap;
-            float x0 = (Width - baseTotal) / 2f, x = x0;
+            float x = (Width - baseTotal) / 2f;
             var centers = new float[n];
             for (int i = 0; i < n; i++) { if (IsSepBefore(i)) x += sep; centers[i] = x + b / 2f; x += b + gap; }
             float total = 0;
@@ -555,18 +715,23 @@ namespace StickyPro
                 total += b * items[i].Scale + gap + (IsSepBefore(i) ? sep : 0);
             }
             total -= gap;
-            float left = (Width - total) / 2f, bottom = Height - Ui.S(8) + hideOffset;
+            float left = (Width - total) / 2f, panelBottom = Height - Ui.S(3) + hideOffset;
+            float iconBottom = panelBottom - Pad - DotSpace;
+            long now = clock.ElapsedMilliseconds;
             x = left;
             for (int i = 0; i < n; i++)
             {
                 if (IsSepBefore(i)) x += sep;
-                float s = b * items[i].Scale;
-                float bounce = 0;
-                if (items[i].BounceUntil > Environment.TickCount) bounce = (float)Math.Abs(Math.Sin((items[i].BounceUntil - Environment.TickCount) / 2400.0 * Math.PI * 4)) * b * 0.45f;
-                items[i].Rect = new RectangleF(x, bottom - pad - Ui.S(6) - s - bounce, s, s);
+                float s = b * items[i].Scale, bounce = 0;
+                if (items[i].BounceStart > 0)
+                {
+                    double t = (now - items[i].BounceStart) / (double)BounceMs;
+                    if (t < 1) bounce = (float)(Math.Abs(Math.Sin(t * Math.PI * 2)) * (1 - t) * b * 0.6);
+                }
+                items[i].Rect = new RectangleF(x, iconBottom - s - bounce, s, s);
                 x += s + gap;
             }
-            panel = new RectangleF(left - pad - Ui.S(4), bottom - b - pad * 2 - Ui.S(6), total + pad * 2 + Ui.S(8), b + pad * 2 + Ui.S(6));
+            panelRect = new RectangleF(left - Pad, panelBottom - PanelH, total + Pad * 2, PanelH);
         }
 
         bool IsSepBefore(int i)
@@ -577,101 +742,96 @@ namespace StickyPro
             return a.Pinned && !c.Pinned && c.Special == null;
         }
 
+        // ---------- Drawing ----------
+        void EnsureSurface(int w, int h)
+        {
+            if (surface != null && surface.Width == w && surface.Height == h) return;
+            FreeSurface();
+            var bi = new N.BITMAPINFOHEADER { biSize = 40, biWidth = w, biHeight = -h, biPlanes = 1, biBitCount = 32 };
+            IntPtr screen = N.GetDC(IntPtr.Zero);
+            memDC = N.CreateCompatibleDC(screen);
+            N.ReleaseDC(IntPtr.Zero, screen);
+            dib = N.CreateDIBSection(memDC, ref bi, 0, out bits, IntPtr.Zero, 0);
+            oldBmp = N.SelectObject(memDC, dib);
+            surface = new Bitmap(w, h, w * 4, PixelFormat.Format32bppPArgb, bits);
+        }
+
+        void FreeSurface()
+        {
+            if (surface != null) { surface.Dispose(); surface = null; }
+            if (memDC != IntPtr.Zero) { N.SelectObject(memDC, oldBmp); N.DeleteDC(memDC); memDC = IntPtr.Zero; }
+            if (dib != IntPtr.Zero) { N.DeleteObject(dib); dib = IntPtr.Zero; }
+        }
+
         void Render()
         {
-            if (!IsHandleCreated || Width <= 0 || Height <= 0) return;
-            if (frame == null || frame.Width != Width || frame.Height != Height) { if (frame != null) frame.Dispose(); frame = new Bitmap(Width, Height, PixelFormat.Format32bppArgb); }
-            RectangleF panel;
-            Arrange(out panel);
-            using (var g = Graphics.FromImage(frame))
+            if (!IsHandleCreated || IsDisposed || Width <= 0 || Height <= 0) return;
+            EnsureSurface(Width, Height);
+            Arrange();
+            bool dark = Ui.Dark;
+            int iconPx = (int)Math.Ceiling(Base * MaxScale);
+            using (var g = Graphics.FromImage(surface))
             {
                 g.Clear(Color.Transparent);
-                g.SmoothingMode = SmoothingMode.AntiAlias; g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.CompositingQuality = CompositingQuality.HighSpeed;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                bool dark = Ui.Dark;
-                var pr = Rectangle.Round(panel);
-                int rad = Math.Max(2, (int)(Ui.S(18) * Ui.RadiusScale));
-                // Soft shadow, glass panel, light rim.
-                for (int i = 4; i >= 1; i--)
-                    using (var path = Ui.Round(new Rectangle(pr.X - i, pr.Y - i + Ui.S(3), pr.Width + i * 2, pr.Height + i * 2), rad + i))
-                    using (var br = new SolidBrush(Color.FromArgb(10, 0, 0, 0))) g.FillPath(br, path);
+                var pr = Rectangle.Round(panelRect);
+                int rad = Math.Max(2, (int)(Math.Min(Ui.S(16), pr.Height * 0.32f) * Ui.RadiusScale));
+                for (int i = 3; i >= 1; i--)
+                    using (var path = Ui.Round(new Rectangle(pr.X - i, pr.Y - i + Ui.S(2), pr.Width + i * 2, pr.Height + i * 2), rad + i))
+                    using (var br = new SolidBrush(Color.FromArgb(12, 0, 0, 0))) g.FillPath(br, path);
                 using (var path = Ui.Round(pr, rad))
                 {
-                    using (var br = new SolidBrush(dark ? Color.FromArgb(190, 32, 34, 42) : Color.FromArgb(185, 246, 247, 251))) g.FillPath(br, path);
-                    using (var pen = new Pen(dark ? Color.FromArgb(70, 255, 255, 255) : Color.FromArgb(150, 255, 255, 255))) g.DrawPath(pen, path);
+                    using (var br = new SolidBrush(dark ? Color.FromArgb(200, 32, 34, 42) : Color.FromArgb(196, 246, 247, 251))) g.FillPath(br, path);
+                    using (var pen = new Pen(dark ? Color.FromArgb(60, 255, 255, 255) : Color.FromArgb(150, 255, 255, 255))) g.DrawPath(pen, path);
                 }
                 using (var path = Ui.Round(new Rectangle(pr.X - 1, pr.Y - 1, pr.Width + 2, pr.Height + 2), rad + 1))
-                using (var pen = new Pen(Color.FromArgb(dark ? 90 : 40, 0, 0, 0))) g.DrawPath(pen, path);
-                for (int i = 0; i < items.Count; i++)
+                using (var pen = new Pen(Color.FromArgb(dark ? 90 : 36, 0, 0, 0))) g.DrawPath(pen, path);
+                using (var sepPen = new Pen(Color.FromArgb(dark ? 70 : 55, dark ? 255 : 0, dark ? 255 : 0, dark ? 255 : 0)))
+                using (var dotBrush = new SolidBrush(dark ? Color.FromArgb(230, 235, 235, 240) : Color.FromArgb(200, 30, 30, 40)))
                 {
-                    var it = items[i]; var r = it.Rect;
-                    if (IsSepBefore(i))
-                        using (var pen = new Pen(Color.FromArgb(dark ? 70 : 60, dark ? 255 : 0, dark ? 255 : 0, dark ? 255 : 0)))
-                            g.DrawLine(pen, r.X - Ui.S(7) - Base * 0.08f, pr.Y + Ui.S(10), r.X - Ui.S(7) - Base * 0.08f, pr.Bottom - Ui.S(10));
-                    int px = Math.Max(16, (int)Math.Ceiling(r.Width));
-                    if (it.Special == "overview") DrawGlyphTile(g, r, "", dark);
-                    else
+                    for (int i = 0; i < items.Count; i++)
                     {
-                        var icon = Wins.Icon(it.Path, Base * 2 > 96 ? 256 : Math.Max(64, Base * 2));
-                        g.DrawImage(icon, r);
-                    }
-                    if (it.Windows.Count > 0)
-                    {
-                        float d = Ui.S(4);
-                        using (var br = new SolidBrush(dark ? Color.FromArgb(230, 235, 235, 240) : Color.FromArgb(200, 30, 30, 40)))
-                            g.FillEllipse(br, r.X + r.Width / 2 - d / 2, pr.Bottom - Ui.S(7) + hideOffset * 0, d, d);
+                        var it = items[i]; var r = it.Rect;
+                        if (IsSepBefore(i)) { float sx = r.X - Base * 0.11f - Ui.S(6); g.DrawLine(sepPen, sx, pr.Y + Pad, sx, pr.Bottom - Pad); }
+                        if (it.Special == "overview") DrawGlyphTile(g, r);
+                        else g.DrawImage(Wins.Icon(it.Path, iconPx), r);
+                        if (it.Windows.Count > 0) { float d = Math.Max(3f, 3.5f * Ui.Scale); g.FillEllipse(dotBrush, r.X + r.Width / 2 - d / 2, pr.Bottom - DotSpace - d / 2 - Ui.S(1), d, d); }
                     }
                 }
-                if (hot >= 0 && hot < items.Count && mouseIn && !hidden)
+                if (hot >= 0 && hot < items.Count && mouseIn && !hidden && hoverAmount > 0.5f)
                 {
                     var it = items[hot]; var r = it.Rect;
                     string name = it.Name + (it.Windows.Count > 1 ? "  (" + it.Windows.Count + ")" : "");
                     var f = Ui.Base;
-                    {
-                        var sz = g.MeasureString(name, f);
-                        var lr = new RectangleF(r.X + r.Width / 2 - sz.Width / 2 - Ui.S(10), r.Y - sz.Height - Ui.S(18), sz.Width + Ui.S(20), sz.Height + Ui.S(8));
-                        if (lr.X < 2) lr.X = 2; if (lr.Right > Width - 2) lr.X = Width - 2 - lr.Width;
-                        using (var path = Ui.Round(Rectangle.Round(lr), Ui.S(8)))
-                        using (var br = new SolidBrush(dark ? Color.FromArgb(235, 44, 46, 56) : Color.FromArgb(235, 250, 250, 252))) g.FillPath(br, path);
-                        using (var br = new SolidBrush(dark ? Color.FromArgb(240, 240, 244) : Color.FromArgb(30, 30, 36)))
-                            g.DrawString(name, f, br, lr.X + Ui.S(10), lr.Y + Ui.S(4));
-                    }
+                    var sz = g.MeasureString(name, f);
+                    var lr = new RectangleF(r.X + r.Width / 2 - sz.Width / 2 - Ui.S(9), r.Y - sz.Height - Ui.S(14), sz.Width + Ui.S(18), sz.Height + Ui.S(6));
+                    if (lr.Y < 1) lr.Y = 1;
+                    if (lr.X < 2) lr.X = 2; if (lr.Right > Width - 2) lr.X = Width - 2 - lr.Width;
+                    using (var path = Ui.Round(Rectangle.Round(lr), Ui.S(7)))
+                    using (var br = new SolidBrush(dark ? Color.FromArgb(235, 44, 46, 56) : Color.FromArgb(240, 250, 250, 252))) g.FillPath(br, path);
+                    using (var br = new SolidBrush(dark ? Color.FromArgb(240, 240, 244) : Color.FromArgb(30, 30, 36)))
+                        g.DrawString(name, f, br, lr.X + Ui.S(9), lr.Y + Ui.S(3));
                 }
             }
-            Push(frame);
+            var size = new N.SIZE { cx = Width, cy = Height };
+            var src = new N.POINT(); var dst = new N.POINT { x = Left, y = Top };
+            var blend = new N.BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
+            N.UpdateLayeredWindow(Handle, IntPtr.Zero, ref dst, ref size, memDC, ref src, 0, ref blend, 2);
         }
 
-        static void DrawGlyphTile(Graphics g, RectangleF r, string glyph, bool dark)
+        static void DrawGlyphTile(Graphics g, RectangleF r)
         {
             var rr = Rectangle.Round(r);
             using (var path = Ui.Round(rr, Math.Max(2, (int)(rr.Width * 0.22f * Ui.RadiusScale))))
-            {
-                using (var br = new LinearGradientBrush(rr, Ui.Mix(Ui.AccentFill, Color.White, 0.25), Ui.AccentFill, 90f)) g.FillPath(br, path);
-            }
-            var f = Ui.Icon((float)Math.Round(Math.Max(8f, rr.Width * 0.36f / Ui.Scale) * 2) / 2f);
+            using (var br = new LinearGradientBrush(rr, Ui.Mix(Ui.AccentFill, Color.White, 0.25), Ui.AccentFill, 90f)) g.FillPath(br, path);
+            var f = Ui.Icon((float)Math.Round(Math.Max(7f, rr.Width * 0.36f / Ui.Scale) * 2) / 2f);
             using (var br = new SolidBrush(Color.White))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString(glyph, f, br, r, sf);
-        }
-
-        void Push(Bitmap bmp)
-        {
-            IntPtr screen = N.GetDC(IntPtr.Zero), mem = N.CreateCompatibleDC(screen), hbmp = IntPtr.Zero, old = IntPtr.Zero;
-            try
-            {
-                hbmp = bmp.GetHbitmap(Color.FromArgb(0));
-                old = N.SelectObject(mem, hbmp);
-                var size = new N.SIZE { cx = bmp.Width, cy = bmp.Height };
-                var src = new N.POINT(); var dst = new N.POINT { x = Left, y = Top };
-                var blend = new N.BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
-                N.UpdateLayeredWindow(Handle, screen, ref dst, ref size, mem, ref src, 0, ref blend, 2);
-            }
-            finally
-            {
-                if (old != IntPtr.Zero) N.SelectObject(mem, old);
-                if (hbmp != IntPtr.Zero) N.DeleteObject(hbmp);
-                N.DeleteDC(mem); N.ReleaseDC(IntPtr.Zero, screen);
-            }
+                g.DrawString("", f, br, r, sf);
         }
     }
 
@@ -747,7 +907,7 @@ namespace StickyPro
             base.WndProc(ref m);
         }
 
-        void Sample()
+        public void Sample()
         {
             IntPtr fg = N.GetForegroundWindow();
             if (fg != IntPtr.Zero && fg != Handle && !Overlay.IsOverlayWindow(fg))
@@ -913,7 +1073,7 @@ namespace StickyPro
         Bitmap backdrop;
         int hover = -1, sel = -1;
         long animStart;
-        const int AnimMs = 220;
+        const int AnimMs = 170;
         bool ready;
 
         public OverviewForm()
@@ -923,14 +1083,18 @@ namespace StickyPro
             DoubleBuffered = true; Bounds = scr; BackColor = Color.Black;
             try
             {
-                // Blurred, darkened picture of the screen as the background.
-                using (var shot = new Bitmap(scr.Width, scr.Height, PixelFormat.Format32bppRgb))
+                // Blurred, darkened picture of the screen as the background: one scaled-down copy straight from the screen
+                // (no full-size capture), then stretched back up.
+                int sw = Math.Max(1, scr.Width / 16), sh = Math.Max(1, scr.Height / 16);
+                using (var small = new Bitmap(sw, sh, PixelFormat.Format32bppRgb))
                 {
-                    using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(scr.Location, Point.Empty, scr.Size);
-                    int sw = Math.Max(1, scr.Width / 14), sh = Math.Max(1, scr.Height / 14);
-                    using (var small = new Bitmap(sw, sh))
+                    using (var g = Graphics.FromImage(small))
                     {
-                        using (var g = Graphics.FromImage(small)) { g.InterpolationMode = InterpolationMode.HighQualityBilinear; g.DrawImage(shot, 0, 0, sw, sh); }
+                        IntPtr dst = g.GetHdc(), screen = N.GetDC(IntPtr.Zero);
+                        try { N.SetStretchBltMode(dst, 4 /*HALFTONE*/); N.StretchBlt(dst, 0, 0, sw, sh, screen, scr.X, scr.Y, scr.Width, scr.Height, 0x00CC0020); }
+                        finally { N.ReleaseDC(IntPtr.Zero, screen); g.ReleaseHdc(dst); }
+                    }
+                    {
                         backdrop = new Bitmap(scr.Width, scr.Height, PixelFormat.Format32bppRgb);
                         using (var g = Graphics.FromImage(backdrop))
                         {
@@ -1059,7 +1223,20 @@ namespace StickyPro
 
         int TileAt(Point p) { for (int i = 0; i < tiles.Count; i++) if (Rectangle.Inflate(tiles[i].Dest, Ui.S(6), Ui.S(30)).Contains(p)) return i; return -1; }
 
-        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); int h = TileAt(e.Location); if (h != hover) { hover = h; Invalidate(); } }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int h = TileAt(e.Location);
+            if (h == hover) return;
+            InvalidateTile(hover); hover = h; InvalidateTile(hover);   // repaint only the two tiles, not the whole screen
+        }
+
+        void InvalidateTile(int i)
+        {
+            if (i < 0 || i >= tiles.Count) return;
+            var r = tiles[i].Dest;
+            Invalidate(Rectangle.FromLTRB(r.Left - Ui.S(12), r.Top - Ui.S(12), r.Right + Ui.S(12), r.Bottom + Ui.S(44)));
+        }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
@@ -1151,6 +1328,15 @@ namespace StickyPro
         [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
         [DllImport("user32.dll")] public static extern bool LockWorkStation();
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+        public delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time);
+        [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint thread, uint flags);
+        [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hook);
+        [DllImport("winmm.dll")] public static extern uint timeBeginPeriod(uint ms);
+        [DllImport("winmm.dll")] public static extern uint timeEndPeriod(uint ms);
+        [DllImport("gdi32.dll")] public static extern IntPtr CreateDIBSection(IntPtr dc, ref BITMAPINFOHEADER bi, uint usage, out IntPtr bits, IntPtr section, uint offset);
+        [DllImport("gdi32.dll")] public static extern bool StretchBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, int sw, int sh, int rop);
+        [DllImport("gdi32.dll")] public static extern int SetStretchBltMode(IntPtr dc, int mode);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string s);
         [DllImport("shell32.dll")] public static extern uint SHAppBarMessage(uint msg, ref APPBARDATA data);
         [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int val, int size);
