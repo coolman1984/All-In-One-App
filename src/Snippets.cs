@@ -155,7 +155,7 @@ namespace StickyPro
             new[] { "pwshhere",  "PWSH in the File Explorer folder", "Ctrl+Alt+E", "PWSH here" },
             new[] { "terminals", "Launch my terminals workspace",    "Ctrl+Alt+L", "Terminals" },
             new[] { "overview",  "Show all windows (overview)",      "Ctrl+Alt+Up", "All windows" },
-            new[] { "overlay",   "Desktop overlay on / off",         "",           "Overlay" },
+            new[] { "overlay",   "Desktop overlay on / off",         "Ctrl+Alt+Z", "Overlay" },
         };
 
         public static string Get(string action)

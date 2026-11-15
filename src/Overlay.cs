@@ -39,7 +39,11 @@ namespace StickyPro
             ApplySettings();
             var h = Changed; if (h != null) h();
         }
-        public static void Toggle() { Set(!On); }
+        public static void Toggle()
+        {
+            Set(!On);
+            if (On) App.I.Balloon("Overlay on", "To exit: the red Exit overlay button (top right), the red button at the end of the dock, or " + Hotkeys.Get("overlay") + ".");
+        }
 
         // App exit: remove the windows (the menu bar gives its screen space back) without changing the saved setting.
         public static void Shutdown()
@@ -213,16 +217,35 @@ namespace StickyPro
             try { return ProcMeta.Describe(path, Path.GetFileNameWithoutExtension(path)); } catch { return Path.GetFileNameWithoutExtension(path); }
         }
 
-        // Large shell icon with alpha (falls back to the associated icon).
+        // App icon at exactly this pixel size, premultiplied, cached: scaled once from a 256 px master with bicubic so it is
+        // drawn 1:1 (sharp) instead of being stretched every frame.
         public static Bitmap Icon(string path, int size)
         {
+            size = Math.Max(8, size);
             string key = path + "|" + size;
             Bitmap b;
             if (icons.TryGetValue(key, out b)) return b;
-            b = ShellImage(IconSource(path), size);
+            var master = Master(path);
+            b = new Bitmap(size, size, PixelFormat.Format32bppPArgb);
+            using (var g = Graphics.FromImage(b))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.PixelOffsetMode = PixelOffsetMode.HighQuality; g.SmoothingMode = SmoothingMode.HighQuality;
+                g.DrawImage(master, new Rectangle(0, 0, size, size));
+            }
+            if (icons.Count > 900) icons.Clear();   // many sizes of many apps: start over (bitmaps in use stay alive until drawn)
+            icons[key] = b;
+            return b;
+        }
+
+        static Bitmap Master(string path)
+        {
+            string key = path + "|master";
+            Bitmap b;
+            if (icons.TryGetValue(key, out b)) return b;
+            b = ShellImage(IconSource(path), 256);
             if (b == null)
-                try { using (var ic = System.Drawing.Icon.ExtractAssociatedIcon(path)) b = new Bitmap(ic.ToBitmap(), size, size); } catch { }
-            if (b == null) { b = new Bitmap(size, size); using (var g = Graphics.FromImage(b)) using (var br = new SolidBrush(Color.FromArgb(120, 128, 128, 140))) g.FillEllipse(br, 2, 2, size - 4, size - 4); }
+                try { using (var ic = System.Drawing.Icon.ExtractAssociatedIcon(path)) b = new Bitmap(ic.ToBitmap()); } catch { }
+            if (b == null) { b = new Bitmap(64, 64, PixelFormat.Format32bppPArgb); using (var g = Graphics.FromImage(b)) using (var br = new SolidBrush(Color.FromArgb(120, 128, 128, 140))) { g.SmoothingMode = SmoothingMode.AntiAlias; g.FillEllipse(br, 4, 4, 56, 56); } }
             icons[key] = b;
             return b;
         }
@@ -253,21 +276,28 @@ namespace StickyPro
                     var ds = new N.DIBSECTION();
                     if (N.GetObject(hbm, Marshal.SizeOf(typeof(N.DIBSECTION)), ref ds) == 0 || ds.dsBm.bmBits == IntPtr.Zero || ds.dsBm.bmBitsPixel != 32) return null;
                     int w = ds.dsBm.bmWidth, h = ds.dsBm.bmHeight, stride = ds.dsBm.bmWidthBytes;
-                    var result = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
-                    var data = result.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
-                    var row = new byte[stride];
+                    var raw = new byte[stride * h];
                     bool bottomUp = ds.dsBmih.biHeight > 0;
                     for (int y = 0; y < h; y++)
+                        Marshal.Copy(new IntPtr(ds.dsBm.bmBits.ToInt64() + (long)(bottomUp ? h - 1 - y : y) * stride), raw, y * stride, stride);
+                    // Many icons come with straight (not premultiplied) alpha; reading them as premultiplied gave coloured
+                    // speckles on the edges. A colour channel above its alpha can only happen with straight alpha.
+                    bool straight = false;
+                    for (int i = 0; i + 3 < raw.Length; i += 4) { byte a = raw[i + 3]; if (raw[i] > a || raw[i + 1] > a || raw[i + 2] > a) { straight = true; break; } }
+                    var fmt = straight ? PixelFormat.Format32bppArgb : PixelFormat.Format32bppPArgb;
+                    using (var src = new Bitmap(w, h, fmt))
                     {
-                        Marshal.Copy(new IntPtr(ds.dsBm.bmBits.ToInt64() + (long)(bottomUp ? h - 1 - y : y) * stride), row, 0, stride);
-                        Marshal.Copy(row, 0, new IntPtr(data.Scan0.ToInt64() + (long)y * data.Stride), Math.Min(stride, data.Stride));
+                        var data = src.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, fmt);
+                        for (int y = 0; y < h; y++) Marshal.Copy(raw, y * stride, new IntPtr(data.Scan0.ToInt64() + (long)y * data.Stride), Math.Min(stride, data.Stride));
+                        src.UnlockBits(data);
+                        var result = new Bitmap(size, size, PixelFormat.Format32bppPArgb);
+                        using (var g = Graphics.FromImage(result))
+                        {
+                            g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                            g.DrawImage(src, new Rectangle(0, 0, size, size));
+                        }
+                        return result;
                     }
-                    result.UnlockBits(data);
-                    if (w == size && h == size) return result;
-                    var scaled = new Bitmap(size, size, PixelFormat.Format32bppPArgb);
-                    using (var g = Graphics.FromImage(scaled)) { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(result, 0, 0, size, size); }
-                    result.Dispose();
-                    return scaled;
                 }
                 finally { N.DeleteObject(hbm); }
             }
@@ -440,7 +470,7 @@ namespace StickyPro
         readonly Timer anim = new Timer { Interval = 16 }, refresh = new Timer { Interval = 1000 }, edge = new Timer { Interval = 50 };
         readonly Stopwatch clock = Stopwatch.StartNew();
         float mouseX = -1, hoverAmount, hideOffset;
-        bool mouseIn, hidden, appbar;
+        bool mouseIn, hidden, appbar, fsHidden;
         int hot = -1;
         long leftAt, lastFrame, lastShown;
         uint callback;
@@ -451,7 +481,7 @@ namespace StickyPro
         const int BounceMs = 1100;
 
         int Base { get { return Ui.S(Math.Max(20, Math.Min(96, Store.Settings.OverlayDockSize))); } }
-        float MaxScale { get { return Store.Settings.OverlayMagnify && Overlay.Animate ? 1.5f : 1f; } }
+        float MaxScale { get { return Store.Settings.OverlayMagnify && Overlay.Animate ? 1.4f : 1f; } }
         int Pad { get { return Math.Max(Ui.S(4), Base / 5); } }
         int DotSpace { get { return Ui.S(5); } }
         int PanelH { get { return Base + Pad * 2 + DotSpace; } }
@@ -572,6 +602,7 @@ namespace StickyPro
             list.Add(new Item { Special = "overview", Name = "All windows" });
             list.Add(new Item { Special = "trash", Path = "::{645FF040-5081-101B-9F08-00AA002F954E}", Name = "Recycle Bin" });
             if (Store.Settings.OverlayTaskbarHidden) list.Add(new Item { Special = "tray", Name = "Windows tray (notification icons, Wi-Fi, sound, clock)" });
+            list.Add(new Item { Special = "exit", Name = "Exit overlay  (" + Hotkeys.Get("overlay") + ")" });
             string sig = string.Join("|", list.Select(x => x.Path + ":" + x.Windows.Count + ":" + x.Pinned));
             foreach (var x in list) { var old = items.FirstOrDefault(o => o.Path == x.Path && o.Special == x.Special); if (old != null) { x.Scale = old.Scale; x.BounceStart = x.Windows.Count > 0 && old.Windows.Count == 0 ? 0 : old.BounceStart; } }
             items.Clear(); items.AddRange(list);
@@ -593,7 +624,9 @@ namespace StickyPro
         {
             long now = clock.ElapsedMilliseconds;
             // A full-screen app or the revealed Windows taskbar: stay out of the way.
-            if (Wins.ForegroundIsFullscreen() || Taskbar.Revealed)
+            bool fs = Wins.ForegroundIsFullscreen();
+            if (fs != fsHidden) { fsHidden = fs; StartAnim(); }   // no edge line over full-screen videos and games
+            if (fs || Taskbar.Revealed)
             {
                 if (!hidden || mouseIn) { hidden = true; mouseIn = false; hot = -1; StartAnim(); }
                 return;
@@ -633,7 +666,10 @@ namespace StickyPro
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            if (fsHidden || Taskbar.Revealed) return;
             mouseIn = true; mouseX = e.X;
+            lastShown = clock.ElapsedMilliseconds;
+            if (hidden) hidden = false;   // touched the bottom edge: up at once
             hot = HitTest(e.Location);
             if (hoverAmount < 1f || anim.Enabled) StartAnim(); else Render();   // follow the mouse in the same frame
         }
@@ -664,6 +700,7 @@ namespace StickyPro
             if (it.Special == "overview") { Overlay.ShowOverview(); return; }
             if (it.Special == "trash") { Wins.Launch(it.Path, null); return; }
             if (it.Special == "start") { Wins.OpenStart(); return; }
+            if (it.Special == "exit") { BeginInvoke(new Action(() => Overlay.Set(false))); return; }
             if (it.Special == "tray") { mouseIn = false; hot = -1; hidden = true; StartAnim(); Taskbar.Reveal(); return; }
             var live = it.Windows;
             if (live.Count == 0) { if (Wins.Launch(it.Path, it.Args)) { it.BounceStart = clock.ElapsedMilliseconds; StartAnim(); } return; }
@@ -734,7 +771,7 @@ namespace StickyPro
             float dt = Math.Max(1, Math.Min(48, now - lastFrame));
             lastFrame = now;
             bool moving = Overlay.Animate, busy = false;
-            float kHover = moving ? 1f - (float)Math.Exp(-dt / 45f) : 1f, kSlide = moving ? 1f - (float)Math.Exp(-dt / 55f) : 1f;
+            float kHover = moving ? 1f - (float)Math.Exp(-dt / 45f) : 1f, kSlide = moving ? 1f - (float)Math.Exp(-dt / 32f) : 1f;
             float th = mouseIn && !hidden ? 1f : 0f;
             hoverAmount += (th - hoverAmount) * kHover;
             if (Math.Abs(th - hoverAmount) < 0.004f) hoverAmount = th; else busy = true;
@@ -822,7 +859,7 @@ namespace StickyPro
             EnsureSurface(Width, Height);
             Arrange();
             bool dark = Ui.Dark;
-            int iconPx = (int)Math.Ceiling(Base * MaxScale);
+
             using (var g = Graphics.FromImage(surface))
             {
                 g.Clear(Color.Transparent);
@@ -853,7 +890,12 @@ namespace StickyPro
                         if (it.Special == "overview") DrawGlyphTile(g, r, "", false);
                         else if (it.Special == "start") DrawStartTile(g, r, dark);
                         else if (it.Special == "tray") DrawGlyphTile(g, r, "", true);
-                        else g.DrawImage(Wins.Icon(it.Path, iconPx), r);
+                        else if (it.Special == "exit") DrawExitTile(g, r);
+                        else
+                        {
+                            int s = Math.Max(8, (int)Math.Round(r.Width));
+                            g.DrawImage(Wins.Icon(it.Path, s), new Rectangle((int)Math.Round(r.X + (r.Width - s) / 2f), (int)Math.Round(r.Y + (r.Height - s) / 2f), s, s));
+                        }
                         if (it.Windows.Count > 0) { float d = Math.Max(3f, 3.5f * Ui.Scale); g.FillEllipse(dotBrush, r.X + r.Width / 2 - d / 2, pr.Bottom - DotSpace - d / 2 - Ui.S(1), d, d); }
                     }
                 }
@@ -872,6 +914,8 @@ namespace StickyPro
                         g.DrawString(name, f, br, lr.X + Ui.S(9), lr.Y + Ui.S(3));
                 }
             }
+            if (Store.Settings.OverlayAutoHide && !fsHidden)
+                using (var g = Graphics.FromImage(surface)) using (var br = new SolidBrush(Color.FromArgb(1, 0, 0, 0))) { g.CompositingMode = CompositingMode.SourceCopy; g.FillRectangle(br, 0, Height - 1, Width, 1); }
             var size = new N.SIZE { cx = Width, cy = Height };
             var src = new N.POINT(); var dst = new N.POINT { x = Left, y = Top };
             var blend = new N.BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
@@ -891,6 +935,17 @@ namespace StickyPro
             using (var br = new SolidBrush(subtle ? (dark ? Color.FromArgb(235, 235, 240) : Color.FromArgb(40, 40, 48)) : Color.White))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                 g.DrawString(glyph, f, br, r, sf);
+        }
+
+        static void DrawExitTile(Graphics g, RectangleF r)
+        {
+            var rr = Rectangle.Round(r);
+            using (var path = Ui.Round(rr, Math.Max(2, (int)(rr.Width * 0.22f * Ui.RadiusScale))))
+            using (var br = new LinearGradientBrush(rr, Color.FromArgb(240, 96, 96), Color.FromArgb(200, 50, 56), 90f)) g.FillPath(br, path);
+            var f = Ui.Icon((float)Math.Round(Math.Max(7f, rr.Width * 0.38f / Ui.Scale) * 2) / 2f);
+            using (var br = new SolidBrush(Color.White))
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                g.DrawString("", f, br, r, sf);   // power
         }
 
         // Start button: four panes, like the Windows start button.
@@ -915,7 +970,7 @@ namespace StickyPro
         bool registered;
         IntPtr activeWin;
         string activePath = "", activeName = "", activeTitle = "";
-        Rectangle logoRect, appRect, clockRect, overviewRect, cpuRect;
+        Rectangle logoRect, appRect, clockRect, overviewRect, cpuRect, exitRect;
         long prevIdle, prevKernel, prevUser; int cpu, mem; int sampleCount;
         int BarH { get { return Ui.S(30); } }
 
@@ -1027,8 +1082,16 @@ namespace StickyPro
             appRect = new Rectangle(x - Ui.S(8), 0, nameSize.Width + Ui.S(16), h);
             TextRenderer.DrawText(g, activeName, Ui.Bold, new Rectangle(x, 0, nameSize.Width + 2, h), fg, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
             x += nameSize.Width + Ui.S(18);
-            // Right side: clock, memory, CPU, all windows.
-            int right = Width - Ui.S(14);
+            // Right side: Exit overlay, clock, memory, CPU, all windows.
+            int right = Width - Ui.S(6);
+            string exitText = "Exit overlay";
+            var es = TextRenderer.MeasureText(exitText, Ui.Base, Size.Empty, TextFormatFlags.NoPadding);
+            exitRect = new Rectangle(right - es.Width - Ui.S(34), Ui.S(4), es.Width + Ui.S(34), h - Ui.S(8));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Ui.Round(exitRect, Ui.S(6))) using (var br = new SolidBrush(Color.FromArgb(220, 60, 64))) g.FillPath(br, path);
+            TextRenderer.DrawText(g, "", Ui.Icon(8f), new Rectangle(exitRect.X + Ui.S(8), exitRect.Y, Ui.S(14), exitRect.Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, exitText, Ui.Base, new Rectangle(exitRect.X + Ui.S(26), exitRect.Y, es.Width + 2, exitRect.Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            right = exitRect.Left - Ui.S(16);
             var now = DateTime.Now;
             string clock = now.ToString("ddd d MMM") + "   " + now.ToString("HH:mm");
             var cs = TextRenderer.MeasureText(clock, Ui.Base, Size.Empty, TextFormatFlags.NoPadding);
@@ -1060,6 +1123,7 @@ namespace StickyPro
             base.OnMouseUp(e);
             if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Right) return;
             var at = new Point(PointToScreen(new Point(e.X, Height)).X, PointToScreen(new Point(0, Height)).Y);
+            if (exitRect.Contains(e.Location)) { BeginInvoke(new Action(() => Overlay.Set(false))); return; }
             if (logoRect.Contains(e.Location)) LogoMenu().Show(new Point(PointToScreen(new Point(logoRect.Left, Height)).X, at.Y));
             else if (appRect.Contains(e.Location)) AppMenu().Show(new Point(PointToScreen(new Point(appRect.Left, Height)).X, at.Y));
             else if (overviewRect.Contains(e.Location)) Overlay.ShowOverview();

@@ -192,8 +192,8 @@ namespace StickyPro
         public List<string> NavFavorites = new List<string>(); // page keys pinned in a Favorites group at the top
         // Desktop overlay (dock, menu bar, hot corners, window overview)
         public bool OverlayOn;
-        public bool OverlayDock = true, OverlayMenuBar = true, OverlayHotCorner = true, OverlayMagnify = true, OverlayAutoHide = true;
-        public int OverlayDockSize = 28;     // icon size in px at 100 % scale (taskbar-like)
+        public bool OverlayDock = true, OverlayMenuBar = true, OverlayHotCorner, OverlayMagnify = true, OverlayAutoHide = true;
+        public int OverlayDockSize = 48;     // icon size in px at 100 % scale
         public bool HideSecurityPopups = true;   // hide the security agent's "Security Warning" pop-ups in the background
         public bool OverlayHideTaskbar = true;   // full-screen mode: hide the Windows taskbar while the overlay is on
         public bool OverlayTaskbarHidden;        // the overlay hid it (restored on the next start after a crash)
@@ -365,7 +365,8 @@ namespace StickyPro
             s.OverlayApps.RemoveAll(d => d == null || string.IsNullOrEmpty(d.Path));
             if (s.OverlayDockVersion < 2) { if (s.OverlayDockSize == 56) s.OverlayDockSize = 28; s.OverlayDockVersion = 2; }   // first dock was too big
             if (s.OverlayDockVersion < 3) { s.OverlayAutoHide = true; s.OverlayDockVersion = 3; }   // full screen: the dock appears only at the bottom edge
-            if (s.OverlayDockSize < 20 || s.OverlayDockSize > 128) s.OverlayDockSize = 28;
+            if (s.OverlayDockVersion < 4) { if (s.OverlayDockSize <= 32) s.OverlayDockSize = 48; s.OverlayHotCorner = false; s.OverlayDockVersion = 4; }   // big icons; no surprise overview from the corner
+            if (s.OverlayDockSize < 20 || s.OverlayDockSize > 128) s.OverlayDockSize = 48;
             if (s.OverlayDockEdge != "left" && s.OverlayDockEdge != "right") s.OverlayDockEdge = "bottom";
             if (string.IsNullOrEmpty(s.OverlayCorner)) s.OverlayCorner = "topleft";
             // New design: switch once to the SerQ look (navy sidebar, blue accent); Nexus and Classic stay available in Settings.
