@@ -154,6 +154,8 @@ namespace StickyPro
                 case "ontop": PowerTools.ToggleForeground(); break;
                 case "pwshhere": Term.OpenFromExplorer(""); break;
                 case "terminals": Term.LaunchCurrent(); break;
+                case "overview": Overlay.ShowOverview(); break;
+                case "overlay": Overlay.Toggle(); break;
                 case "awake": Awake.Set(!Awake.On); Balloon(Awake.On ? "Keep awake: ON" : "Keep awake: OFF", Awake.On ? "The PC will not sleep." : "Normal sleep settings."); break;
             }
         }
@@ -444,6 +446,11 @@ namespace StickyPro
             miAwake.Click += delegate { Awake.Set(!Awake.On); };
             Awake.Changed += delegate { miAwake.Checked = Awake.On; };
             menu.Items.Add(miAwake);
+            var miOverlay = new ToolStripMenuItem("Desktop overlay (dock and menu bar)");
+            miOverlay.Checked = Store.Settings.OverlayOn;
+            miOverlay.Click += delegate { Overlay.Toggle(); };
+            Overlay.Changed += delegate { miOverlay.Checked = Overlay.On; };
+            menu.Items.Add(miOverlay);
             miStartup = new ToolStripMenuItem("Start with Windows");
             miStartup.Click += delegate { SetStartup(!IsStartup()); miStartup.Checked = IsStartup(); };
             menu.Items.Add(miStartup);
@@ -523,6 +530,7 @@ namespace StickyPro
             Ui.ThemeIndex = Store.Settings.Theme;
             Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq";
             Ui.ThemeMenu(tray.ContextMenuStrip);
+            if (Overlay.On) Overlay.ApplySettings();   // dock and menu bar repaint in the new theme
             string page = null;
             bool wasVisible = false;
             if (main != null && !main.IsDisposed)
@@ -1102,6 +1110,7 @@ namespace StickyPro
             if (Recorder.Active) Recorder.Stop(true);
             try { Native.RemoveClipboardFormatListener(msg.Handle); } catch { }
             foreach (int id in registered) Native.UnregisterHotKey(msg.Handle, id);
+            try { Overlay.Shutdown(); } catch { }
             tray.Visible = false;
             tray.ContextMenuStrip.Dispose();
             tray.Dispose();

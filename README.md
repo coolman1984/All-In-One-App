@@ -40,6 +40,11 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
 
 ## New in this version
+- **Desktop overlay** (button at the top of the main window, tray menu, or Settings > Desktop overlay): a dock with
+  magnifying icons, running-app dots, pinned apps (drop files on it to pin) and right-click window lists; a menu bar at
+  the top with the active app's menu, CPU / RAM / battery and the clock (maximized windows stay below it); a hot corner
+  and Ctrl+Alt+Up for a window overview with live thumbnails. It is drawn by the app above Windows; turning it off gives
+  everything back.
 - **Agents** (first page under Tools): chat with the Claude Code, Codex, Cline, Antigravity and OpenCode CLIs in 1, 2, 3, 4
   or 6 side-by-side panes or a 2 x 2 / 3 x 2 grid. Put several agents in one chat: they answer in turn and see each other's
   replies. Each chat has a folder and a mode (Ask = read only, Edit, Auto). Chats, favorites and history are saved in

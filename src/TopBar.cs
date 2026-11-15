@@ -54,7 +54,7 @@ namespace StickyPro
             Add("tasks", "", "Due today", "#64748B", "tasks");
             Add("urgent", "", "Urgent", "#64748B", "tagged");
             Add("rec", "", "Recorder", "#64748B", "snip");
-            foreach (var k in new[] { "theme", "awake", "wifi" }) toggles.Add(new Toggle { Key = k });
+            foreach (var k in new[] { "overlay", "theme", "awake", "wifi" }) toggles.Add(new Toggle { Key = k });
             clock.Tick += delegate { if (DateTime.Now.Minute != lastMinute) { lastMinute = DateTime.Now.Minute; Invalidate(clockRect); } };
             update = () => { if (Live) RefreshValues(); };
             // Store events can come in bursts (typing in a note, copying): recompute the data facts once, 400 ms after the last one.
@@ -63,7 +63,7 @@ namespace StickyPro
             redraw = () => { if (!IsDisposed) Invalidate(); };
             ProcessSampler.Updated += update; Store.ClipsChanged += storeUpdate; Store.PromptsChanged += storeUpdate; Store.NotesChanged += storeUpdate;
             Store.ActivityChanged += storeUpdate; Store.TaggedChanged += storeUpdate; Store.TasksChanged += storeUpdate; Recorder.Finished += storeUpdate;
-            Awake.Changed += redraw; WiFi.Changed += redraw;
+            Awake.Changed += redraw; WiFi.Changed += redraw; Overlay.Changed += redraw;
             Cursor = Cursors.Default;
         }
 
@@ -369,11 +369,12 @@ namespace StickyPro
             switch (t.Key)
             {
                 case "theme": return Ui.Dark ? "" : "";
+                case "overlay": return "";
                 case "awake": return "";
                 default: return WiFi.State == "Off" ? "" : "";
             }
         }
-        bool ToggleOn(Toggle t) { return t.Key == "awake" ? Awake.On : t.Key == "wifi" ? WiFi.State == "On" : false; }
+        bool ToggleOn(Toggle t) { return t.Key == "overlay" ? Overlay.On : t.Key == "awake" ? Awake.On : t.Key == "wifi" ? WiFi.State == "On" : false; }
 
         void DrawToggle(Graphics g, Toggle t)
         {
@@ -411,7 +412,7 @@ namespace StickyPro
         {
             var c = h as Chip; if (c != null) return c.Tip ?? (c.Label + ": " + c.Value);
             var t = h as Toggle;
-            if (t != null) return t.Key == "theme" ? (Ui.Dark ? "Switch to light mode" : "Switch to dark mode") : t.Key == "awake" ? "Keep screen awake (no sleep / screensaver): " + (Awake.On ? "on" : "off") : "Wi-Fi: " + (WiFi.Busy ? "working..." : WiFi.State);
+            if (t != null) return t.Key == "overlay" ? "Desktop overlay (dock, menu bar, hot corner, window overview): " + (Overlay.On ? "on" : "off") : t.Key == "theme" ? (Ui.Dark ? "Switch to light mode" : "Switch to dark mode") : t.Key == "awake" ? "Keep screen awake (no sleep / screensaver): " + (Awake.On ? "on" : "off") : "Wi-Fi: " + (WiFi.Busy ? "working..." : WiFi.State);
             var s = h as string;
             if (s == "brand") return "Home";
             if (s == "search") return "Search notes, prompts, clips, tasks and pages";
@@ -433,6 +434,7 @@ namespace StickyPro
             {
                 if (t.Key == "theme") BeginInvoke(new Action(() => App.I.ToggleDark()));
                 else if (t.Key == "awake") Awake.Set(!Awake.On);
+                else if (t.Key == "overlay") Overlay.Toggle();
                 else WiFi.Toggle();
                 return;
             }
@@ -471,7 +473,7 @@ namespace StickyPro
                 ProcessSampler.Updated -= update; Store.ClipsChanged -= storeUpdate; Store.PromptsChanged -= storeUpdate; Store.NotesChanged -= storeUpdate;
                 Store.ActivityChanged -= storeUpdate; Store.TaggedChanged -= storeUpdate; Store.TasksChanged -= storeUpdate; Recorder.Finished -= storeUpdate;
                 factsTimer.Dispose();
-                Awake.Changed -= redraw; WiFi.Changed -= redraw;
+                Awake.Changed -= redraw; WiFi.Changed -= redraw; Overlay.Changed -= redraw;
                 clock.Dispose(); tip.Dispose(); if (logo != null) logo.Dispose();
             }
             base.Dispose(disposing);

@@ -15,6 +15,10 @@ namespace StickyPro
         readonly ComboBox headFont, monoFont, corner;
         readonly NumericUpDown headScale, monoSize;
         readonly CheckBox shadows;
+        readonly CheckBox ovOn, ovDock, ovBar, ovMagnify, ovAutoHide, ovAnim;
+        readonly ComboBox ovCorner;
+        readonly NumericUpDown ovSize;
+        static readonly string[] ovCorners = { "off", "topleft", "topright", "bottomleft", "bottomright" };
         readonly Button accentBtn;
         readonly Control accentSwatch;
         string accentHex = Store.Settings.AccentColor;
@@ -143,6 +147,25 @@ namespace StickyPro
                 using (var d = new SidebarDialog(mf2)) if (d.ShowDialog(this) == DialogResult.OK) { Store.MarkSettings(); mf2.BuildNav(); }
             }));
             Row(t, "Rename, reorder, hide or pin pages", navBar);
+
+            Section(t, "Desktop overlay");
+            ovOn = new CheckBox { Text = "On (dock, menu bar, all windows)", AutoSize = true, Checked = Overlay.On };
+            Row(t, "Overlay", ovOn);
+            var ovParts = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+            ovDock = new CheckBox { Text = "Dock", AutoSize = true, Checked = Store.Settings.OverlayDock };
+            ovBar = new CheckBox { Text = "Menu bar at the top", AutoSize = true, Checked = Store.Settings.OverlayMenuBar };
+            ovMagnify = new CheckBox { Text = "Magnify icons", AutoSize = true, Checked = Store.Settings.OverlayMagnify };
+            ovAutoHide = new CheckBox { Text = "Auto-hide the dock", AutoSize = true, Checked = Store.Settings.OverlayAutoHide };
+            ovParts.Controls.AddRange(new Control[] { ovDock, ovBar, ovMagnify, ovAutoHide });
+            Row(t, "Parts", ovParts);
+            ovSize = new NumericUpDown { Minimum = 32, Maximum = 96, Increment = 4, Value = Math.Max(32, Math.Min(96, Store.Settings.OverlayDockSize)) };
+            Row(t, "Dock icon size (px)", ovSize);
+            ovCorner = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            ovCorner.Items.AddRange(new object[] { "Off", "Top left", "Top right", "Bottom left", "Bottom right" });
+            ovCorner.SelectedIndex = Store.Settings.OverlayHotCorner ? Math.Max(0, Array.IndexOf(ovCorners, Store.Settings.OverlayCorner)) : 0;
+            Row(t, "Hot corner: show all windows", ovCorner);
+            ovAnim = new CheckBox { Text = "Animations (magnify, slide, window overview)", AutoSize = true, Checked = Store.Settings.Animations };
+            Row(t, "Motion", ovAnim);
 
             Section(t, "Behaviour");
             maxClips = new NumericUpDown(); maxClips.Minimum = 50; maxClips.Maximum = 20000; maxClips.Increment = 100;
@@ -299,6 +322,11 @@ namespace StickyPro
             s.UserName = userName.Text.Trim();
             s.DockVisible = dockVisible.Checked;
             if (keepAwake.Checked != Awake.On) Awake.Set(keepAwake.Checked);
+            s.OverlayDock = ovDock.Checked; s.OverlayMenuBar = ovBar.Checked; s.OverlayMagnify = ovMagnify.Checked; s.OverlayAutoHide = ovAutoHide.Checked;
+            s.OverlayDockSize = (int)ovSize.Value; s.Animations = ovAnim.Checked;
+            s.OverlayHotCorner = ovCorner.SelectedIndex > 0;
+            if (ovCorner.SelectedIndex > 0) s.OverlayCorner = ovCorners[ovCorner.SelectedIndex];
+            if (ovOn.Checked != Overlay.On) Overlay.Set(ovOn.Checked); else Overlay.ApplySettings();
             s.NoteFontName = fontName.SelectedItem as string ?? "Segoe UI";
             s.NoteFontSize = (float)fontSize.Value;
             s.MaxClips = (int)maxClips.Value;
