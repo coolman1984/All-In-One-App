@@ -376,8 +376,11 @@ namespace StickyPro
         // the choice is kept in data-location.txt next to the exe, so the app finds it before loading anything.
         public static string LocationFile { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-location.txt"); } }
         public static string DefaultDir { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data"); } }
+        // "AllInOne.exe --data <folder>" uses that folder for this run only (portable use, tests).
+        public static string DirOverride;
         public static string DataFolder()
         {
+            if (!string.IsNullOrEmpty(DirOverride)) { Directory.CreateDirectory(DirOverride); return DirOverride; }
             try
             {
                 if (File.Exists(LocationFile))

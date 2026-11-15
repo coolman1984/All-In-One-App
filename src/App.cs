@@ -980,6 +980,15 @@ namespace StickyPro
             return f;
         }
 
+        // Replaces a note's text; an open note window shows it at once.
+        public void SetNoteText(Note n, string text)
+        {
+            NoteForm f;
+            if (noteForms.TryGetValue(n.Id, out f) && !f.IsDisposed) { f.SetPlainText(text); return; }
+            n.Text = text ?? ""; n.Rtf = ""; n.Rtl = Ui.IsRtl(n.Text);
+            n.Modified = Store.Now(); Store.MarkNotes(); Store.RaiseNotes();
+        }
+
         public void CloseNoteWindow(Note n)
         {
             NoteForm f;

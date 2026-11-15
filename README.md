@@ -40,6 +40,24 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
 
 ## New in this version
+- **Agents** (first page under Tools): chat with the Claude Code, Codex, Cline, Antigravity and OpenCode CLIs in 1, 2, 3, 4
+  or 6 side-by-side panes or a 2 x 2 / 3 x 2 grid. Put several agents in one chat: they answer in turn and see each other's
+  replies. Each chat has a folder and a mode (Ask = read only, Edit, Auto). Chats, favorites and history are saved in
+  `<data>\agents`; agent commands are in `agents.json` (edit it to add another CLI). "Chat with agents here" on folder menus.
+- **AI agents can use the app (MCP)**: `AllInOne.exe --mcp` is an MCP server (stdio). Settings > AI agents has copy buttons, or run
+  `claude mcp add --scope user all-in-one -- "C:\path\AllInOne.exe" --mcp`. Tools: app status, search everything, notes
+  (search, read, create, update, archive), tasks (search, create, update, finish), prompts (search, read, save, fill
+  blanks; also offered as MCP prompts), clipboard history (search, read, pin, folder, label, copy), favorite and recent
+  folders (favorite, color, tag, note, rename), coding agents (list, chats, read, ask one or more agents in a folder and
+  wait for the answers). The server talks to the running app over a local named pipe and starts the app when needed.
+- **Your look**: custom accent color, heading font and size, code font and size, corner roundness, card shadows, your app
+  name (title bar and sidebar) and your name.
+- **Sidebar you arrange**: right-click a page to rename, move, pin to Favorites or hide it; Settings > Customize sidebar.
+  The sidebar folds to icons with the round edge button; the quick launch bar hides the same way.
+- **Project folders shelf** (Terminals), **places sidebar** (Explorer: favorites, drives with free space, recent), and
+  shared favorites, colors, tags and notes for folders across Terminals, Explorer and Agents.
+- **Data folder**: Settings > Your data > Move data folder copies everything to a folder you choose (used after a restart).
+  `AllInOne.exe --data <folder>` uses a folder for one run (portable use).
 - **Wide-screen layout**: System > Processes has a Task-Manager-style performance strip (CPU and memory charts, disk bars)
   shown only on that tab, heat-map CPU / Memory / Disk cells, and Threads, Process and Location columns. Lists share extra width
   between their text columns (Processes, Startup, Cleanup, Big files, Chrome bookmarks, Uninstall, Activity, Tagged files).
@@ -82,7 +100,7 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - **Power tools**: always on top / see-through for any window, quick actions (awake, Wi-Fi, lock, sleep, flush DNS,
   restart Explorer, clear temp), hosts file editor (backup first, admin to save), "what is using this file".
 - **Shortcuts** page: edit every app key, make your own global launch keys, reference lists of in-app and Windows keys.
-- **Settings**: 6 color themes, light/dark, app font and size, quick launch on/off, keep awake.
+- **Settings**: 8 color themes or your own accent, light/dark, 3 designs, app / heading / code fonts, corners, shadows, names, quick launch on/off, keep awake.
 
 ## System monitor (main window > System monitor, or a floating card)
 - Processes: live CPU, memory (private working set, same as Task Manager), disk I/O; group by app; Delete key = End task.

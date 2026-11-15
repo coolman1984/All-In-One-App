@@ -17,6 +17,7 @@ namespace StickyPro
             bool startup = false, exit = false;
             string page = null;
             for (int i = 0; i < args.Length - 1; i++) if (args[i] == "--page") page = args[i + 1];
+            for (int i = 0; i < args.Length - 1; i++) if (args[i] == "--data") try { Store.DirOverride = Path.GetFullPath(args[i + 1]); } catch { }
             foreach (var a in args)
             {
                 string x = a.ToLowerInvariant();

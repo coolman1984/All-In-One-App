@@ -157,6 +157,27 @@ namespace StickyPro
             if (c.Title == null) c.Title = ""; if (c.Folder == null) c.Folder = ""; if (string.IsNullOrEmpty(c.Mode)) c.Mode = "edit";
         }
         public static void Raise() { var h = Changed; if (h != null) h(); }
+        // Chats being answered right now (Agents page or MCP agent_ask), and a chat changed outside its pane.
+        public static readonly HashSet<string> Busy = new HashSet<string>();
+        public static event Action<AgentChat> ChatUpdated;
+        public static void RaiseChat(AgentChat c) { var h = ChatUpdated; if (h != null) h(c); }
+
+        // What an agent has not seen yet: the user's new message, plus what the other agents answered since its last turn.
+        public static string PromptFor(AgentChat c, string agentId)
+        {
+            int seen; c.Seen.TryGetValue(agentId, out seen);
+            var news = c.Messages.Skip(Math.Min(seen, c.Messages.Count)).Where(m => (m.Role == "user" || m.Role == "agent") && !(m.Role == "agent" && m.Agent == agentId)).ToList();
+            if (news.Count == 1 && news[0].Role == "user") return news[0].Text;
+            var sb = new StringBuilder();
+            sb.Append("You are in a group chat with the user and other coding agents (" + string.Join(", ", c.Agents.Where(a => a != agentId).Select(NameOf)) + "), all working in this folder. New messages since your last turn:\n\n");
+            foreach (var m in news)
+            {
+                string t = m.Text.Length > 6000 ? m.Text.Substring(0, 6000) + "\n[...]" : m.Text;
+                sb.Append("[").Append(m.Role == "user" ? "User" : NameOf(m.Agent)).Append("]\n").Append(t).Append("\n\n");
+            }
+            sb.Append("Answer the user's latest message. Build on the other agents' answers instead of repeating them.");
+            return sb.ToString();
+        }
 
         public static AgentChat New(string folder, IEnumerable<string> agents)
         {
@@ -834,7 +855,7 @@ namespace StickyPro
         void SendInput()
         {
             string text = input.Text.Trim();
-            if (text.Length == 0 || Busy) return;
+            if (text.Length == 0 || Busy || AgentStore.Busy.Contains(Chat.Id)) { if (Chat != null && AgentStore.Busy.Contains(Chat.Id)) App.I.Status("This chat is being answered through MCP. Wait for it to finish."); return; }
             input.Clear();
             Send(text);
         }
@@ -844,6 +865,7 @@ namespace StickyPro
         {
             if (Busy || string.IsNullOrWhiteSpace(text)) return;
             var c = Chat;
+            if (AgentStore.Busy.Contains(c.Id)) { App.I.Status("This chat is being answered through MCP. Wait for it to finish."); return; }
             if (c.Agents.Count == 0) c.Agents.Add(AgentStore.Defs[0].Id);
             if (c.Folder.Length == 0 || !Directory.Exists(c.Folder))
             {
@@ -857,6 +879,7 @@ namespace StickyPro
             MetaStore.Touch("folders", c.Folder);
             queue.Clear();
             foreach (var a in c.Agents) queue.Enqueue(a);
+            AgentStore.Busy.Add(c.Id);
             send.Text = "Stop";
             tick.Start();
             RunNext();
@@ -870,21 +893,12 @@ namespace StickyPro
         }
 
         // What an agent has not seen yet: your new message, plus what the other agents answered since its last turn.
-        string BuildPrompt(string agentId)
-        {
-            var c = Chat; int seen; c.Seen.TryGetValue(agentId, out seen);
-            var news = c.Messages.Skip(Math.Min(seen, c.Messages.Count)).Where(m => (m.Role == "user" || m.Role == "agent") && !(m.Role == "agent" && m.Agent == agentId)).ToList();
-            if (news.Count == 1 && news[0].Role == "user") return news[0].Text;
-            var sb = new StringBuilder();
-            sb.Append("You are in a group chat with the user and other coding agents (" + string.Join(", ", c.Agents.Where(a => a != agentId).Select(AgentStore.NameOf)) + "), all working in this folder. New messages since your last turn:\n\n");
-            foreach (var m in news)
-            {
-                string t = m.Text.Length > 6000 ? m.Text.Substring(0, 6000) + "\n[...]" : m.Text;
-                sb.Append("[").Append(m.Role == "user" ? "User" : AgentStore.NameOf(m.Agent)).Append("]\n").Append(t).Append("\n\n");
-            }
-            sb.Append("Answer the user's latest message. Build on the other agents' answers instead of repeating them.");
-            return sb.ToString();
-        }
+        string BuildPrompt(string agentId) { return AgentStore.PromptFor(Chat, agentId); }
+
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); AgentStore.ChatUpdated += OnChatUpdated; }
+        protected override void OnHandleDestroyed(EventArgs e) { AgentStore.ChatUpdated -= OnChatUpdated; base.OnHandleDestroyed(e); }
+        // The chat was answered elsewhere (MCP agent_ask): show the new messages.
+        void OnChatUpdated(AgentChat c) { if (c == Chat && run == null) { view.Relayout(true); RaiseChanged(); } }
 
         void RunNext()
         {
@@ -918,6 +932,7 @@ namespace StickyPro
         }
         void Done()
         {
+            if (Chat != null) AgentStore.Busy.Remove(Chat.Id);
             runAgent = null; run = null;
             view.Working = null; view.LastTool = null; view.Relayout(false);
             send.Text = "Send"; tick.Stop();

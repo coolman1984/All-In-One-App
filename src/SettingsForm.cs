@@ -181,6 +181,18 @@ namespace StickyPro
             whereBar.Controls.Add(Ui.Btn("Move data folder...", delegate { MoveData(where); }));
             Row(t, "Data folder", whereBar);
 
+            Section(t, "AI agents (MCP)");
+            string exe = Application.ExecutablePath;
+            var mcpBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+            mcpBar.Controls.Add(Ui.Btn("Copy Claude Code command", delegate { App.I.CopyText("claude mcp add --scope user all-in-one -- \"" + exe + "\" --mcp"); App.I.Status("Copied. Run it in a terminal."); }));
+            mcpBar.Controls.Add(Ui.Btn("Copy Codex command", delegate { App.I.CopyText("codex mcp add all-in-one -- \"" + exe + "\" --mcp"); App.I.Status("Copied. Run it in a terminal."); }));
+            mcpBar.Controls.Add(Ui.Btn("Copy JSON config", delegate
+            {
+                App.I.CopyText("{\n  \"mcpServers\": {\n    \"all-in-one\": {\n      \"command\": \"" + exe.Replace("\\", "\\\\") + "\",\n      \"args\": [\"--mcp\"]\n    }\n  }\n}");
+                App.I.Status("Copied. Paste it into the agent's MCP settings (Cline, Antigravity, Cursor...).");
+            }));
+            Row(t, "Let any AI agent read and organize your notes, tasks, prompts, clips and folders, and ask the coding agents", mcpBar);
+
             Section(t, "Shortcuts  (click a box, press the keys; Backspace = off)");
             foreach (var a in Hotkeys.Actions)
             {
