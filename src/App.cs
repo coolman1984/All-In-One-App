@@ -70,8 +70,9 @@ namespace StickyPro
             {
                 Store.Settings.FirstRunDone = true;
                 Store.MarkSettings();
-                SetStartup(true);
+                if (!Install.InTemp) SetStartup(true);
                 if (Store.Prompts.Count == 0) SeedPrompts();
+                if (!Install.IsInstalledCopy && !Install.IsDevCopy) Ui.Later(800, () => Install.OfferOnFirstRun());
             }
             MigrateStartup();
             miStartup.Checked = IsStartup();
@@ -454,6 +455,7 @@ namespace StickyPro
             miStartup = new ToolStripMenuItem("Start with Windows");
             miStartup.Click += delegate { SetStartup(!IsStartup()); miStartup.Checked = IsStartup(); };
             menu.Items.Add(miStartup);
+            if (!Install.IsInstalledCopy && !Install.IsDevCopy) menu.Items.Add("Install for this Windows user...", null, delegate { Install.Run(true); });
             menu.Items.Add("Settings...", null, delegate { ShowSettings(null); });
             menu.Items.Add("Open data folder", null, delegate { try { Process.Start("explorer.exe", "\"" + Store.Dir + "\""); } catch { } });
             menu.Items.Add(new ToolStripSeparator());
@@ -551,8 +553,8 @@ namespace StickyPro
 
         // ---------- Start with Windows ----------
 
-        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string RunName = "AllInOne";
+        public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        public const string RunName = "AllInOne";
         const string OldRunName = "StickyNotesPro"; // name before the rename to "All in One"
 
         public static bool IsStartup()
@@ -566,6 +568,7 @@ namespace StickyPro
         {
             try
             {
+                if (Install.InTemp) return;
                 bool on;
                 using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) on = k != null && (k.GetValue(OldRunName) != null || k.GetValue(RunName) != null);
                 if (!on) return;
@@ -1091,6 +1094,14 @@ namespace StickyPro
         bool exitWaiting;
         bool exiting;
         void RecordingFinished() { Recorder.Finished -= RecordingFinished; exitWaiting = false; Exit(); }
+
+        // After installing: close this copy and start the installed one (it waits for this process to let go).
+        public void ExitForInstall(string installedExe)
+        {
+            Exit();
+            if (!exiting) return;
+            try { Process.Start(new ProcessStartInfo(installedExe, "--after-install") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(installedExe) }); } catch (Exception ex) { Log("Start installed copy: " + ex.Message); }
+        }
 
         public void Exit()
         {

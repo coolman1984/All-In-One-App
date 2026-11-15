@@ -31,13 +31,20 @@ namespace StickyPro
             // MCP server for AI agents (stdio). Runs as its own small process and talks to the running app.
             if (Array.Exists(args, a => a.ToLowerInvariant() == "--mcp")) { McpServer.Run(args); return; }
 
+            if (Array.Exists(args, a => a.ToLowerInvariant() == "--uninstall"))
+            {
+                Application.EnableVisualStyles();
+                Install.Uninstall();
+                return;
+            }
+
             if (exit)
             {
                 try { using (var ev = EventWaitHandle.OpenExisting(ExitEventName)) ev.Set(); } catch { }
                 return;
             }
 
-            bool elevated = Array.Exists(args, a => a.ToLowerInvariant() == "--elevated");
+            bool elevated = Array.Exists(args, a => a.ToLowerInvariant() == "--elevated" || a.ToLowerInvariant() == "--after-install");
             bool perf = Array.Exists(args, a => a.ToLowerInvariant() == "--perf");
             var mutex = new Mutex(false, MutexName);
             bool created;

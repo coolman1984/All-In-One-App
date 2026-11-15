@@ -123,7 +123,7 @@ namespace StickyPro
                     {
                         { "app", Ui.AppTitle }, { "data_folder", Store.Dir }, { "notes", Store.Notes.Count(n => !n.Archived) }, { "archived_notes", Store.Notes.Count(n => n.Archived) },
                         { "open_tasks", Store.Tasks.Count(t => !t.Done) }, { "prompts", Store.Prompts.Count }, { "clips", Store.Clips.Count },
-                        { "agent_chats", AgentStore.Chats.Count }, { "favorite_folders", MetaStore.Favorites("folders").Count }, { "now", Iso(DateTime.Now.Ticks) }
+                        { "agent_chats", AgentStore.Loaded ? AgentStore.Chats.Count : ChatFileCount() }, { "favorite_folders", MetaStore.Favorites("folders").Count }, { "now", Iso(DateTime.Now.Ticks) }
                     });
                 case "search_all": return SearchAll(a);
                 case "open_page":
@@ -333,6 +333,8 @@ namespace StickyPro
         }
 
         // ---------- Agents ----------
+        static int ChatFileCount() { try { string d = Path.Combine(AgentStore.Dir, "chats"); return Directory.Exists(d) ? Directory.GetFiles(d, "*.json").Length : 0; } catch { return 0; } }
+
         static void EnsureChats()
         {
             if (AgentStore.Loaded) return;

@@ -374,8 +374,11 @@ namespace StickyPro
 
         // Where all data lives. Default: "data" next to the exe. The user can choose any folder (Settings > Data);
         // the choice is kept in data-location.txt next to the exe, so the app finds it before loading anything.
-        public static string LocationFile { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-location.txt"); } }
-        public static string DefaultDir { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data"); } }
+        // Next to the exe when that folder can be written (portable); otherwise %LocalAppData%\AllInOne (see Install).
+        static string dataRoot;
+        static string DataRoot { get { if (dataRoot == null) dataRoot = Install.DataRoot(AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\')); return dataRoot; } }
+        public static string LocationFile { get { return Path.Combine(DataRoot, "data-location.txt"); } }
+        public static string DefaultDir { get { return Path.Combine(DataRoot, "data"); } }
         // "AllInOne.exe --data <folder>" uses that folder for this run only (portable use, tests).
         public static string DirOverride;
         public static string DataFolder()

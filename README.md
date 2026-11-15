@@ -39,6 +39,17 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
   "Copy as" text actions; multi-select copy; paste queue; skips copies marked private by password managers.
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
 
+## Share it with other people
+- Run `powershell -ExecutionPolicy Bypass -File tools\make-dist.ps1`. It makes `dist\All-in-One-portable.zip` (one exe plus
+  READ ME FIRST.txt) without touching the running app or your data.
+- It runs on any Windows 10 / 11 (64-bit) PC with nothing to install and no admin rights: it needs only .NET Framework 4.8,
+  which is part of Windows, and uses no other DLLs.
+- First start of a copied exe offers to install it for that Windows user (`%LocalAppData%\Programs\All in One`, Start menu,
+  Desktop, start with Windows, Settings > Apps entry that uninstalls it). Saying No keeps it portable.
+- Data: next to the exe when that folder is writable; otherwise (Program Files, run from inside a zip, installed copy)
+  `%LocalAppData%\AllInOne\data`.
+- The exe is not code-signed, so Windows SmartScreen may ask once: More info > Run anyway.
+
 ## New in this version
 - **Desktop overlay** (button at the top of the main window, tray menu, or Settings > Desktop overlay): a dock with
   magnifying icons, running-app dots, pinned apps (drop files on it to pin) and right-click window lists; a menu bar at
