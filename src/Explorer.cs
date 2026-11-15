@@ -541,6 +541,7 @@ namespace StickyPro
         // Only panes that are on screen keep a file watcher.
         void ApplyShown()
         {
+            if (panes == null || grid == null) return;   // Visible can change inside the constructor, before the panes exist
             int count = Math.Min(panes.Count, grid.Controls.Count);
             bool vis = Visible && !IsDisposed;
             for (int i = 0; i < panes.Count; i++) panes[i].SetShown(vis && i < count);

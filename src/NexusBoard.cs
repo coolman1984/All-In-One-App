@@ -231,6 +231,7 @@ namespace StickyPro
         {
             var g = e.Graphics;
             g.Clear(Parent != null ? Parent.BackColor : Ui.Bg);
+            if (header.Width <= Ui.S(40) || header.Height <= 0) return;   // not measured yet (first paint before layout)
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             var clip = e.ClipRectangle;
@@ -244,7 +245,7 @@ namespace StickyPro
 
         void Header(Graphics g)
         {
-            int limit = (!btnTerm.IsEmpty ? btnTerm.X : !btnNew.IsEmpty ? btnNew.X : bell.X) - Ui.S(12);
+            int limit = (btnTerm.Width > 0 ? btnTerm.X : btnNew.Width > 0 ? btnNew.X : bell.X) - Ui.S(12);
             string hello = "Welcome back, ", name = UserName();
             int hw = TextRenderer.MeasureText(g, hello, Ui.Title, Size.Empty, TextFormatFlags.NoPadding).Width;
             int nw = TextRenderer.MeasureText(g, name, Ui.Title, Size.Empty, TextFormatFlags.NoPadding).Width;
@@ -256,8 +257,8 @@ namespace StickyPro
             }
             TextRenderer.DrawText(g, "Here's what's happening on your PC today  ·  " + DateTime.Now.ToString("dddd, d MMMM"), Ui.Base, new Rectangle(0, Ui.S(40), Math.Max(Ui.S(80), limit), Ui.S(20)), Ui.Muted, L);
 
-            if (!btnTerm.IsEmpty) { var r = btnTerm; Ui.Shadow(g, r, Ui.S(10)); Outline(g, r, "", "term"); BtnText(g, r, "", "Terminals", Ui.Text); }
-            if (!btnNew.IsEmpty)
+            if (btnTerm.Width > 0) { var r = btnTerm; Ui.Shadow(g, r, Ui.S(10)); Outline(g, r, "", "term"); BtnText(g, r, "", "Terminals", Ui.Text); }
+            if (btnNew.Width > 0)
             {
                 var r = btnNew;
                 Ui.Shadow(g, r, Ui.S(10));
@@ -276,6 +277,7 @@ namespace StickyPro
                 using (var b = new SolidBrush(Blue)) g.FillEllipse(b, br);
                 TextRenderer.DrawText(g, dueToday > 9 ? "9+" : dueToday.ToString(), BadgeFont, br, Color.White, C);
             }
+            if (avatar.Width <= 0) return;
             Ui.Shadow(g, avatar, avatar.Width / 2);
             using (var b = new LinearGradientBrush(avatar, Ui.Mix(Ui.AccentFill, Color.White, 0.25), Ui.Sidebar, LinearGradientMode.ForwardDiagonal)) g.FillEllipse(b, avatar);
             using (var p = new Pen(Ui.Card, Ui.S(2))) g.DrawEllipse(p, avatar);

@@ -757,16 +757,31 @@ namespace StickyPro
             PaneGrip.Attach(mid, "prompts.list", Ui.S(160));
             PaneGrip.Attach(left, "prompts.cats", Ui.S(110));
 
+            // The editor is a TableLayoutPanel with AutoSize rows: double-buffer it and batch the pane changes
+            // into one layout pass, so live window resizing stays smooth.
+            try { typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(editor, true, null); } catch { }
             EventHandler layout = delegate
             {
-                bool compact = Width < Ui.S(850);
-                left.Visible = !compact;
-                compactCats.Visible = compact;
-                if (!compact) left.Width = PaneGrip.Size("prompts.cats", DockStyle.Left, Ui.S(200), Width / 2);
-                bool stacked = Width < Ui.S(600);
-                mid.Dock = stacked ? DockStyle.Top : DockStyle.Left;
-                if (stacked) mid.Height = PaneGrip.Size("prompts.list", DockStyle.Top, Ui.S(190), Height);
-                else mid.Width = PaneGrip.Size("prompts.list", DockStyle.Left, compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Ui.S(340), Width - (compact ? 0 : left.Width));
+                SuspendLayout();
+                try
+                {
+                    bool compact = Width < Ui.S(850);
+                    if (left.Visible == compact) left.Visible = !compact;
+                    if (compactCats.Visible != compact) compactCats.Visible = compact;
+                    if (!compact) { int lw = PaneGrip.Size("prompts.cats", DockStyle.Left, Ui.S(200), Width / 2); if (left.Width != lw) left.Width = lw; }
+                    bool stacked = Width < Ui.S(600);
+                    var md = stacked ? DockStyle.Top : DockStyle.Left;
+                    if (mid.Dock != md) mid.Dock = md;
+                    if (stacked) mid.Height = PaneGrip.Size("prompts.list", DockStyle.Top, Ui.S(190), Height);
+                    else
+                    {
+                        // Wide windows: the prompt list grows (about a quarter of the page, 340 to 560 px) instead of a fixed strip.
+                        int want = compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Math.Max(Ui.S(340), Math.Min(Ui.S(560), Width * 26 / 100));
+                        int mw = PaneGrip.Size("prompts.list", DockStyle.Left, want, Width - (compact ? 0 : left.Width));
+                        if (mid.Width != mw) mid.Width = mw;
+                    }
+                }
+                finally { ResumeLayout(true); }
             };
             Resize += layout;
             layout(this, EventArgs.Empty);
