@@ -77,7 +77,6 @@ namespace StickyPro
             try
             {
                 if (bar != null && !bar.IsDisposed) bar.Sample();
-                if (dock != null && !dock.IsDisposed) dock.RefreshWindows(false);
             }
             catch (Exception ex) { App.Log("Overlay foreground: " + ex.Message); }
         }
@@ -307,6 +306,12 @@ namespace StickyPro
         }
 
         public static void Close(IntPtr h) { N.PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero); }
+
+        public static void OpenStart()
+        {
+            N.keybd_event(0x11, 0, 0, UIntPtr.Zero); N.keybd_event(0x1B, 0, 0, UIntPtr.Zero);       // Ctrl down, Esc down
+            N.keybd_event(0x1B, 0, 2, UIntPtr.Zero); N.keybd_event(0x11, 0, 2, UIntPtr.Zero);       // Esc up, Ctrl up
+        }
         public static void Minimize(IntPtr h) { N.ShowWindow(h, 6); }
         public static bool IsTopmost(IntPtr h) { return (N.GetWindowLong(h, -20) & 0x8) != 0; }
         public static void SetTopmost(IntPtr h, bool on) { N.SetWindowPos(h, new IntPtr(on ? -1 : -2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }
@@ -342,14 +347,24 @@ namespace StickyPro
         static List<IntPtr> Bars()
         {
             var l = new List<IntPtr>();
-            N.EnumWindows((h, p) =>
-            {
-                var c = new StringBuilder(64); N.GetClassName(h, c, 64);
-                string s = c.ToString();
-                if (s == "Shell_TrayWnd" || s == "Shell_SecondaryTrayWnd") l.Add(h);
-                return true;
-            }, IntPtr.Zero);
+            IntPtr main = Main;
+            if (main != IntPtr.Zero) l.Add(main);
+            IntPtr h = IntPtr.Zero;
+            while ((h = N.FindWindowEx(IntPtr.Zero, h, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero) l.Add(h);
             return l;
+        }
+
+        static readonly Stopwatch clock = Stopwatch.StartNew();   // not Environment.TickCount: it turns negative after 24.9 days
+        static long revealUntil;
+        static bool revealing;
+        public static bool Revealed { get { return revealing && clock.ElapsedMilliseconds < revealUntil; } }
+
+        static void SetState(int state)
+        {
+            IntPtr tray = Main;
+            if (tray == IntPtr.Zero) return;
+            var b = Abd(tray); b.lParam = (IntPtr)state;
+            N.SHAppBarMessage(10 /*ABM_SETSTATE*/, ref b);
         }
 
         static N.APPBARDATA Abd(IntPtr h) { var a = new N.APPBARDATA(); a.cbSize = Marshal.SizeOf(typeof(N.APPBARDATA)); a.hWnd = h; return a; }
@@ -367,24 +382,46 @@ namespace StickyPro
                 Store.MarkSettings();
                 try { Store.SaveNow(); } catch { }   // so a crash can still put the taskbar back on the next start
             }
-            var b = Abd(tray); b.lParam = (IntPtr)1;   // ABS_AUTOHIDE
-            N.SHAppBarMessage(10 /*ABM_SETSTATE*/, ref b);
+            revealing = false;
+            SetState(1);   // ABS_AUTOHIDE: its strip goes back to windows
             foreach (var h in Bars()) N.ShowWindow(h, 0);
+            // Windows applies the auto-hide state a moment later and shows a 2 px strip again: hide that too.
+            Ui.Later(300, Enforce); Ui.Later(1000, Enforce);
         }
 
         // Explorer restarts or the auto-hide reveal can show it again.
         public static void Enforce()
         {
             if (!Store.Settings.OverlayTaskbarHidden) return;
-            foreach (var h in Bars()) if (N.IsWindowVisible(h)) N.ShowWindow(h, 0);
+            var bars = Bars();
+            if (revealing)
+            {
+                // The revealed taskbar stays while the mouse is on it (or on the menus it opened above it).
+                var p = Cursor.Position;
+                foreach (var h in bars) { N.RECT r; if (N.GetWindowRect(h, out r) && p.X >= r.Left && p.X < r.Right && p.Y >= r.Top - 2 && p.Y < r.Bottom) { revealUntil = clock.ElapsedMilliseconds + 1500; break; } }
+                if (Revealed) return;
+                revealing = false;
+                SetState(1);
+            }
+            foreach (var h in bars) if (N.IsWindowVisible(h)) N.ShowWindow(h, 0);
+        }
+
+        // The tray button: the real taskbar in full (notification icons, Wi-Fi, sound, clock) for a few seconds, then hidden
+        // again. In auto-hide state it would only show a 2 px strip, so it is switched to normal while revealed.
+        public static void Reveal()
+        {
+            if (!Store.Settings.OverlayTaskbarHidden) return;
+            revealUntil = clock.ElapsedMilliseconds + 6000;
+            if (!revealing) { revealing = true; SetState(0); }
+            foreach (var h in Bars()) N.ShowWindow(h, 5);
         }
 
         public static void Restore()
         {
             var s = Store.Settings;
             if (!s.OverlayTaskbarHidden) return;
-            IntPtr tray = Main;
-            if (tray != IntPtr.Zero) { var b = Abd(tray); b.lParam = (IntPtr)s.OverlayTaskbarState; N.SHAppBarMessage(10, ref b); }
+            revealing = false;
+            SetState(s.OverlayTaskbarState);
             foreach (var h in Bars()) N.ShowWindow(h, 5);
             s.OverlayTaskbarHidden = false;
             Store.MarkSettings();
@@ -400,12 +437,12 @@ namespace StickyPro
         class Item { public string Path = "", Args = "", Name = "", Match = "", Special; public bool Pinned; public List<WinInfo> Windows = new List<WinInfo>(); public RectangleF Rect; public float Scale = 1f; public long BounceStart; }
 
         readonly List<Item> items = new List<Item>();
-        readonly Timer anim = new Timer { Interval = 10 }, refresh = new Timer { Interval = 1000 }, edge = new Timer { Interval = 80 };
+        readonly Timer anim = new Timer { Interval = 16 }, refresh = new Timer { Interval = 1000 }, edge = new Timer { Interval = 50 };
         readonly Stopwatch clock = Stopwatch.StartNew();
         float mouseX = -1, hoverAmount, hideOffset;
-        bool mouseIn, hidden, fastTimer, appbar;
+        bool mouseIn, hidden, appbar;
         int hot = -1;
-        long leftAt, lastFrame;
+        long leftAt, lastFrame, lastShown;
         uint callback;
         string lastSignature = "";
         RectangleF panelRect;
@@ -520,6 +557,7 @@ namespace StickyPro
             if (IsDisposed) return;
             var wins = Wins.List();
             var list = new List<Item>();
+            list.Add(new Item { Special = "start", Name = "Start" });
             foreach (var d in Store.Settings.OverlayApps)
                 list.Add(new Item { Path = d.Path, Args = d.Args, Name = string.IsNullOrEmpty(d.Name) ? Wins.NameOf(d.Path) : d.Name, Match = Wins.Target(d.Path), Pinned = true });
             foreach (var w in wins)
@@ -530,9 +568,10 @@ namespace StickyPro
                 if (w.Path.EndsWith("explorer.exe", StringComparison.OrdinalIgnoreCase) && w.Class != "CabinetWClass") continue;
                 it.Windows.Add(w);
             }
-            list.RemoveAll(x => !x.Pinned && x.Windows.Count == 0);
+            list.RemoveAll(x => x.Special == null && !x.Pinned && x.Windows.Count == 0);
             list.Add(new Item { Special = "overview", Name = "All windows" });
             list.Add(new Item { Special = "trash", Path = "::{645FF040-5081-101B-9F08-00AA002F954E}", Name = "Recycle Bin" });
+            if (Store.Settings.OverlayTaskbarHidden) list.Add(new Item { Special = "tray", Name = "Windows tray (notification icons, Wi-Fi, sound, clock)" });
             string sig = string.Join("|", list.Select(x => x.Path + ":" + x.Windows.Count + ":" + x.Pinned));
             foreach (var x in list) { var old = items.FirstOrDefault(o => o.Path == x.Path && o.Special == x.Special); if (old != null) { x.Scale = old.Scale; x.BounceStart = x.Windows.Count > 0 && old.Windows.Count == 0 ? 0 : old.BounceStart; } }
             items.Clear(); items.AddRange(list);
@@ -548,22 +587,35 @@ namespace StickyPro
             return new RectangleF(Left + panelRect.Left, Top + top - Ui.S(4), panelRect.Width, panelRect.Bottom - top + Ui.S(8));
         }
 
-        void CheckEdge()
+        void CheckEdge() { CheckEdgeAt(Cursor.Position); }
+
+        void CheckEdgeAt(Point p)
         {
-            var p = Cursor.Position;
-            if (mouseIn)
+            long now = clock.ElapsedMilliseconds;
+            // A full-screen app or the revealed Windows taskbar: stay out of the way.
+            if (Wins.ForegroundIsFullscreen() || Taskbar.Revealed)
             {
-                // Mouse messages stop over transparent pixels, so the hover ends here, not on MouseLeave.
-                if (!HoverZone().Contains(p)) { mouseIn = false; hot = -1; leftAt = Environment.TickCount; StartAnim(); }
+                if (!hidden || mouseIn) { hidden = true; mouseIn = false; hot = -1; StartAnim(); }
+                return;
             }
-            bool full = Wins.ForegroundIsFullscreen();
-            bool wantHidden = full;
-            if (!full && Store.Settings.OverlayAutoHide && !mouseIn)
+            bool auto = Store.Settings.OverlayAutoHide;
+            // Auto-hide: touching the bottom edge of the screen anywhere brings the dock up at once.
+            bool edgeHit = auto && p.Y >= Bottom - 1 && p.X >= Left && p.X < Right;
+            // Mouse messages stop over transparent pixels, so hover is tracked here too, not only in OnMouseMove.
+            bool over = !hidden && HoverZone().Contains(p);
+            if (over || edgeHit)
             {
-                bool atEdge = p.Y >= Bottom - 2 && p.X >= Left + panelRect.Left && p.X <= Left + panelRect.Right;
-                if (atEdge) leftAt = Environment.TickCount;
-                wantHidden = Environment.TickCount - leftAt > 600;
+                lastShown = now;
+                float mx = p.X - Left;
+                if (!mouseIn || Math.Abs(mx - mouseX) > 0.5f)
+                {
+                    mouseIn = true; mouseX = mx;
+                    hot = over ? HitTest(new Point(p.X - Left, p.Y - Top)) : -1;
+                    StartAnim();
+                }
             }
+            else if (mouseIn) { mouseIn = false; hot = -1; leftAt = now; StartAnim(); }
+            bool wantHidden = auto && !mouseIn && now - lastShown > 400;
             if (wantHidden != hidden) { hidden = wantHidden; StartAnim(); }
         }
 
@@ -611,6 +663,8 @@ namespace StickyPro
         {
             if (it.Special == "overview") { Overlay.ShowOverview(); return; }
             if (it.Special == "trash") { Wins.Launch(it.Path, null); return; }
+            if (it.Special == "start") { Wins.OpenStart(); return; }
+            if (it.Special == "tray") { mouseIn = false; hot = -1; hidden = true; StartAnim(); Taskbar.Reveal(); return; }
             var live = it.Windows;
             if (live.Count == 0) { if (Wins.Launch(it.Path, it.Args)) { it.BounceStart = clock.ElapsedMilliseconds; StartAnim(); } return; }
             IntPtr fg = N.GetForegroundWindow();
@@ -666,14 +720,12 @@ namespace StickyPro
         {
             if (anim.Enabled) return;
             lastFrame = clock.ElapsedMilliseconds - 10;
-            if (!fastTimer) { N.timeBeginPeriod(1); fastTimer = true; }   // ~100 ticks a second instead of 64 while moving
             anim.Start();
         }
 
         void StopAnim()
         {
             anim.Stop();
-            if (fastTimer) { N.timeEndPeriod(1); fastTimer = false; }
         }
 
         void Step()
@@ -738,6 +790,7 @@ namespace StickyPro
         {
             if (i == 0) return false;
             var a = items[i - 1]; var c = items[i];
+            if (a.Special == "start") return true;
             if (c.Special != null && a.Special == null) return true;
             return a.Pinned && !c.Pinned && c.Special == null;
         }
@@ -797,7 +850,9 @@ namespace StickyPro
                     {
                         var it = items[i]; var r = it.Rect;
                         if (IsSepBefore(i)) { float sx = r.X - Base * 0.11f - Ui.S(6); g.DrawLine(sepPen, sx, pr.Y + Pad, sx, pr.Bottom - Pad); }
-                        if (it.Special == "overview") DrawGlyphTile(g, r);
+                        if (it.Special == "overview") DrawGlyphTile(g, r, "", false);
+                        else if (it.Special == "start") DrawStartTile(g, r, dark);
+                        else if (it.Special == "tray") DrawGlyphTile(g, r, "", true);
                         else g.DrawImage(Wins.Icon(it.Path, iconPx), r);
                         if (it.Windows.Count > 0) { float d = Math.Max(3f, 3.5f * Ui.Scale); g.FillEllipse(dotBrush, r.X + r.Width / 2 - d / 2, pr.Bottom - DotSpace - d / 2 - Ui.S(1), d, d); }
                     }
@@ -823,15 +878,32 @@ namespace StickyPro
             N.UpdateLayeredWindow(Handle, IntPtr.Zero, ref dst, ref size, memDC, ref src, 0, ref blend, 2);
         }
 
-        static void DrawGlyphTile(Graphics g, RectangleF r)
+        static void DrawGlyphTile(Graphics g, RectangleF r, string glyph, bool subtle)
         {
             var rr = Rectangle.Round(r);
+            bool dark = Ui.Dark;
             using (var path = Ui.Round(rr, Math.Max(2, (int)(rr.Width * 0.22f * Ui.RadiusScale))))
-            using (var br = new LinearGradientBrush(rr, Ui.Mix(Ui.AccentFill, Color.White, 0.25), Ui.AccentFill, 90f)) g.FillPath(br, path);
+            {
+                if (subtle) using (var br = new SolidBrush(dark ? Color.FromArgb(70, 255, 255, 255) : Color.FromArgb(150, 255, 255, 255))) g.FillPath(br, path);
+                else using (var br = new LinearGradientBrush(rr, Ui.Mix(Ui.AccentFill, Color.White, 0.25), Ui.AccentFill, 90f)) g.FillPath(br, path);
+            }
             var f = Ui.Icon((float)Math.Round(Math.Max(7f, rr.Width * 0.36f / Ui.Scale) * 2) / 2f);
-            using (var br = new SolidBrush(Color.White))
+            using (var br = new SolidBrush(subtle ? (dark ? Color.FromArgb(235, 235, 240) : Color.FromArgb(40, 40, 48)) : Color.White))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString("", f, br, r, sf);
+                g.DrawString(glyph, f, br, r, sf);
+        }
+
+        // Start button: four panes, like the Windows start button.
+        static void DrawStartTile(Graphics g, RectangleF r, bool dark)
+        {
+            float pad = r.Width * 0.2f, gap = Math.Max(1f, r.Width * 0.05f);
+            float s = (r.Width - pad * 2 - gap) / 2f;
+            var c1 = Color.FromArgb(0, 120, 212); var c2 = Color.FromArgb(70, 170, 255);
+            for (int i = 0; i < 4; i++)
+            {
+                var q = new RectangleF(r.X + pad + (i % 2) * (s + gap), r.Y + pad + (i / 2) * (s + gap), s, s);
+                using (var br = new LinearGradientBrush(RectangleF.Inflate(q, 1, 1), c2, c1, 45f)) g.FillRectangle(br, q);
+            }
         }
     }
 
@@ -1329,6 +1401,8 @@ namespace StickyPro
         [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
         [DllImport("user32.dll")] public static extern bool LockWorkStation();
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+        [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
         public delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time);
         [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint thread, uint flags);
         [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hook);

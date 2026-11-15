@@ -12,8 +12,6 @@ namespace StickyPro
     // <data>\security-warnings.log so nothing is lost.
     static class PopupHider
     {
-        static IntPtr hook;
-        static readonly WinEventProc proc = OnShow;   // kept alive: native code calls it
         static Timer sweep;
         static readonly Dictionary<int, bool> agentPid = new Dictionary<int, bool>();
         static readonly HashSet<IntPtr> logged = new HashSet<IntPtr>();
@@ -23,28 +21,19 @@ namespace StickyPro
         public static void Apply()
         {
             bool on = Store.Settings.HideSecurityPopups;
-            if (on && hook == IntPtr.Zero)
+            // A poll, not a system-wide event hook: a hook on window-show events receives every menu, tooltip and window of
+            // every app and slowed the whole PC (mouse and right-click stalled). One FindWindowEx call every 300 ms costs nothing.
+            if (on && sweep == null)
             {
-                hook = SetWinEventHook(0x8002, 0x8002, IntPtr.Zero, proc, 0, 0, 0);   // EVENT_OBJECT_SHOW, out of context
-                sweep = new Timer { Interval = 1500 };   // backup for anything the event missed
+                sweep = new Timer { Interval = 300 };
                 sweep.Tick += delegate { Sweep(); };
                 sweep.Start();
                 Sweep();
             }
-            else if (!on && hook != IntPtr.Zero)
-            {
-                UnhookWinEvent(hook); hook = IntPtr.Zero;
-                if (sweep != null) { sweep.Stop(); sweep.Dispose(); sweep = null; }
-            }
+            else if (!on && sweep != null) Stop();
         }
 
-        public static void Stop() { if (hook != IntPtr.Zero) { UnhookWinEvent(hook); hook = IntPtr.Zero; } }
-
-        static void OnShow(IntPtr h, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time)
-        {
-            if (obj != 0 || child != 0 || hwnd == IntPtr.Zero) return;   // windows only, not their parts
-            try { Check(hwnd); } catch { }
-        }
+        public static void Stop() { if (sweep != null) { sweep.Stop(); sweep.Dispose(); sweep = null; } }
 
         static void Sweep()
         {
@@ -63,6 +52,7 @@ namespace StickyPro
             var title = new StringBuilder(64);
             GetWindowText(hwnd, title, 64);
             if (title.ToString() != "Security Warning") return;
+            if (!IsWindowVisible(hwnd)) return;   // already hidden (the agent shows it again for a new warning)
             uint pid; GetWindowThreadProcessId(hwnd, out pid);
             if (!IsAgent((int)pid)) return;
             string text = DialogText(hwnd);
@@ -114,10 +104,7 @@ namespace StickyPro
             return string.Join(" | ", parts);
         }
 
-        delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time);
         delegate bool EnumProc(IntPtr h, IntPtr l);
-        [DllImport("user32.dll")] static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint thread, uint flags);
-        [DllImport("user32.dll")] static extern bool UnhookWinEvent(IntPtr hook);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder sb, int max);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
