@@ -31,6 +31,8 @@ namespace StickyPro
         readonly QuickDock dock;
         readonly NavItem navTerminals;
         readonly TerminalPage terminals;
+        readonly AgentsPage agents;
+        readonly NavItem navAgents;
 
         Panel PageWith(string title, Control inner)
         {
@@ -106,6 +108,8 @@ namespace StickyPro
             content.Controls.Add(shortcuts);
             terminals = new TerminalPage { Visible = false };
             content.Controls.Add(terminals);
+            agents = new AgentsPage();
+            content.Controls.Add(agents);
             Controls.Add(content);
 
             status = new Label();
@@ -200,6 +204,8 @@ namespace StickyPro
             navigation.Controls.Add(navHome);
             navTerminals = new NavItem("", "Terminals");
             navTerminals.Click += delegate { ShowPage("terminals"); };
+            navAgents = new NavItem("", "Agents");
+            navAgents.Click += delegate { ShowPage("agents"); };
             // Grouped sidebar (Dock Top stacks in reverse, so add bottom-up).
             navigation.Controls.Clear();
             var order = new List<Control>();
@@ -207,7 +213,7 @@ namespace StickyPro
             if (Ui.Nexus) order.Add(grp("General"));
             order.AddRange(new Control[] { navHome, navTasks, navNotes, navPrompts, navClips });
             if (Ui.Nexus) order.Add(grp("Tools"));
-            order.AddRange(new Control[] { navTerminals, navExplorer, navSnip, navChrome, navPower });
+            order.AddRange(new Control[] { navAgents, navTerminals, navExplorer, navSnip, navChrome, navPower });
             if (Ui.Nexus) order.Add(grp("System"));
             order.AddRange(new Control[] { navSystem, navCards, navActivity, navTagged });
             int navH = 0;
@@ -339,6 +345,7 @@ namespace StickyPro
                 navPower.Selected = target == "power"; power.Visible = target == "power";
                 navKeys.Selected = target == "shortcuts"; shortcuts.Visible = target == "shortcuts";
                 navTerminals.Selected = target == "terminals"; terminals.Visible = target == "terminals";
+                navAgents.Selected = target == "agents"; agents.Visible = target == "agents";
             });
             RefreshCurrent();
             FocusSearch();
@@ -384,6 +391,7 @@ namespace StickyPro
         public void SelectTask(TaskItem t) { ShowPage("tasks"); tasks.Select(t); }
         public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); }
         public void AddTerminalFolder(string folder) { ShowPage("terminals"); terminals.UseFolder(folder); }
+        public void AddAgentFolder(string folder) { ShowPage("agents"); agents.UseFolder(folder); }
         public void RefreshLaunchers() { shortcuts.RefreshLaunchers(); }
         public void SetDockVisible(bool v) { dock.Visible = v; PlaceToggles(null); }
 

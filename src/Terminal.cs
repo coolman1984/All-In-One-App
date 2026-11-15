@@ -160,6 +160,7 @@ namespace StickyPro
             items.Add("PWSH here", null, delegate { var f = Safe(folder); if (f != null) Open(f, ""); });
             items.Add("Claude here (in PWSH)", null, delegate { var f = Safe(folder); if (f != null) Open(f, "claude"); });
             items.Add("Add to my terminals workspace", null, delegate { var f = Safe(folder); if (f != null) App.I.AddTerminalFolder(f); });
+            items.Add("Chat with agents here", null, delegate { var f = Safe(folder); if (f != null) App.I.AddAgentFolder(f); });
         }
         static string Safe(Func<string> f) { try { var s = f(); return string.IsNullOrWhiteSpace(s) ? null : s; } catch { return null; } }
 

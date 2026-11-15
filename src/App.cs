@@ -942,6 +942,9 @@ namespace StickyPro
             ShowMain("terminals");
             main.AddTerminalFolder(folder);
         }
+        public void Status(string text) { if (main != null && !main.IsDisposed) main.Status(text); }
+        public void AddAgentFolder(string folder) { ShowMain("agents"); main.AddAgentFolder(folder); }
+        public void OpenInExplorerPage(string folder) { ShowMain("explorer"); main.OpenInExplorer(folder); }
 
         void ShowQuick(string mode)
         {
