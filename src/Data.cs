@@ -194,6 +194,7 @@ namespace StickyPro
         public bool OverlayOn;
         public bool OverlayDock = true, OverlayMenuBar = true, OverlayHotCorner = true, OverlayMagnify = true, OverlayAutoHide;
         public int OverlayDockSize = 28;     // icon size in px at 100 % scale (taskbar-like)
+        public bool HideSecurityPopups = true;   // hide the security agent's "Security Warning" pop-ups in the background
         public bool OverlayHideTaskbar = true;   // full-screen mode: hide the Windows taskbar while the overlay is on
         public bool OverlayTaskbarHidden;        // the overlay hid it (restored on the next start after a crash)
         public int OverlayTaskbarState;          // the taskbar's own auto-hide state before that

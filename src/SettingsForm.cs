@@ -15,7 +15,7 @@ namespace StickyPro
         readonly ComboBox headFont, monoFont, corner;
         readonly NumericUpDown headScale, monoSize;
         readonly CheckBox shadows;
-        readonly CheckBox ovOn, ovDock, ovBar, ovMagnify, ovAutoHide, ovAnim, ovTaskbar;
+        readonly CheckBox ovOn, ovDock, ovBar, ovMagnify, ovAutoHide, ovAnim, ovTaskbar, hidePopups;
         readonly ComboBox ovCorner;
         readonly NumericUpDown ovSize;
         static readonly string[] ovCorners = { "off", "topleft", "topright", "bottomleft", "bottomright" };
@@ -169,6 +169,8 @@ namespace StickyPro
             Row(t, "Motion", ovAnim);
 
             Section(t, "Behaviour");
+            hidePopups = new CheckBox { Text = "Hide \"Security Warning\" pop-ups", AutoSize = true, Checked = Store.Settings.HideSecurityPopups };
+            Row(t, "Pop-ups", hidePopups);
             maxClips = new NumericUpDown(); maxClips.Minimum = 50; maxClips.Maximum = 20000; maxClips.Increment = 100;
             maxClips.Value = Math.Max(50, Math.Min(20000, Store.Settings.MaxClips));
             Row(t, "Clipboard history size (items)", maxClips);
@@ -323,6 +325,7 @@ namespace StickyPro
             s.UserName = userName.Text.Trim();
             s.DockVisible = dockVisible.Checked;
             if (keepAwake.Checked != Awake.On) Awake.Set(keepAwake.Checked);
+            s.HideSecurityPopups = hidePopups.Checked; PopupHider.Apply();
             s.OverlayDock = ovDock.Checked; s.OverlayMenuBar = ovBar.Checked; s.OverlayHideTaskbar = ovTaskbar.Checked; s.OverlayMagnify = ovMagnify.Checked; s.OverlayAutoHide = ovAutoHide.Checked;
             s.OverlayDockSize = (int)ovSize.Value; s.Animations = ovAnim.Checked;
             s.OverlayHotCorner = ovCorner.SelectedIndex > 0;

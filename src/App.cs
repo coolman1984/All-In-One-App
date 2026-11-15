@@ -52,6 +52,7 @@ namespace StickyPro
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
             if (Store.Settings.KeepAwake) Awake.Set(true);
+            try { PopupHider.Apply(); } catch (Exception ex) { Log("Popup hider: " + ex.Message); }
 
             msg = new MsgWindow(this);
             var failed = RegisterHotkeys();
@@ -1122,6 +1123,7 @@ namespace StickyPro
             try { Native.RemoveClipboardFormatListener(msg.Handle); } catch { }
             foreach (int id in registered) Native.UnregisterHotKey(msg.Handle, id);
             try { Overlay.Shutdown(); } catch { }
+            try { PopupHider.Stop(); } catch { }
             tray.Visible = false;
             tray.ContextMenuStrip.Dispose();
             tray.Dispose();
