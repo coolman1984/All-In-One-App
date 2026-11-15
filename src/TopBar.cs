@@ -198,7 +198,7 @@ namespace StickyPro
             int lx = brandRect.Width >= Ui.S(150) ? Ui.S(16) : (brandRect.Width - logo.Width) / 2;
             g.DrawImage(logo, lx, (Height - logo.Height) / 2);
             if (brandRect.Width >= Ui.S(150))
-                TextRenderer.DrawText(g, App.Name, Ui.Big, new Rectangle(lx + logo.Width + Ui.S(10), 0, brandRect.Width - lx - logo.Width - Ui.S(12), Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, Ui.AppTitle, Ui.Big, new Rectangle(lx + logo.Width + Ui.S(10), 0, brandRect.Width - lx - logo.Width - Ui.S(12), Height), Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             foreach (var c in chips) if (!c.Bounds.IsEmpty && c.Bounds.IntersectsWith(e.ClipRectangle)) DrawChip(g, c);
             if (!moreRect.IsEmpty) DrawPill(g, moreRect, Color.FromArgb(70, 255, 255, 255), hover as string == "more", "+" + hidden.Count, null);
             foreach (var t in toggles) if (t.Visible) DrawToggle(g, t);
@@ -241,7 +241,7 @@ namespace StickyPro
             int lx = wide ? Ui.S(20) + off : off + (brandRect.Width - off - Ui.S(2) - logo.Width) / 2;
             g.DrawImage(logo, lx, (Height - logo.Height) / 2 + cy);
             if (wide)
-                TextRenderer.DrawText(g, App.Name, Ui.Title, new Rectangle(lx + logo.Width + Ui.S(10), cy, brandRect.Width - lx - logo.Width - Ui.S(14), Height), Ui.Navy ? Color.White : Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, Ui.AppTitle, Ui.Title, new Rectangle(lx + logo.Width + Ui.S(10), cy, brandRect.Width - lx - logo.Width - Ui.S(14), Height), Ui.Navy ? Color.White : Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             // Search
             if (!searchRect.IsEmpty)
             {

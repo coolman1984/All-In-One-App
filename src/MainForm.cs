@@ -59,7 +59,7 @@ namespace StickyPro
         public MainForm()
         {
             AutoScaleMode = AutoScaleMode.None;
-            Text = App.Name;
+            Text = Ui.AppTitle;
             Icon = App.AppIcon;
             Font = Ui.Base;
             BackColor = Ui.Bg;
@@ -206,19 +206,14 @@ namespace StickyPro
             navTerminals.Click += delegate { ShowPage("terminals"); };
             navAgents = new NavItem("", "Agents");
             navAgents.Click += delegate { ShowPage("agents"); };
-            // Grouped sidebar (Dock Top stacks in reverse, so add bottom-up).
-            navigation.Controls.Clear();
-            var order = new List<Control>();
-            Func<string, Control> grp = t => (Control)new NavGroup(t);
-            if (Ui.Nexus) order.Add(grp("General"));
-            order.AddRange(new Control[] { navHome, navTasks, navNotes, navPrompts, navClips });
-            if (Ui.Nexus) order.Add(grp("Tools"));
-            order.AddRange(new Control[] { navAgents, navTerminals, navExplorer, navSnip, navChrome, navPower });
-            if (Ui.Nexus) order.Add(grp("System"));
-            order.AddRange(new Control[] { navSystem, navCards, navActivity, navTagged });
-            int navH = 0;
-            for (int oi = order.Count - 1; oi >= 0; oi--) { order[oi].Dock = DockStyle.Top; navigation.Controls.Add(order[oi]); navH += order[oi].Height; }
-            navigation.AutoScrollMinSize = new Size(0, navH + Ui.S(6));
+            // Sidebar pages: your names, order, favorites and hidden pages come from Settings (right-click a page).
+            navList = navigation;
+            AddNavPage("dashboard", navHome, "General"); AddNavPage("tasks", navTasks, "General"); AddNavPage("notes", navNotes, "General");
+            AddNavPage("prompts", navPrompts, "General"); AddNavPage("clips", navClips, "General");
+            AddNavPage("agents", navAgents, "Tools"); AddNavPage("terminals", navTerminals, "Tools"); AddNavPage("explorer", navExplorer, "Tools");
+            AddNavPage("snip", navSnip, "Tools"); AddNavPage("chrome", navChrome, "Tools"); AddNavPage("power", navPower, "Tools");
+            AddNavPage("system", navSystem, "System"); AddNavPage("cards", navCards, "System"); AddNavPage("activity", navActivity, "System"); AddNavPage("tagged", navTagged, "System");
+            BuildNav();
             if (Ui.Nexus) { var support = new NavGroup("Support") { Dock = DockStyle.Bottom }; nav.Controls.Add(support); nav.Controls.SetChildIndex(support, 1); }
 
             Controls.Add(nav);
@@ -250,6 +245,86 @@ namespace StickyPro
 
         readonly EdgeToggle navToggle, dockToggle;
         Panel navPanel;
+
+        // ---------- Sidebar pages ----------
+        public class NavPage { public string Key, Glyph, Name, Group; public NavItem Item; }
+        readonly List<NavPage> navPages = new List<NavPage>();
+        Panel navList;
+        public List<NavPage> NavPages { get { return navPages; } }
+
+        void AddNavPage(string key, NavItem item, string group)
+        {
+            var p = new NavPage { Key = key, Glyph = item.Glyph, Name = item.Text, Group = group, Item = item };
+            navPages.Add(p);
+            item.MouseUp += (s, e) => { if (e.Button == MouseButtons.Right) NavMenu(p, item.PointToScreen(e.Location)); };
+        }
+
+        // Pages in display order: Favorites first, then General / Tools / System in your order.
+        List<KeyValuePair<string, List<NavPage>>> NavLayout(bool includeHidden) { return NavModel.Layout(navPages, NavState.Of(Store.Settings), includeHidden); }
+
+        public void BuildNav()
+        {
+            if (navList == null) return;
+            var order = new List<Control>();
+            foreach (var g in NavLayout(false))
+            {
+                if (Ui.Nexus) order.Add(new NavGroup(g.Key));
+                foreach (var p in g.Value) { p.Item.Text = Ui.PageName(p.Key, p.Name); navigationTips.SetToolTip(p.Item, p.Item.Text); order.Add(p.Item); }
+            }
+            navList.SuspendLayout();
+            foreach (var old in navList.Controls.OfType<NavGroup>().ToList()) { navList.Controls.Remove(old); old.Dispose(); }
+            navList.Controls.Clear();
+            int navH = 0;
+            // Dock Top stacks in reverse, so add bottom-up.
+            for (int oi = order.Count - 1; oi >= 0; oi--) { order[oi].Dock = DockStyle.Top; navList.Controls.Add(order[oi]); navH += order[oi].Height; }
+            navList.AutoScrollMinSize = new Size(0, navH + Ui.S(6));
+            navList.ResumeLayout(true);
+            if (topBar != null) topBar.Invalidate();
+        }
+
+        void NavMenu(NavPage p, Point at)
+        {
+            var s = Store.Settings;
+            var m = Ui.Menu();
+            m.Items.Add("Open", null, delegate { ShowPage(p.Key); });
+            m.Items.Add("Rename...", null, delegate
+            {
+                string v = Ui.Ask("Rename page", "Name in the sidebar (empty = " + p.Name + ")", Ui.PageName(p.Key, p.Name), this);
+                if (v == null) return;
+                v = v.Trim();
+                if (v.Length == 0 || v == p.Name) s.PageNames.Remove(p.Key); else s.PageNames[p.Key] = v;
+                NavChanged();
+            });
+            bool fav = s.NavFavorites.Contains(p.Key);
+            m.Items.Add(fav ? "Remove from favorites" : "Add to favorites", null, delegate { if (fav) s.NavFavorites.Remove(p.Key); else s.NavFavorites.Add(p.Key); NavChanged(); });
+            m.Items.Add("Move up", null, delegate { MoveNav(p, -1); });
+            m.Items.Add("Move down", null, delegate { MoveNav(p, 1); });
+            m.Items.Add("Hide from the sidebar", null, delegate { if (!s.NavHidden.Contains(p.Key)) s.NavHidden.Add(p.Key); NavChanged(); });
+            m.Items.Add(new ToolStripSeparator());
+            if (s.NavHidden.Count > 0)
+            {
+                var hidden = new ToolStripMenuItem("Show a hidden page");
+                foreach (var k in s.NavHidden.ToList())
+                {
+                    var hp = navPages.FirstOrDefault(x => x.Key == k); if (hp == null) continue;
+                    string key = k;
+                    hidden.DropDownItems.Add(Ui.PageName(hp.Key, hp.Name), null, delegate { s.NavHidden.Remove(key); NavChanged(); });
+                }
+                m.Items.Add(hidden);
+            }
+            m.Items.Add("Customize sidebar...", null, delegate { CustomizeNav(); });
+            m.Show(at);
+        }
+
+        // Moves a page inside its group (or inside Favorites).
+        void MoveNav(NavPage p, int delta) { if (NavModel.Move(navPages, NavState.Of(Store.Settings), p, delta)) NavChanged(); }
+
+        public void CustomizeNav()
+        {
+            using (var d = new SidebarDialog(this)) if (d.ShowDialog(this) == DialogResult.OK) NavChanged();
+        }
+
+        void NavChanged() { Store.MarkSettings(); BuildNav(); }
         bool NavCollapsed { get { int v; return Store.Settings.PaneSizes.TryGetValue("nav.collapsed", out v) && v == 1; } }
         void AdaptNav(Panel nav)
         {

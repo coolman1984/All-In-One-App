@@ -215,7 +215,7 @@ namespace StickyPro
             sb.Append("Folder: ").Append(c.Folder).Append("  \nAgents: ").Append(string.Join(", ", c.Agents.Select(NameOf))).Append("\n\n");
             foreach (var m in c.Messages)
             {
-                string who = m.Role == "user" ? "You" : m.Role == "agent" ? NameOf(m.Agent) : m.Role == "tool" ? NameOf(m.Agent) + " (tool)" : m.Role;
+                string who = m.Role == "user" ? Ui.UserName : m.Role == "agent" ? NameOf(m.Agent) : m.Role == "tool" ? NameOf(m.Agent) + " (tool)" : m.Role;
                 sb.Append("**").Append(who).Append("** - ").Append(new DateTime(m.Time).ToString("yyyy-MM-dd HH:mm")).Append("\n\n");
                 sb.Append(m.Role == "tool" ? "`" + m.Text + "`" : m.Text).Append("\n\n");
             }
@@ -662,7 +662,7 @@ namespace StickyPro
                 string who = chat.Agents.Count == 0 ? "an agent" : string.Join(" + ", chat.Agents.Select(AgentStore.NameOf));
                 TextRenderer.DrawText(g, "New chat with " + who, Ui.Big, new Rectangle(0, r.Height / 2 - Ui.S(40), r.Width, Ui.S(30)), Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                 TextRenderer.DrawText(g, "Folder: " + (chat.Folder.Length > 0 ? chat.Folder : "(choose one in the header)") + "\nType below. Enter sends, Shift+Enter makes a new line.", Ui.Small,
-                    new Rectangle(Ui.S(20), r.Height / 2 - Ui.S(4), r.Width - Ui.S(40), Ui.S(40)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak);
+                    new Rectangle(Ui.S(20), r.Height / 2 - Ui.S(4), r.Width - Ui.S(40), Math.Max(Ui.S(40), r.Height / 2)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak | TextFormatFlags.PathEllipsis);
                 return;
             }
             foreach (var it in items)

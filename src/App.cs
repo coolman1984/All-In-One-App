@@ -48,7 +48,7 @@ namespace StickyPro
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
             Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq";
-            Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
+            Ui.ApplyLook();
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
             if (Store.Settings.KeepAwake) Awake.Set(true);
@@ -486,8 +486,17 @@ namespace StickyPro
 
         // ---------- Settings / theme ----------
 
+        // Everything that changes how the main window is drawn; a change rebuilds the window.
+        static string LookKey()
+        {
+            var s = Store.Settings;
+            return string.Join("|", new object[] { s.Dark, s.Theme, s.Design, s.UiFont, s.UiFontSize, s.HeadingFont, s.HeadingScale, s.AccentColor, s.CornerRadius, s.Shadows, s.AppTitle, s.MonoFont, s.MonoFontSize,
+                string.Join(",", s.NavOrder), string.Join(",", s.NavHidden), string.Join(",", s.NavFavorites), string.Join(",", s.PageNames.Select(p => p.Key + "=" + p.Value)) });
+        }
+
         public void ShowSettings(IWin32Window owner)
         {
+            string before = LookKey();
             using (var f = new SettingsForm())
             {
                 if (f.ShowDialog(owner) != DialogResult.OK) return;
@@ -500,11 +509,8 @@ namespace StickyPro
             var failed = RegisterHotkeys();
             if (failed.Count > 0)
                 MessageBox.Show("These shortcuts are already used by another app and do not work:\n\n" + string.Join("\n", failed) + "\n\nPick other keys in Settings.", Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            bool fontChanged = Ui.Base.Size != Store.Settings.UiFontSize || (Store.Settings.UiFont.Length > 0 && Ui.FontName != Store.Settings.UiFont);
-            if (fontChanged) Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
             if (main != null && !main.IsDisposed) main.SetDockVisible(Store.Settings.DockVisible);
-            bool designChanged = Ui.Nexus != (Store.Settings.Design != "classic") || Ui.Navy != (Store.Settings.Design == "serq");
-            if (Ui.Dark != Store.Settings.Dark || Ui.ThemeIndex != Store.Settings.Theme || fontChanged || designChanged) ApplyTheme();
+            if (LookKey() != before) { Ui.ApplyLook(); ApplyTheme(); }
         }
 
         public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }

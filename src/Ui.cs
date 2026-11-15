@@ -34,16 +34,46 @@ namespace StickyPro
         public static Font Title = new Font(FontName, 17f, FontStyle.Bold);
         public static Font Kpi = new Font(FontName, 20f, FontStyle.Bold);
         // Interface font and size from Settings. Old fonts are not disposed (open windows may still use them).
-        public static void InitFonts(string name, float size)
+        public static void InitFonts(string name, float size) { InitFonts(name, size, "", 1f); }
+        // Heading font / scale drive page titles, card titles and big numbers (Big, Title, Metric, Kpi).
+        public static void InitFonts(string name, float size, string heading, float headingScale)
         {
             if (size < 8 || size > 16) size = 10f;
-            string family = string.IsNullOrEmpty(name) ? ChooseFont() : name;
-            try { using (var test = new Font(family, size)) if (!string.Equals(test.Name, family, StringComparison.OrdinalIgnoreCase)) family = ChooseFont(); } catch { family = ChooseFont(); }
-            float k = size / 10f;
+            if (float.IsNaN(headingScale) || headingScale < 0.85f || headingScale > 1.4f) headingScale = 1f;
+            string family = Installed(name) ? name : ChooseFont();
+            string head = Installed(heading) ? heading : family;
+            float k = size / 10f, h = k * headingScale;
             FontName = family;
             Base = new Font(family, size); Bold = new Font(family, size, FontStyle.Bold); Small = new Font(family, 8.5f * k);
-            Big = new Font(family, 14f * k, FontStyle.Bold); Metric = new Font(family, 24f * k, FontStyle.Bold);
-            Title = new Font(family, 17f * k, FontStyle.Bold); Kpi = new Font(family, 20f * k, FontStyle.Bold);
+            Big = new Font(head, 14f * h, FontStyle.Bold); Metric = new Font(head, 24f * h, FontStyle.Bold);
+            Title = new Font(head, 17f * h, FontStyle.Bold); Kpi = new Font(head, 20f * h, FontStyle.Bold);
+        }
+        public static bool Installed(string family)
+        {
+            if (string.IsNullOrEmpty(family)) return false;
+            try { using (var test = new Font(family, 10f)) return string.Equals(test.Name, family, StringComparison.OrdinalIgnoreCase); } catch { return false; }
+        }
+        // Look settings that are read while painting: custom accent, corner radius scale, card shadows.
+        public static Color? CustomAccent;
+        public static float RadiusScale = 1f;
+        public static bool Shadows = true;
+        public static void ApplyLook()
+        {
+            var s = Store.Settings;
+            CustomAccent = null;
+            if (!string.IsNullOrEmpty(s.AccentColor)) try { CustomAccent = ColorTranslator.FromHtml(s.AccentColor); } catch { }
+            RadiusScale = s.CornerRadius < 0 ? 1f : s.CornerRadius / 8f;
+            Shadows = s.Shadows;
+            InitFonts(s.UiFont, s.UiFontSize, s.HeadingFont, s.HeadingScale);
+        }
+        // Your name for the app (Settings > Names) or "All in One".
+        public static string AppTitle { get { return Store.Settings != null && !string.IsNullOrEmpty(Store.Settings.AppTitle) ? Store.Settings.AppTitle : App.Name; } }
+        // Your name (Settings > Names) or "You".
+        public static string UserName { get { return Store.Settings != null && !string.IsNullOrEmpty(Store.Settings.UserName) ? Store.Settings.UserName : "You"; } }
+        // Your name for a page in the sidebar, or the default.
+        public static string PageName(string key, string def)
+        {
+            string v; return Store.Settings != null && Store.Settings.PageNames.TryGetValue(key, out v) && !string.IsNullOrEmpty(v) ? v : def;
         }
 
         // Colour themes: the accent (and the classic sidebar colour) follow the theme.
@@ -73,7 +103,7 @@ namespace StickyPro
         // Soft drop shadow under a rounded card (SerQ look); a no-op in the other designs.
         public static void Shadow(Graphics g, Rectangle r, int radius)
         {
-            if (!Navy) return;
+            if (!Navy || !Shadows) return;
             var old = g.SmoothingMode; g.SmoothingMode = SmoothingMode.AntiAlias;
             int steps = 6;
             for (int i = steps; i >= 1; i--)
@@ -97,7 +127,7 @@ namespace StickyPro
             g.SmoothingMode = old;
         }
         public static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
-        static Color TB { get { return ThemeColor(ThemeIndex); } }
+        static Color TB { get { return CustomAccent ?? ThemeColor(ThemeIndex); } }
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
@@ -541,7 +571,7 @@ namespace StickyPro
         {
             var p = new GraphicsPath();
             if (r.Width <= 0 || r.Height <= 0) return p;
-            int d = Math.Max(1, rad * 2);
+            int d = Math.Max(1, (int)(rad * 2 * RadiusScale));
             if (d > r.Width) d = r.Width;
             if (d > r.Height) d = r.Height;
             p.AddArc(r.X, r.Y, d, d, 180, 90);

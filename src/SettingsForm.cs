@@ -11,7 +11,14 @@ namespace StickyPro
         readonly ComboBox theme, fontName, copyMode, colorTheme, uiFont, design;
         readonly NumericUpDown fontSize, maxClips, uiSize;
         readonly CheckBox snippets, startup, autoSave, autoCopy, activity, dockVisible, keepAwake;
-        readonly TextBox snipFolder;
+        readonly TextBox snipFolder, appTitle, userName;
+        readonly ComboBox headFont, monoFont, corner;
+        readonly NumericUpDown headScale, monoSize;
+        readonly CheckBox shadows;
+        readonly Button accentBtn;
+        readonly Control accentSwatch;
+        string accentHex = Store.Settings.AccentColor;
+        static readonly int[] cornerValues = { -1, 0, 4, 8, 12, 16 };
         readonly NumericUpDown fps;
         readonly Dictionary<string, HotkeyBox> boxes = new Dictionary<string, HotkeyBox>();
 
@@ -69,6 +76,47 @@ namespace StickyPro
             Row(t, "App font", uiFont);
             uiSize = new NumericUpDown { Minimum = 8, Maximum = 16, DecimalPlaces = 1, Increment = 0.5m, Value = (decimal)Math.Max(8f, Math.Min(16f, Store.Settings.UiFontSize)) };
             Row(t, "App font size (the window reopens)", uiSize);
+            headFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            headFont.Items.Add("(same as the app font)");
+            foreach (var n in new[] { "Segoe UI", "Segoe UI Semibold", "Segoe UI Variable Display", "Bahnschrift", "Calibri", "Cambria", "Georgia", "Arial", "Verdana", "Trebuchet MS", "Cascadia Code" })
+                if (Ui.Installed(n)) headFont.Items.Add(n);
+            int hf = headFont.Items.IndexOf(Store.Settings.HeadingFont); headFont.SelectedIndex = hf > 0 ? hf : 0;
+            Row(t, "Heading font (titles, big numbers)", headFont);
+            headScale = new NumericUpDown { Minimum = 85, Maximum = 140, Increment = 5, Value = (decimal)Math.Round(Math.Max(0.85f, Math.Min(1.4f, Store.Settings.HeadingScale)) * 100) };
+            Row(t, "Heading size (%)", headScale);
+            monoFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            monoFont.Items.Add("(default: Cascadia Mono / Consolas)");
+            foreach (var n in new[] { "Cascadia Mono", "Cascadia Code", "Consolas", "Lucida Console", "Courier New", "JetBrains Mono", "Fira Code", "Source Code Pro" })
+                if (Ui.Installed(n)) monoFont.Items.Add(n);
+            int mf = monoFont.Items.IndexOf(Store.Settings.MonoFont); monoFont.SelectedIndex = mf > 0 ? mf : 0;
+            Row(t, "Code font (agent chats, code blocks)", monoFont);
+            monoSize = new NumericUpDown { Minimum = 7, Maximum = 20, DecimalPlaces = 1, Increment = 0.5m, Value = (decimal)Math.Max(7f, Math.Min(20f, Store.Settings.MonoFontSize)) };
+            Row(t, "Code font size", monoSize);
+            var accentBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+            accentBtn = Ui.Btn("", delegate
+            {
+                using (var cd = new ColorDialog { FullOpen = true, Color = AccentNow() })
+                    if (cd.ShowDialog(this) == DialogResult.OK) { accentHex = ColorTranslator.ToHtml(Color.FromArgb(cd.Color.R, cd.Color.G, cd.Color.B)); ShowAccent(); }
+            });
+            accentSwatch = new Control { Size = Ui.S(30, 30), Margin = new Padding(0, Ui.S(2), Ui.S(6), 0) };
+            accentSwatch.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (var b = new SolidBrush(Ui.Card)) e.Graphics.FillRectangle(b, accentSwatch.ClientRectangle);
+                using (var path = Ui.Round(new Rectangle(1, 1, accentSwatch.Width - 3, accentSwatch.Height - 3), Ui.S(6)))
+                using (var b = new SolidBrush(AccentNow())) e.Graphics.FillPath(b, path);
+            };
+            accentBar.Controls.Add(accentSwatch);
+            accentBar.Controls.Add(accentBtn);
+            accentBar.Controls.Add(Ui.Btn("Reset", delegate { accentHex = ""; ShowAccent(); }));
+            ShowAccent();
+            Row(t, "Accent color", accentBar);
+            corner = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            corner.Items.AddRange(new object[] { "Design default", "Square", "Small", "Medium", "Large", "Extra round" });
+            corner.SelectedIndex = Math.Max(0, Array.IndexOf(cornerValues, Store.Settings.CornerRadius));
+            Row(t, "Corners", corner);
+            shadows = new CheckBox { Text = "Soft shadows under cards (SerQ design)", AutoSize = true, Checked = Store.Settings.Shadows };
+            Row(t, "Shadows", shadows);
             dockVisible = new CheckBox { Text = "Show the quick launch bar on the right", AutoSize = true, Checked = Store.Settings.DockVisible };
             Row(t, "Quick launch", dockVisible);
             keepAwake = new CheckBox { Text = "Keep the PC awake (no sleep, screen stays on)", AutoSize = true, Checked = Awake.On };
@@ -81,6 +129,20 @@ namespace StickyPro
             fontSize = new NumericUpDown(); fontSize.Minimum = 7; fontSize.Maximum = 36; fontSize.DecimalPlaces = 1; fontSize.Increment = 0.5m;
             fontSize.Value = (decimal)Math.Max(7f, Math.Min(36f, Store.Settings.NoteFontSize));
             Row(t, "Font size", fontSize);
+
+            Section(t, "Names and sidebar");
+            appTitle = new FluentTextBox { Text = Store.Settings.AppTitle };
+            Row(t, "App name (title bar, sidebar; empty = " + App.Name + ")", appTitle);
+            userName = new FluentTextBox { Text = Store.Settings.UserName };
+            Row(t, "Your name (agent chats and exports; empty = You)", userName);
+            var navBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+            navBar.Controls.Add(Ui.Btn("Customize sidebar...", delegate
+            {
+                var mf2 = Application.OpenForms.OfType<MainForm>().FirstOrDefault(f => !f.IsDisposed);
+                if (mf2 == null) { MessageBox.Show(this, "Open the main window first.", App.Name); return; }
+                using (var d = new SidebarDialog(mf2)) if (d.ShowDialog(this) == DialogResult.OK) { Store.MarkSettings(); mf2.BuildNav(); }
+            }));
+            Row(t, "Rename, reorder, hide or pin pages", navBar);
 
             Section(t, "Behaviour");
             maxClips = new NumericUpDown(); maxClips.Minimum = 50; maxClips.Maximum = 20000; maxClips.Increment = 100;
@@ -112,6 +174,12 @@ namespace StickyPro
             dataBar.Controls.Add(Ui.Btn("Back up all data...", delegate { Backup.Export(this); }));
             dataBar.Controls.Add(Ui.Btn("Restore a backup...", delegate { if (Backup.Import(this)) DialogResult = DialogResult.Cancel; }));
             Row(t, "Notes, prompts, clips, cards, settings", dataBar);
+            var whereBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+            var where = new Label { AutoSize = true, MaximumSize = new Size(Ui.S(280), 0), ForeColor = Ui.Muted, Text = Store.Dir, Margin = new Padding(0, Ui.S(6), Ui.S(8), Ui.S(4)) };
+            whereBar.Controls.Add(where); whereBar.SetFlowBreak(where, true);
+            whereBar.Controls.Add(Ui.Btn("Open", delegate { try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Store.Dir + "\""); } catch { } }));
+            whereBar.Controls.Add(Ui.Btn("Move data folder...", delegate { MoveData(where); }));
+            Row(t, "Data folder", whereBar);
 
             Section(t, "Shortcuts  (click a box, press the keys; Backspace = off)");
             foreach (var a in Hotkeys.Actions)
@@ -136,6 +204,31 @@ namespace StickyPro
                 foreach (Control child in t.Controls) if (child is CheckBox) child.MaximumSize = new Size(fieldWidth, 0);
             };
             Ui.Theme(this);
+        }
+
+        Color AccentNow()
+        {
+            if (!string.IsNullOrEmpty(accentHex)) try { return ColorTranslator.FromHtml(accentHex); } catch { }
+            return Ui.ThemeColor(colorTheme != null ? colorTheme.SelectedIndex : Store.Settings.Theme);
+        }
+
+        void ShowAccent()
+        {
+            if (accentSwatch != null) accentSwatch.Invalidate();
+            accentBtn.Text = string.IsNullOrEmpty(accentHex) ? "Theme color" : accentHex.ToUpperInvariant();
+        }
+
+        void MoveData(Label where)
+        {
+            using (var d = new FolderBrowserDialog { Description = "Choose the new data folder. Your data is copied there; the old files stay where they are.", ShowNewFolderButton = true })
+            {
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                string err = Store.MoveDataTo(d.SelectedPath);
+                if (err != null) { MessageBox.Show(this, "Could not move the data folder: " + err, App.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                where.Text = d.SelectedPath + "  (after restart)";
+                if (MessageBox.Show(this, "Your data was copied to:\n" + d.SelectedPath + "\n\nThe app uses it after a restart. Restart now?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    App.I.RestartNow();
+            }
         }
 
         static void Section(TableLayoutPanel t, string text)
@@ -183,6 +276,15 @@ namespace StickyPro
             s.Design = design.SelectedIndex == 2 ? "classic" : design.SelectedIndex == 1 ? "nexus" : "serq";
             s.UiFont = uiFont.SelectedIndex > 0 ? (string)uiFont.SelectedItem : "";
             s.UiFontSize = (float)uiSize.Value;
+            s.HeadingFont = headFont.SelectedIndex > 0 ? (string)headFont.SelectedItem : "";
+            s.HeadingScale = (float)headScale.Value / 100f;
+            s.MonoFont = monoFont.SelectedIndex > 0 ? (string)monoFont.SelectedItem : "";
+            s.MonoFontSize = (float)monoSize.Value;
+            s.AccentColor = accentHex ?? "";
+            s.CornerRadius = cornerValues[Math.Max(0, corner.SelectedIndex)];
+            s.Shadows = shadows.Checked;
+            s.AppTitle = appTitle.Text.Trim();
+            s.UserName = userName.Text.Trim();
             s.DockVisible = dockVisible.Checked;
             if (keepAwake.Checked != Awake.On) Awake.Set(keepAwake.Checked);
             s.NoteFontName = fontName.SelectedItem as string ?? "Segoe UI";
