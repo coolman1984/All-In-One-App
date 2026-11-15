@@ -7,8 +7,8 @@ using System.Windows.Forms;
 
 namespace StickyPro
 {
-    // Nexus-style home dashboard: title + actions, KPI cards with badges, live CPU/RAM bar chart,
-    // clipboard week bars, top memory apps table and a library donut. One owner-drawn control.
+    // Home dashboard (SerQ / Nexus designs): welcome header with actions, live overview area chart, library donut,
+    // four KPI cards, storage funnel and a top-apps list with status pills. One owner-drawn control.
     class NexusBoard : Control
     {
         class Hot { public Rectangle R; public string Key; public Action Run; }
@@ -17,23 +17,24 @@ namespace StickyPro
         Hot hover;
         int width = 800;
 
-        // Layout rectangles
-        Rectangle titleRect, btnPrimary, btnSecond, btnThird, chartCard, weekCard, appsCard, donutCard;
+        Rectangle header, btnNew, btnTerm, bell, avatar, overview, donut, storage, apps;
         readonly Rectangle[] kpi = new Rectangle[4];
 
         // Data
-        readonly string[] kpiLabel = { "CPU", "Memory", "Disk C", "Disk D" };
-        readonly string[] kpiGlyph = { "", "", "", "" };
-        readonly string[] kpiPage = { "system:procs", "system:procs", "system:drives", "system:drives" };
-        readonly string[] kpiValue = { "-", "-", "-", "-" }, kpiSub = { "", "", "", "" }, kpiBadge = { "", "", "", "" };
-        readonly bool[] kpiBad = new bool[4];
-        double[] cpu = new double[0], ram = new double[0];
-        readonly int[] week = new int[7];
-        readonly string[] weekDay = new string[7];
-        List<KeyValuePair<string, long>> apps = new List<KeyValuePair<string, long>>();
-        long memTotal = 1;
+        double[] cpu = new double[0];
+        double cpuNow; int memLoad; string memUsed = "-", memDelta = "", cpuAvg = "-", cpuDelta = "";
+        readonly string[] kpiLabel = { "Tasks due today", "Clips today", "Files opened today", "Tagged urgent" };
+        readonly string[] kpiGlyph = { "", "", "", "" };
+        readonly string[] kpiPage = { "tasks", "clips", "activity", "tagged" };
+        readonly int[] kpiValue = new int[4];
+        readonly string[] kpiNote = { "", "", "", "" };
+        readonly int[] kpiTrend = new int[4];   // 1 good (green), -1 bad (red), 0 neutral
         readonly int[] lib = new int[4];
-        static readonly string[] libName = { "Notes", "Prompts", "Clips", "Tasks" };
+        static readonly string[] libName = { "Notes", "Prompts", "Clips", "Open tasks" };
+        DriveSnapshot driveC, driveD;
+        List<KeyValuePair<string, long>> top = new List<KeyValuePair<string, long>>();
+        Dictionary<string, int> procCount = new Dictionary<string, int>();
+        int dueToday;
 
         public NexusBoard()
         {
@@ -41,329 +42,312 @@ namespace StickyPro
             AccessibleName = "Dashboard";
         }
 
+        static string UserName()
+        {
+            string n = Environment.UserName ?? "";
+            var parts = n.Split(new[] { '.', '_', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string best = parts.OrderByDescending(p => p.Length).FirstOrDefault() ?? n;
+            return best.Length == 0 ? "there" : char.ToUpperInvariant(best[0]) + best.Substring(1).ToLowerInvariant();
+        }
+
         // ---------- data ----------
         public void RefreshData()
         {
             cpu = ProcessSampler.CpuHistory.ToArray();
-            ram = ProcessSampler.RamHistory.ToArray();
-            double c = ProcessSampler.CpuTotal; int m = ProcessSampler.MemLoad;
-            kpiValue[0] = c.ToString("0") + "%"; kpiSub[0] = "Average " + (cpu.Length > 0 ? cpu.Average().ToString("0") : "0") + "% last 2 min";
-            kpiBadge[0] = Delta(cpu); kpiBad[0] = c > 85;
-            kpiValue[1] = m + "%"; kpiSub[1] = Fmt.Bytes((long)(ProcessSampler.MemTotal - ProcessSampler.MemAvail)) + " of " + Fmt.Bytes((long)ProcessSampler.MemTotal);
-            kpiBadge[1] = Delta(ram); kpiBad[1] = m > 85;
-            for (int i = 0; i < 2; i++)
-            {
-                var d = DriveSnapshot.Read(i == 0 ? "C" : "D");
-                kpiValue[2 + i] = d.Used < 0 ? "-" : d.Value.Replace(" free", "");
-                kpiSub[2 + i] = d.Used < 0 ? "Not available" : "free " + d.Detail;
-                kpiBadge[2 + i] = d.Used < 0 ? "" : (d.Used * 100).ToString("0") + "% used";
-                kpiBad[2 + i] = d.Used > 0.9;
-            }
-            var today = DateTime.Today;
-            for (int i = 0; i < 7; i++)
-            {
-                var day = today.AddDays(i - 6);
-                long a = day.Ticks, b = day.AddDays(1).Ticks;
-                week[i] = Store.Clips.Count(x => x.Time >= a && x.Time < b);
-                weekDay[i] = day.ToString("ddd");
-            }
-            apps = ProcessSampler.Last.GroupBy(p => p.Display).Select(g => new KeyValuePair<string, long>(g.Key, g.Sum(p => p.Mem))).OrderByDescending(k => k.Value).Take(5).ToList();
-            memTotal = Math.Max(1, (long)ProcessSampler.MemTotal);
+            var ram = ProcessSampler.RamHistory.ToArray();
+            cpuNow = ProcessSampler.CpuTotal; memLoad = ProcessSampler.MemLoad;
+            memUsed = Fmt.Bytes((long)(ProcessSampler.MemTotal - ProcessSampler.MemAvail));
+            memDelta = Delta(ram); cpuDelta = Delta(cpu);
+            cpuAvg = (cpu.Length > 0 ? cpu.Average() : cpuNow).ToString("0") + "%";
+
+            var facts = DashboardFacts.Read(Store.Now());
+            long today = DateTime.Today.Ticks, yesterday = DateTime.Today.AddDays(-1).Ticks;
+            int clipsY = Store.Clips.Count(c => c.Time >= yesterday && c.Time < today);
+            int filesY = Store.Activity.Where(a => a.Event == "Opened" && a.Time >= yesterday && a.Time < today).Select(a => a.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            int overdue = Store.Tasks.Count(t => !t.Done && t.Due > 0 && t.Due < today);
+            dueToday = facts.RemindersToday;
+            kpiValue[0] = facts.RemindersToday; kpiNote[0] = overdue > 0 ? overdue + " overdue" : "Nothing overdue"; kpiTrend[0] = overdue > 0 ? -1 : 1;
+            kpiValue[1] = facts.ClipsToday; kpiNote[1] = Vs(facts.ClipsToday, clipsY); kpiTrend[1] = facts.ClipsToday >= clipsY ? 1 : -1;
+            kpiValue[2] = facts.FilesToday; kpiNote[2] = Vs(facts.FilesToday, filesY); kpiTrend[2] = facts.FilesToday >= filesY ? 1 : -1;
+            kpiValue[3] = facts.Urgent; kpiNote[3] = Store.Tagged.Count + " tagged in total"; kpiTrend[3] = facts.Urgent > 0 ? -1 : 1;
+
             lib[0] = Store.Notes.Count; lib[1] = Store.Prompts.Count; lib[2] = Store.Clips.Count; lib[3] = Store.Tasks.Count(t => !t.Done);
+            driveC = DriveSnapshot.Read("C"); driveD = DriveSnapshot.Read("D");
+            var groups = ProcessSampler.Last.GroupBy(p => p.Display).ToList();
+            top = groups.Select(g => new KeyValuePair<string, long>(g.Key, g.Sum(p => p.Mem))).OrderByDescending(k => k.Value).Take(4).ToList();
+            procCount = groups.ToDictionary(g => g.Key ?? "", g => g.Count());
             Invalidate();
+        }
+
+        static string Vs(int now, int before)
+        {
+            if (before == 0) return now == 0 ? "Same as yesterday" : "↑ " + now + " vs yesterday";
+            int pct = (int)Math.Round((now - before) * 100.0 / before);
+            return (pct >= 0 ? "↑ " : "↓ ") + Math.Abs(pct) + "% vs yesterday";
         }
 
         static string Delta(double[] h)
         {
             if (h.Length < 6) return "";
-            double now = h.Skip(h.Length - 3).Average(), before = h.Take(Math.Min(10, h.Length - 3)).Average();
-            double d = now - before;
-            return (d >= 0 ? "+" : "") + d.ToString("0.0") + "%";
+            double d = h.Skip(h.Length - 3).Average() - h.Take(Math.Min(10, h.Length - 3)).Average();
+            return (d >= 0 ? "↑ " : "↓ ") + Math.Abs(d).ToString("0.0") + "% vs 2 min ago";
         }
 
         // ---------- layout ----------
-        public int Measure(int w)
+        // Lays out for a width (a small inner margin keeps the card shadows visible) and returns the height.
+        public int Measure(int full)
+        {
+            int m = Ui.S(8);
+            int h = Arrange(Math.Max(Ui.S(200), full - 2 * m));
+            var off = new Size(m, m);
+            header.Offset(m, m); btnNew.Offset(m, m); btnTerm.Offset(m, m); bell.Offset(m, m); avatar.Offset(m, m);
+            overview.Offset(m, m); donut.Offset(m, m); storage.Offset(m, m); apps.Offset(m, m);
+            for (int i = 0; i < 4; i++) kpi[i].Offset(m, m);
+            foreach (var hot in hots) hot.R = new Rectangle(hot.R.Location + off, hot.R.Size);
+            return h + 2 * m;
+        }
+
+        int Arrange(int w)
         {
             width = w;
             hots.Clear();
-            int gap = Ui.S(16), y = 0;
-            titleRect = new Rectangle(0, 0, w, Ui.S(56));
-            int bh = Ui.S(38);
-            int bw1 = TextRenderer.MeasureText("Launch terminals", Ui.Bold).Width + Ui.S(48);
-            int bw2 = TextRenderer.MeasureText("New task", Ui.Bold).Width + Ui.S(46);
-            int bw3 = TextRenderer.MeasureText("Search", Ui.Bold).Width + Ui.S(46);
-            bool roomy = w > Ui.S(640);
-            btnPrimary = roomy ? new Rectangle(w - bw1, Ui.S(8), bw1, bh) : Rectangle.Empty;
-            btnSecond = roomy ? new Rectangle(btnPrimary.X - Ui.S(10) - bw2, Ui.S(8), bw2, bh) : Rectangle.Empty;
-            btnThird = roomy && w > Ui.S(860) ? new Rectangle(btnSecond.X - Ui.S(10) - bw3, Ui.S(8), bw3, bh) : Rectangle.Empty;
-            if (roomy)
-            {
-                hots.Add(new Hot { R = btnPrimary, Key = "launch", Run = () => Term.LaunchCurrent() });
-                hots.Add(new Hot { R = btnSecond, Key = "newtask", Run = () => QuickTaskForm.Open() });
-                if (!btnThird.IsEmpty) hots.Add(new Hot { R = btnThird, Key = "search", Run = () => GlobalSearch.Open(FindForm()) });
-            }
-            y = titleRect.Bottom + Ui.S(8);
+            int gap = Ui.S(18);
+            header = new Rectangle(0, 0, w, Ui.S(70));
+            int bh = Ui.S(40), c = Ui.S(42);
+            avatar = new Rectangle(w - c, Ui.S(10), c, c);
+            bell = new Rectangle(avatar.X - Ui.S(12) - c, Ui.S(10), c, c);
+            int bw = TextRenderer.MeasureText("New task", Ui.Bold).Width + Ui.S(52);
+            int tw = TextRenderer.MeasureText("Terminals", Ui.Bold).Width + Ui.S(52);
+            bool roomy = w > Ui.S(700);
+            btnNew = roomy ? new Rectangle(bell.X - Ui.S(16) - bw, Ui.S(11), bw, bh) : Rectangle.Empty;
+            btnTerm = roomy && w > Ui.S(900) ? new Rectangle(btnNew.X - Ui.S(10) - tw, Ui.S(11), tw, bh) : Rectangle.Empty;
+            hots.Add(new Hot { R = bell, Key = "bell", Run = () => App.I.ShowMain("tasks") });
+            hots.Add(new Hot { R = avatar, Key = "avatar", Run = () => App.I.ShowSettings(FindForm()) });
+            if (roomy) hots.Add(new Hot { R = btnNew, Key = "new", Run = () => QuickTaskForm.Open() });
+            if (!btnTerm.IsEmpty) hots.Add(new Hot { R = btnTerm, Key = "term", Run = () => App.I.ShowMain("terminals") });
+            int y = header.Bottom + Ui.S(10);
 
-            int cols = w >= Ui.S(1000) ? 4 : w >= Ui.S(520) ? 2 : 1;
-            int kw = (w - gap * (cols - 1)) / cols, kh = Ui.S(138);
+            bool two = w >= Ui.S(900);
+            int left = two ? (w - gap) * 58 / 100 : w, right = two ? w - gap - left : w;
+            int h1 = Ui.S(340);
+            overview = new Rectangle(0, y, left, h1);
+            donut = two ? new Rectangle(left + gap, y, right, h1) : new Rectangle(0, y + h1 + gap, w, h1);
+            y = donut.Bottom + gap;
+            hots.Add(new Hot { R = new Rectangle(overview.X, overview.Y, overview.Width, Ui.S(60)), Key = "overview", Run = () => App.I.ShowMain("system:procs") });
+            hots.Add(new Hot { R = ViewAll(donut), Key = "donutall", Run = () => App.I.ShowMain("notes") });
+
+            int cols = w >= Ui.S(980) ? 4 : w >= Ui.S(500) ? 2 : 1;
+            int kw = (w - gap * (cols - 1)) / cols, kh = Ui.S(128);
             for (int i = 0; i < 4; i++)
             {
-                int c = i % cols, r = i / cols;
-                kpi[i] = new Rectangle(c * (kw + gap), y + r * (kh + gap), kw, kh);
+                kpi[i] = new Rectangle((i % cols) * (kw + gap), y + (i / cols) * (kh + gap), kw, kh);
                 string page = kpiPage[i];
                 hots.Add(new Hot { R = kpi[i], Key = "kpi" + i, Run = () => App.I.ShowMain(page) });
             }
             y += ((4 + cols - 1) / cols) * (kh + gap);
 
-            bool two = w >= Ui.S(900);
-            int big = two ? (w - gap) * 62 / 100 : w, small = two ? w - gap - big : w;
-            int ch = Ui.S(300);
-            chartCard = new Rectangle(0, y, big, ch);
-            weekCard = two ? new Rectangle(big + gap, y, small, ch) : new Rectangle(0, y + ch + gap, w, ch);
-            y = weekCard.Bottom + gap;
-            hots.Add(new Hot { R = new Rectangle(chartCard.X, chartCard.Y, chartCard.Width, Ui.S(52)), Key = "chart", Run = () => App.I.ShowMain("system:procs") });
-            hots.Add(new Hot { R = new Rectangle(weekCard.X, weekCard.Y, weekCard.Width, Ui.S(52)), Key = "week", Run = () => App.I.ShowMain("clips") });
+            int sl = two ? (w - gap) * 42 / 100 : w, sr = two ? w - gap - sl : w;
+            int h3 = Ui.S(330);
+            storage = new Rectangle(0, y, sl, h3);
+            apps = two ? new Rectangle(sl + gap, y, sr, h3) : new Rectangle(0, y + h3 + gap, w, h3);
+            y = apps.Bottom + gap;
+            hots.Add(new Hot { R = new Rectangle(storage.X, storage.Y, storage.Width, Ui.S(60)), Key = "storage", Run = () => App.I.ShowMain("system:drives") });
+            hots.Add(new Hot { R = ViewAll(apps), Key = "appsall", Run = () => App.I.ShowMain("system:procs") });
+            return y + Ui.S(6);
+        }
 
-            int th = Ui.S(70) + 5 * Ui.S(44) + Ui.S(10);
-            appsCard = new Rectangle(0, y, big, th);
-            donutCard = two ? new Rectangle(big + gap, y, small, th) : new Rectangle(0, y + th + gap, w, th);
-            y = donutCard.Bottom + gap;
-            hots.Add(new Hot { R = new Rectangle(appsCard.X, appsCard.Y, appsCard.Width, appsCard.Height), Key = "apps", Run = () => App.I.ShowMain("system:procs") });
-            return y;
+        static Rectangle ViewAll(Rectangle card)
+        {
+            int w = TextRenderer.MeasureText("View all", Ui.Bold).Width + Ui.S(28);
+            return new Rectangle(card.Right - Ui.S(22) - w, card.Y + Ui.S(22), w, Ui.S(34));
+        }
+
+        // ---------- paint helpers ----------
+        static readonly TextFormatFlags L = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
+        static readonly TextFormatFlags C = TextFormatFlags.NoPrefix | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
+        static Color Green { get { return Ui.Dark ? Color.FromArgb(52, 211, 153) : Color.FromArgb(18, 168, 110); } }
+        static Color Red { get { return Ui.Dark ? Color.FromArgb(251, 113, 133) : Color.FromArgb(229, 72, 77); } }
+        static Color Amber { get { return Color.FromArgb(245, 176, 40); } }
+        static Color Grey { get { return Ui.Dark ? Color.FromArgb(90, 98, 120) : Color.FromArgb(208, 213, 221); } }
+        static Color Blue { get { return Ui.Accent; } }
+
+        static Font emoji, badge, huge; static string fontKey;
+        static void Fonts()
+        {
+            string k = Ui.FontName + Ui.Kpi.Size;
+            if (k == fontKey) return;
+            fontKey = k;
+            emoji = new Font("Segoe UI Emoji", Ui.Title.SizeInPoints * 0.85f);
+            badge = new Font(Ui.FontName, 7f, FontStyle.Bold);
+            huge = new Font(Ui.FontName, Ui.Kpi.SizeInPoints * 1.25f, FontStyle.Bold);
+        }
+        static Font EmojiFont { get { Fonts(); return emoji; } }
+        static Font BadgeFont { get { Fonts(); return badge; } }
+        static Font HugeFont { get { Fonts(); return huge; } }
+
+        bool IsHot(string key) { return hover != null && hover.Key == key; }
+        int Radius { get { return Ui.S(Ui.Navy ? 18 : 14); } }
+
+        void Card(Graphics g, Rectangle r, bool hot) { Ui.FillCard(g, new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1), Radius, hot); }
+
+        void Title(Graphics g, Rectangle card, string title, string sub)
+        {
+            TextRenderer.DrawText(g, title, Ui.Big, new Rectangle(card.X + Ui.S(24), card.Y + Ui.S(20), card.Width - Ui.S(150), Ui.S(26)), Ui.Text, L);
+            TextRenderer.DrawText(g, sub, Ui.Small, new Rectangle(card.X + Ui.S(24), card.Y + Ui.S(46), card.Width - Ui.S(150), Ui.S(18)), Ui.Muted, L);
+        }
+
+        void Outline(Graphics g, Rectangle r, string text, string key)
+        {
+            using (var path = Ui.Round(r, Ui.S(10)))
+            {
+                using (var b = new SolidBrush(IsHot(key) ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
+                using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
+            }
+            TextRenderer.DrawText(g, text, Ui.Bold, r, Ui.Text, C);
+        }
+
+        static void Pill(Graphics g, Rectangle r, string text, Color tone)
+        {
+            using (var path = Ui.Round(r, Ui.S(8))) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 50 : 30, tone))) g.FillPath(b, path);
+            TextRenderer.DrawText(g, text, Ui.Small, r, tone, C);
+        }
+
+        static void IconTile(Graphics g, Rectangle r, string glyph, Color tone, float size)
+        {
+            using (var path = Ui.Round(r, Ui.S(12))) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 55 : 26, tone))) g.FillPath(b, path);
+            TextRenderer.DrawText(g, glyph, Ui.Icon(size), r, tone, C);
         }
 
         // ---------- paint ----------
-        static readonly TextFormatFlags L = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
-
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.Clear(Parent != null ? Parent.BackColor : Ui.Bg);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
-            // Title + subtitle
-            int hour = DateTime.Now.Hour;
-            string greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-            TextRenderer.DrawText(g, "Dashboard", Ui.Title, new Rectangle(0, Ui.S(2), titleRect.Width / 2, Ui.S(30)), Ui.Text, L);
-            TextRenderer.DrawText(g, greet + "  ·  " + DateTime.Now.ToString("dddd, d MMMM yyyy"), Ui.Base, new Rectangle(0, Ui.S(32), Math.Max(Ui.S(100), (btnThird.IsEmpty ? btnSecond.IsEmpty ? width : btnSecond.X : btnThird.X) - Ui.S(10)), Ui.S(20)), Ui.Muted, L);
-            if (!btnThird.IsEmpty) Button(g, btnThird, "", "Search", false, "search");
-            if (!btnSecond.IsEmpty) Button(g, btnSecond, "", "New task", false, "newtask");
-            if (!btnPrimary.IsEmpty) Button(g, btnPrimary, "", "Launch terminals", true, "launch");
-
-            for (int i = 0; i < 4; i++) if (kpi[i].IntersectsWith(e.ClipRectangle)) Kpi(g, i);
-            if (chartCard.IntersectsWith(e.ClipRectangle)) Chart(g);
-            if (weekCard.IntersectsWith(e.ClipRectangle)) Week(g);
-            if (appsCard.IntersectsWith(e.ClipRectangle)) Apps(g);
-            if (donutCard.IntersectsWith(e.ClipRectangle)) Donut(g);
+            var clip = e.ClipRectangle;
+            if (header.IntersectsWith(clip)) Header(g);
+            if (overview.IntersectsWith(clip)) Overview(g);
+            if (donut.IntersectsWith(clip)) Donut(g);
+            for (int i = 0; i < 4; i++) if (kpi[i].IntersectsWith(clip)) Kpi(g, i);
+            if (storage.IntersectsWith(clip)) Storage(g);
+            if (apps.IntersectsWith(clip)) Apps(g);
         }
 
-        bool IsHot(string key) { return hover != null && hover.Key == key; }
-
-        void Button(Graphics g, Rectangle r, string glyph, string text, bool primary, string key)
+        void Header(Graphics g)
         {
-            bool hot = IsHot(key);
-            using (var path = Ui.Round(r, Ui.S(10)))
+            int limit = (!btnTerm.IsEmpty ? btnTerm.X : !btnNew.IsEmpty ? btnNew.X : bell.X) - Ui.S(12);
+            string hello = "Welcome back, ", name = UserName();
+            int hw = TextRenderer.MeasureText(g, hello, Ui.Title, Size.Empty, TextFormatFlags.NoPadding).Width;
+            int nw = TextRenderer.MeasureText(g, name, Ui.Title, Size.Empty, TextFormatFlags.NoPadding).Width;
+            TextRenderer.DrawText(g, hello, Ui.Title, new Rectangle(0, Ui.S(6), Math.Min(hw + 2, limit), Ui.S(32)), Ui.Text, L);
+            if (hw + nw < limit)
             {
-                var fill = primary ? (hot ? Ui.AccentHover : Ui.AccentFill) : hot ? Ui.HoverBg : Ui.Card;
-                using (var b = new SolidBrush(fill)) g.FillPath(b, path);
-                if (!primary) using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
+                TextRenderer.DrawText(g, name, Ui.Title, new Rectangle(hw, Ui.S(6), nw + 2, Ui.S(32)), Ui.Accent, L);
+                if (hw + nw + Ui.S(30) < limit) TextRenderer.DrawText(g, "\U0001F44B", EmojiFont, new Rectangle(hw + nw + Ui.S(6), Ui.S(6), Ui.S(30), Ui.S(32)), Amber, L);
             }
-            var fore = primary ? Color.White : Ui.Text;
+            TextRenderer.DrawText(g, "Here's what's happening on your PC today  ·  " + DateTime.Now.ToString("dddd, d MMMM"), Ui.Base, new Rectangle(0, Ui.S(40), Math.Max(Ui.S(80), limit), Ui.S(20)), Ui.Muted, L);
+
+            if (!btnTerm.IsEmpty) { var r = btnTerm; Ui.Shadow(g, r, Ui.S(10)); Outline(g, r, "", "term"); BtnText(g, r, "", "Terminals", Ui.Text); }
+            if (!btnNew.IsEmpty)
+            {
+                var r = btnNew;
+                Ui.Shadow(g, r, Ui.S(10));
+                using (var path = Ui.Round(r, Ui.S(10)))
+                using (var b = new LinearGradientBrush(r, IsHot("new") ? Ui.AccentHover : Ui.Mix(Ui.AccentFill, Color.White, 0.12), IsHot("new") ? Ui.AccentPressed : Ui.AccentFill, LinearGradientMode.Vertical))
+                    g.FillPath(b, path);
+                BtnText(g, r, "", "New task", Color.White);
+            }
+            // Bell with a count badge, avatar with initials
+            Ui.Shadow(g, bell, bell.Width / 2);
+            using (var b = new SolidBrush(IsHot("bell") ? Ui.HoverBg : Ui.Card)) g.FillEllipse(b, bell);
+            TextRenderer.DrawText(g, "", Ui.Icon(13f), bell, Ui.Text, C);
+            if (dueToday > 0)
+            {
+                var br = new Rectangle(bell.Right - Ui.S(16), bell.Y - Ui.S(2), Ui.S(18), Ui.S(18));
+                using (var b = new SolidBrush(Blue)) g.FillEllipse(b, br);
+                TextRenderer.DrawText(g, dueToday > 9 ? "9+" : dueToday.ToString(), BadgeFont, br, Color.White, C);
+            }
+            Ui.Shadow(g, avatar, avatar.Width / 2);
+            using (var b = new LinearGradientBrush(avatar, Ui.Mix(Ui.AccentFill, Color.White, 0.25), Ui.Sidebar, LinearGradientMode.ForwardDiagonal)) g.FillEllipse(b, avatar);
+            using (var p = new Pen(Ui.Card, Ui.S(2))) g.DrawEllipse(p, avatar);
+            string init = UserName().Substring(0, 1);
+            TextRenderer.DrawText(g, init, Ui.Big, avatar, Color.White, C);
+        }
+
+        static void BtnText(Graphics g, Rectangle r, string glyph, string text, Color fore)
+        {
             int tw = TextRenderer.MeasureText(text, Ui.Bold).Width;
-            int x = r.X + (r.Width - tw - Ui.S(22)) / 2;
-            TextRenderer.DrawText(g, glyph, Ui.Icon(10.5f), new Rectangle(x, r.Y, Ui.S(16), r.Height), fore, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, text, Ui.Bold, new Rectangle(x + Ui.S(22), r.Y, tw + Ui.S(4), r.Height), fore, L);
+            int x = r.X + (r.Width - tw - Ui.S(24)) / 2;
+            TextRenderer.DrawText(g, glyph, Ui.Icon(10.5f), new Rectangle(x, r.Y, Ui.S(18), r.Height), fore, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, text, Ui.Bold, new Rectangle(x + Ui.S(24), r.Y, tw + Ui.S(4), r.Height), fore, L);
         }
 
-        void Card(Graphics g, Rectangle r, bool hot)
+        void Overview(Graphics g)
         {
-            var rr = new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1);
-            using (var path = Ui.Round(rr, Ui.S(14)))
+            var c = overview;
+            Card(g, c, IsHot("overview"));
+            Title(g, c, "System Overview", "Live CPU load of your PC, every 2 seconds");
+            var pill = new Rectangle(c.Right - Ui.S(24) - Ui.S(118), c.Y + Ui.S(22), Ui.S(118), Ui.S(32));
+            using (var path = Ui.Round(pill, Ui.S(9))) { using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path); using (var p = new Pen(Ui.Line)) g.DrawPath(p, path); }
+            TextRenderer.DrawText(g, "Last 2 min  ˅", Ui.Small, pill, Ui.Text, C);
+
+            int statsH = Ui.S(96);
+            var plot = new Rectangle(c.X + Ui.S(28), c.Y + Ui.S(86), c.Width - Ui.S(56), c.Height - Ui.S(86) - statsH - Ui.S(10));
+            var data = cpu.Length >= 2 ? cpu : new double[] { cpuNow, cpuNow };
+            double max = Math.Max(25, data.Max() * 1.25);
+            var pts = new PointF[data.Length];
+            for (int i = 0; i < data.Length; i++)
+                pts[i] = new PointF(plot.X + i * plot.Width / (float)(data.Length - 1), plot.Bottom - (float)(Math.Min(max, data[i]) / max * plot.Height));
+            using (var area = new GraphicsPath())
             {
-                using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path);
-                using (var p = new Pen(hot ? Ui.Mix(Ui.Line, Ui.Accent, 0.6) : Ui.Line)) g.DrawPath(p, path);
+                area.AddCurve(pts, 0.5f);
+                area.AddLine(pts[pts.Length - 1].X, plot.Bottom, pts[0].X, plot.Bottom);
+                area.CloseFigure();
+                var gr = new Rectangle(plot.X, plot.Y - 1, plot.Width, plot.Height + 2);
+                using (var b = new LinearGradientBrush(gr, Color.FromArgb(Ui.Dark ? 80 : 60, Blue), Color.FromArgb(0, Blue), LinearGradientMode.Vertical)) g.FillPath(b, area);
             }
+            using (var pen = new Pen(Blue, Ui.S(5) / 2f) { LineJoin = LineJoin.Round }) g.DrawCurve(pen, pts, 0.5f);
+            var end = pts[pts.Length - 1];
+            using (var b = new SolidBrush(Ui.Card)) g.FillEllipse(b, end.X - Ui.S(7), end.Y - Ui.S(7), Ui.S(14), Ui.S(14));
+            using (var b = new SolidBrush(Blue)) g.FillEllipse(b, end.X - Ui.S(5), end.Y - Ui.S(5), Ui.S(10), Ui.S(10));
+            // Callout with the live value
+            var co = new Rectangle((int)end.X - Ui.S(84), Math.Max(plot.Y - Ui.S(18), (int)end.Y - Ui.S(62)), Ui.S(78), Ui.S(48));
+            Ui.Shadow(g, co, Ui.S(10));
+            using (var path = Ui.Round(co, Ui.S(10))) { using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path); using (var p = new Pen(Ui.Line)) g.DrawPath(p, path); }
+            TextRenderer.DrawText(g, cpuNow.ToString("0") + "%", Ui.Bold, new Rectangle(co.X, co.Y + Ui.S(5), co.Width, Ui.S(20)), Ui.Text, C);
+            TextRenderer.DrawText(g, "✓ live CPU", Ui.Small, new Rectangle(co.X, co.Y + Ui.S(25), co.Width, Ui.S(16)), Green, C);
+
+            // Stats strip
+            var s = new Rectangle(c.X + Ui.S(16), c.Bottom - statsH - Ui.S(14), c.Width - Ui.S(32), statsH);
+            using (var path = Ui.Round(s, Ui.S(12))) using (var b = new SolidBrush(Ui.Navy ? Ui.Mix(Ui.Bg, Ui.Card, 0.45) : Ui.Bg)) g.FillPath(b, path);
+            int half = s.Width / 2;
+            Stat(g, new Rectangle(s.X, s.Y, half, s.Height), "Memory in use", memUsed, memLoad + "% of RAM   " + memDelta, memDelta.StartsWith("↑") ? Red : Green);
+            using (var p = new Pen(Ui.Line)) g.DrawLine(p, s.X + half, s.Y + Ui.S(16), s.X + half, s.Bottom - Ui.S(16));
+            Stat(g, new Rectangle(s.X + half, s.Y, half, s.Height), "Average CPU", cpuAvg, cpuDelta.Length > 0 ? cpuDelta : "collecting...", cpuDelta.StartsWith("↑") ? Red : Green);
         }
 
-        void CardTitle(Graphics g, Rectangle card, string title, string sub)
+        static void Stat(Graphics g, Rectangle r, string label, string value, string note, Color tone)
         {
-            TextRenderer.DrawText(g, title, Ui.Bold, new Rectangle(card.X + Ui.S(20), card.Y + Ui.S(14), card.Width - Ui.S(40), Ui.S(22)), Ui.Text, L);
-            if (sub != null) TextRenderer.DrawText(g, sub, Ui.Small, new Rectangle(card.X + Ui.S(20), card.Y + Ui.S(36), card.Width - Ui.S(40), Ui.S(16)), Ui.Muted, L);
-        }
-
-        void Badge(Graphics g, string text, int right, int y, Color tone)
-        {
-            if (string.IsNullOrEmpty(text)) return;
-            int w = TextRenderer.MeasureText(text, Ui.Small).Width + Ui.S(14), h = Ui.S(22);
-            var r = new Rectangle(right - w, y, w, h);
-            using (var path = Ui.Round(r, h / 2)) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 55 : 28, tone))) g.FillPath(b, path);
-            TextRenderer.DrawText(g, text, Ui.Small, r, tone, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-        }
-
-        static Color Good { get { return Ui.Dark ? Color.FromArgb(52, 211, 153) : Color.FromArgb(5, 150, 105); } }
-        static Color Bad { get { return Ui.Dark ? Color.FromArgb(251, 113, 133) : Color.FromArgb(225, 29, 72); } }
-
-        void Kpi(Graphics g, int i)
-        {
-            var r = kpi[i];
-            Card(g, r, IsHot("kpi" + i));
-            var tint = Ui.Series(i == 0 ? 0 : i == 1 ? 1 : i == 2 ? 4 : 2);
-            int pad = Ui.S(20), ic = Ui.S(36);
-            var ir = new Rectangle(r.X + pad, r.Y + Ui.S(18), ic, ic);
-            using (var path = Ui.Round(ir, Ui.S(10))) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 60 : 28, tint))) g.FillPath(b, path);
-            TextRenderer.DrawText(g, kpiGlyph[i], Ui.Icon(13f), ir, tint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g, kpiLabel[i], Ui.Base, new Rectangle(ir.Right + Ui.S(12), ir.Y, r.Width - ic - pad * 2 - Ui.S(40), ic), Ui.Muted, L);
-            TextRenderer.DrawText(g, "", Ui.Icon(10f), new Rectangle(r.Right - pad - Ui.S(18), ir.Y, Ui.S(18), ic), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
-            var vr = new Rectangle(r.X + pad, ir.Bottom + Ui.S(12), r.Width - pad * 2, Ui.S(36));
-            TextRenderer.DrawText(g, kpiValue[i], Ui.Kpi, vr, Ui.Text, L);
-            int vw = TextRenderer.MeasureText(kpiValue[i], Ui.Kpi).Width;
-            bool rising = kpiBadge[i].StartsWith("+");
-            Color tone = i < 2 ? (kpiBad[i] ? Bad : rising ? Bad : Good) : (kpiBad[i] ? Bad : Good);
-            if (i < 2 && kpiBadge[i].Length > 0 && !kpiBad[i] && rising && kpiBadge[i] == "+0.0%") tone = Good;
-            if (vw + Ui.S(110) < vr.Width) Badge(g, kpiBadge[i], vr.X + vw + Ui.S(12) + TextRenderer.MeasureText(kpiBadge[i], Ui.Small).Width + Ui.S(14), vr.Y + Ui.S(8), tone);
-            TextRenderer.DrawText(g, kpiSub[i], Ui.Small, new Rectangle(r.X + pad, vr.Bottom + Ui.S(6), r.Width - pad * 2, Ui.S(18)), Ui.Muted, L);
-        }
-
-        void Legend(Graphics g, Rectangle card, string[] names, Color[] colors)
-        {
-            int x = card.Right - Ui.S(20);
-            for (int i = names.Length - 1; i >= 0; i--)
-            {
-                int tw = TextRenderer.MeasureText(names[i], Ui.Small).Width;
-                x -= tw;
-                TextRenderer.DrawText(g, names[i], Ui.Small, new Rectangle(x, card.Y + Ui.S(16), tw + 2, Ui.S(18)), Ui.Muted, L);
-                x -= Ui.S(14);
-                using (var b = new SolidBrush(colors[i])) g.FillEllipse(b, x, card.Y + Ui.S(21), Ui.S(8), Ui.S(8));
-                x -= Ui.S(14);
-            }
-        }
-
-        void Grid(Graphics g, Rectangle plot, int lines, Func<int, string> label)
-        {
-            using (var pen = new Pen(Ui.Line) { DashStyle = DashStyle.Dash })
-                for (int k = 0; k <= lines; k++)
-                {
-                    int yy = plot.Bottom - k * plot.Height / lines;
-                    g.DrawLine(pen, plot.X, yy, plot.Right, yy);
-                    if (label != null) TextRenderer.DrawText(g, label(k), Ui.Small, new Rectangle(plot.X - Ui.S(40), yy - Ui.S(8), Ui.S(34), Ui.S(16)), Ui.Muted, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                }
-        }
-
-        void Chart(Graphics g)
-        {
-            var c = chartCard;
-            Card(g, c, IsHot("chart"));
-            CardTitle(g, c, "Live CPU & RAM", "Last " + (Math.Max(cpu.Length, ram.Length) * 2) + " seconds, every 2 s");
-            var a = Ui.Series(0); var b2 = Ui.Series(1);
-            Legend(g, c, new[] { "CPU", "RAM" }, new[] { a, b2 });
-            var plot = new Rectangle(c.X + Ui.S(56), c.Y + Ui.S(70), c.Width - Ui.S(76), c.Height - Ui.S(100));
-            Grid(g, plot, 4, k => (k * 25) + "%");
-            int n = Math.Min(30, Math.Max(cpu.Length, ram.Length));
-            if (n == 0) { TextRenderer.DrawText(g, "Collecting samples...", Ui.Base, plot, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter); return; }
-            float slot = plot.Width / 30f, bw = Math.Max(2f, slot * 0.28f);
-            for (int i = 0; i < n; i++)
-            {
-                double cv = cpu.Length > 0 ? cpu[Math.Max(0, cpu.Length - n + i)] : 0, rv = ram.Length > 0 ? ram[Math.Max(0, ram.Length - n + i)] : 0;
-                float x = plot.X + (30 - n + i) * slot + slot / 2f;
-                Bar(g, x - bw - 1, plot, cv, bw, a);
-                Bar(g, x + 1, plot, rv, bw, b2);
-            }
-        }
-
-        static void Bar(Graphics g, float x, Rectangle plot, double pct, float w, Color color)
-        {
-            float h = (float)(Math.Max(0, Math.Min(100, pct)) * plot.Height / 100.0);
-            if (h < 1) return;
-            var r = new RectangleF(x, plot.Bottom - h, w, h);
-            float rad = Math.Min(w / 2f, h);
-            using (var path = new GraphicsPath())
-            {
-                path.AddArc(r.X, r.Y, rad * 2, rad * 2, 180, 90);
-                path.AddArc(r.Right - rad * 2, r.Y, rad * 2, rad * 2, 270, 90);
-                path.AddLine(r.Right, r.Bottom, r.X, r.Bottom);
-                path.CloseFigure();
-                using (var b = new SolidBrush(color)) g.FillPath(b, path);
-            }
-        }
-
-        void Week(Graphics g)
-        {
-            var c = weekCard;
-            Card(g, c, IsHot("week"));
-            int total = week.Sum();
-            CardTitle(g, c, "Clipboard this week", total.ToString("N0") + " items copied in 7 days");
-            var plot = new Rectangle(c.X + Ui.S(24), c.Y + Ui.S(78), c.Width - Ui.S(48), c.Height - Ui.S(118));
-            int max = Math.Max(1, week.Max());
-            float slot = plot.Width / 7f, bw = Math.Min(Ui.S(34), slot * 0.62f);
-            for (int i = 0; i < 7; i++)
-            {
-                float x = plot.X + i * slot + (slot - bw) / 2;
-                var track = new Rectangle((int)x, plot.Y, (int)bw, plot.Height);
-                using (var path = Ui.Round(track, (int)(bw / 3))) using (var b = new SolidBrush(Ui.Track)) g.FillPath(b, path);
-                int h = (int)(plot.Height * week[i] / (double)max);
-                if (h > 0)
-                {
-                    var r = new Rectangle((int)x, plot.Bottom - h, (int)bw, h);
-                    using (var path = Ui.Round(r, Math.Min((int)(bw / 3), h / 2))) using (var b = new SolidBrush(i == 6 ? Ui.AccentFill : Ui.Mix(Ui.AccentFill, Ui.Card, 0.55))) g.FillPath(b, path);
-                }
-                if (i == 6 && week[i] > 0)
-                {
-                    string v = week[i].ToString();
-                    var tr = new Rectangle((int)(x + bw / 2) - Ui.S(20), plot.Bottom - h - Ui.S(26), Ui.S(40), Ui.S(20));
-                    using (var path = Ui.Round(tr, Ui.S(6))) using (var b = new SolidBrush(Ui.Text)) g.FillPath(b, path);
-                    TextRenderer.DrawText(g, v, Ui.Small, tr, Ui.Card, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-                }
-                TextRenderer.DrawText(g, weekDay[i] ?? "", Ui.Small, new Rectangle((int)(plot.X + i * slot), plot.Bottom + Ui.S(8), (int)slot, Ui.S(18)), i == 6 ? Ui.Text : Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
-            }
-        }
-
-        void Apps(Graphics g)
-        {
-            var c = appsCard;
-            Card(g, c, IsHot("apps"));
-            CardTitle(g, c, "Top memory apps", "Click to open the system monitor");
-            int x = c.X + Ui.S(20), w = c.Width - Ui.S(40), y = c.Y + Ui.S(62);
-            int col2 = x + w * 48 / 100, col3 = x + w * 70 / 100;
-            using (var b = new SolidBrush(Ui.Bg)) g.FillRectangle(b, c.X + 1, y, c.Width - 2, Ui.S(30));
-            TextRenderer.DrawText(g, "APPLICATION", Ui.Small, new Rectangle(x, y, col2 - x, Ui.S(30)), Ui.Muted, L);
-            TextRenderer.DrawText(g, "MEMORY", Ui.Small, new Rectangle(col2, y, col3 - col2, Ui.S(30)), Ui.Muted, L);
-            TextRenderer.DrawText(g, "SHARE OF RAM", Ui.Small, new Rectangle(col3, y, x + w - col3, Ui.S(30)), Ui.Muted, L);
-            y += Ui.S(34);
-            if (apps.Count == 0) { TextRenderer.DrawText(g, "Collecting...", Ui.Base, new Rectangle(x, y, w, Ui.S(40)), Ui.Muted, L); return; }
-            for (int i = 0; i < apps.Count; i++)
-            {
-                var a = apps[i];
-                var row = new Rectangle(x, y, w, Ui.S(44));
-                var tint = Ui.Series(i);
-                var dot = new Rectangle(x, row.Y + Ui.S(8), Ui.S(28), Ui.S(28));
-                using (var path = Ui.Round(dot, Ui.S(8))) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 60 : 30, tint))) g.FillPath(b, path);
-                string initial = string.IsNullOrEmpty(a.Key) ? "?" : a.Key.Substring(0, 1).ToUpperInvariant();
-                TextRenderer.DrawText(g, initial, Ui.Bold, dot, tint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-                TextRenderer.DrawText(g, a.Key, Ui.Bold, new Rectangle(dot.Right + Ui.S(10), row.Y, col2 - dot.Right - Ui.S(16), row.Height), Ui.Text, L);
-                TextRenderer.DrawText(g, Fmt.Bytes(a.Value), Ui.Base, new Rectangle(col2, row.Y, col3 - col2, row.Height), Ui.Text, L);
-                double share = a.Value / (double)memTotal;
-                int pw = Math.Max(Ui.S(40), x + w - col3 - Ui.S(56));
-                var track = new Rectangle(col3, row.Y + row.Height / 2 - Ui.S(4), pw, Ui.S(8));
-                using (var path = Ui.Round(track, Ui.S(4))) using (var b = new SolidBrush(Ui.Track)) g.FillPath(b, path);
-                int fw = Math.Max(Ui.S(8), (int)(pw * Math.Min(1, share * 3)));
-                using (var path = Ui.Round(new Rectangle(track.X, track.Y, fw, track.Height), Ui.S(4))) using (var b = new SolidBrush(tint)) g.FillPath(b, path);
-                TextRenderer.DrawText(g, (share * 100).ToString("0.0") + "%", Ui.Small, new Rectangle(track.Right + Ui.S(8), row.Y, Ui.S(50), row.Height), Ui.Muted, L);
-                if (i < apps.Count - 1) using (var p = new Pen(Ui.Line)) g.DrawLine(p, x, row.Bottom, x + w, row.Bottom);
-                y += row.Height;
-            }
+            int x = r.X + Ui.S(20), w = r.Width - Ui.S(30);
+            TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(x, r.Y + Ui.S(12), w, Ui.S(18)), Ui.Muted, L);
+            TextRenderer.DrawText(g, value, Ui.Kpi, new Rectangle(x, r.Y + Ui.S(30), w, Ui.S(34)), Ui.Text, L);
+            TextRenderer.DrawText(g, note, Ui.Small, new Rectangle(x, r.Y + Ui.S(66), w, Ui.S(18)), tone, L);
         }
 
         void Donut(Graphics g)
         {
-            var c = donutCard;
+            var c = donut;
             Card(g, c, false);
+            Title(g, c, "Your Library", "Everything you have saved");
+            Outline(g, ViewAll(c), "View all", "donutall");
             int total = lib.Sum();
-            CardTitle(g, c, "Your library", total.ToString("N0") + " items saved");
-            int size = Math.Min(c.Width - Ui.S(60), c.Height - Ui.S(150));
-            size = Math.Max(Ui.S(90), Math.Min(Ui.S(190), size));
-            var ring = new Rectangle(c.X + (c.Width - size) / 2, c.Y + Ui.S(66), size, size);
-            int thick = Math.Max(Ui.S(14), size / 7);
+            var colors = new[] { Green, Blue, Amber, Grey };
+            int legendW = Math.Min(Ui.S(190), c.Width / 2 - Ui.S(10));
+            int size = Math.Min(c.Height - Ui.S(120), c.Width - legendW - Ui.S(70));
+            size = Math.Max(Ui.S(100), Math.Min(Ui.S(200), size));
+            var ring = new Rectangle(c.X + Ui.S(30), c.Y + Ui.S(84) + (c.Height - Ui.S(104) - size) / 2, size, size);
+            int thick = Math.Max(Ui.S(16), size / 7);
             var inner = Rectangle.Inflate(ring, -thick / 2, -thick / 2);
             using (var p = new Pen(Ui.Track, thick)) g.DrawEllipse(p, inner);
             if (total > 0)
@@ -373,20 +357,105 @@ namespace StickyPro
                 {
                     if (lib[i] == 0) continue;
                     float sweep = 360f * lib[i] / total;
-                    using (var p = new Pen(Ui.Series(i), thick) { StartCap = LineCap.Flat, EndCap = LineCap.Flat }) g.DrawArc(p, inner, start, Math.Max(1f, sweep - 1.5f));
+                    using (var p = new Pen(colors[i], thick)) g.DrawArc(p, inner, start, Math.Max(1f, sweep - 2f));
                     start += sweep;
                 }
             }
-            TextRenderer.DrawText(g, total.ToString("N0"), Ui.Kpi, new Rectangle(ring.X, ring.Y + ring.Height / 2 - Ui.S(22), ring.Width, Ui.S(30)), Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-            TextRenderer.DrawText(g, "items", Ui.Small, new Rectangle(ring.X, ring.Y + ring.Height / 2 + Ui.S(8), ring.Width, Ui.S(16)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix);
-            // Legend 2x2
-            int ly = ring.Bottom + Ui.S(16), colW = (c.Width - Ui.S(40)) / 2;
+            TextRenderer.DrawText(g, total.ToString("N0"), Ui.Kpi, new Rectangle(ring.X, ring.Y + ring.Height / 2 - Ui.S(24), ring.Width, Ui.S(32)), Ui.Text, C);
+            TextRenderer.DrawText(g, "Total items", Ui.Small, new Rectangle(ring.X, ring.Y + ring.Height / 2 + Ui.S(8), ring.Width, Ui.S(16)), Ui.Muted, C);
+            int lx = ring.Right + Ui.S(30), lw = c.Right - Ui.S(28) - lx, ly = ring.Y + ring.Height / 2 - Ui.S(68);
             for (int i = 0; i < 4; i++)
             {
-                int lx = c.X + Ui.S(20) + (i % 2) * colW, yy = ly + (i / 2) * Ui.S(24);
-                using (var b = new SolidBrush(Ui.Series(i))) g.FillEllipse(b, lx, yy + Ui.S(5), Ui.S(9), Ui.S(9));
-                TextRenderer.DrawText(g, libName[i], Ui.Small, new Rectangle(lx + Ui.S(16), yy, colW / 2, Ui.S(20)), Ui.Muted, L);
-                TextRenderer.DrawText(g, lib[i].ToString("N0"), Ui.Bold, new Rectangle(lx + Ui.S(16), yy, colW - Ui.S(24), Ui.S(20)), Ui.Text, L | TextFormatFlags.Right);
+                int yy = ly + i * Ui.S(36);
+                using (var b = new SolidBrush(colors[i])) g.FillEllipse(b, lx, yy + Ui.S(7), Ui.S(11), Ui.S(11));
+                TextRenderer.DrawText(g, libName[i], Ui.Base, new Rectangle(lx + Ui.S(22), yy, lw - Ui.S(70), Ui.S(26)), Ui.Text, L);
+                TextRenderer.DrawText(g, lib[i].ToString("N0"), Ui.Bold, new Rectangle(lx, yy, lw, Ui.S(26)), Ui.Text, L | TextFormatFlags.Right);
+            }
+        }
+
+        void Kpi(Graphics g, int i)
+        {
+            var r = kpi[i];
+            Card(g, r, IsHot("kpi" + i));
+            var tones = new[] { Blue, Amber, Green, Red };
+            var ir = new Rectangle(r.X + Ui.S(22), r.Y + Ui.S(22), Ui.S(44), Ui.S(44));
+            IconTile(g, ir, kpiGlyph[i], tones[i], 14f);
+            int tx = ir.Right + Ui.S(16), tw = r.Right - tx - Ui.S(16);
+            TextRenderer.DrawText(g, kpiLabel[i], Ui.Base, new Rectangle(tx, r.Y + Ui.S(20), tw, Ui.S(20)), Ui.Text, L);
+            TextRenderer.DrawText(g, kpiValue[i].ToString("N0"), Ui.Kpi, new Rectangle(tx, r.Y + Ui.S(42), tw, Ui.S(34)), Ui.Text, L);
+            TextRenderer.DrawText(g, kpiNote[i], Ui.Small, new Rectangle(r.X + Ui.S(22), r.Bottom - Ui.S(36), r.Width - Ui.S(40), Ui.S(18)), kpiTrend[i] > 0 ? Green : kpiTrend[i] < 0 ? Red : Ui.Muted, L);
+        }
+
+        void Storage(Graphics g)
+        {
+            var c = storage;
+            Card(g, c, IsHot("storage"));
+            Title(g, c, "Storage", "Free space on your drives");
+            var d = driveC ?? DriveSnapshot.Read("C");
+            int x = c.X + Ui.S(28), colW = Math.Max(Ui.S(120), c.Width * 45 / 100);
+            string free = d.Used < 0 ? "-" : d.Value.Replace(" free", "");
+            TextRenderer.DrawText(g, free, HugeFont, new Rectangle(x, c.Y + Ui.S(88), colW, Ui.S(44)), Blue, L);
+            TextRenderer.DrawText(g, "Free on C:  " + d.Detail, Ui.Base, new Rectangle(x, c.Y + Ui.S(134), colW, Ui.S(20)), Ui.Muted, L);
+            using (var p = new Pen(Ui.Line)) g.DrawLine(p, x, c.Y + Ui.S(170), x + colW - Ui.S(20), c.Y + Ui.S(170));
+            var dd = driveD ?? DriveSnapshot.Read("D");
+            TextRenderer.DrawText(g, "Used on C:", Ui.Small, new Rectangle(x, c.Y + Ui.S(186), colW, Ui.S(18)), Ui.Muted, L);
+            TextRenderer.DrawText(g, d.Used < 0 ? "-" : (d.Used * 100).ToString("0.0") + "%", Ui.Kpi, new Rectangle(x, c.Y + Ui.S(206), colW, Ui.S(34)), Ui.Text, L);
+            string dn = dd.Used < 0 ? "No D: drive" : "D: " + dd.Value;
+            TextRenderer.DrawText(g, (d.Used > 0.9 ? "↑ almost full, clean up" : "✓ healthy") + "   ·   " + dn, Ui.Small, new Rectangle(x, c.Y + Ui.S(244), c.Width - Ui.S(56), Ui.S(18)), d.Used > 0.9 ? Red : Green, L);
+
+            // Funnel: total -> used -> free (decorative tiers in the accent colour)
+            int fx = c.X + colW + Ui.S(20), fw = c.Right - Ui.S(28) - fx;
+            if (fw < Ui.S(100)) return;
+            int top = c.Y + Ui.S(86), tierH = Ui.S(44), gap = Ui.S(6);
+            string[] labels = { "Total", "Used", "Free" };
+            for (int t = 0; t < 3; t++)
+            {
+                float wTop = fw * (1f - t * 0.2f), wBot = fw * (1f - (t + 1) * 0.2f) + Ui.S(10);
+                float cx = fx + fw / 2f, yy = top + t * (tierH + gap);
+                using (var path = new GraphicsPath())
+                {
+                    path.AddLine(cx - wTop / 2, yy, cx + wTop / 2, yy);
+                    path.AddLine(cx + wTop / 2, yy, cx + wBot / 2, yy + tierH);
+                    path.AddLine(cx + wBot / 2, yy + tierH, cx - wBot / 2, yy + tierH);
+                    path.CloseFigure();
+                    var shade = Ui.Mix(Ui.AccentFill, Color.White, 0.12 + t * 0.2);
+                    using (var b = new LinearGradientBrush(new RectangleF(cx - wTop / 2, yy, wTop, tierH + 1), Ui.Mix(shade, Color.White, 0.18), shade, LinearGradientMode.Vertical)) g.FillPath(b, path);
+                }
+                TextRenderer.DrawText(g, labels[t], Ui.Small, new Rectangle((int)(cx - wTop / 2), (int)yy, (int)wTop, tierH), Color.White, C);
+            }
+            int by = top + 3 * (tierH + gap);
+            TextRenderer.DrawText(g, d.Detail.Replace("of ", "") + " total", Ui.Small, new Rectangle(fx, by, fw, Ui.S(18)), Ui.Muted, C);
+        }
+
+        void Apps(Graphics g)
+        {
+            var c = apps;
+            Card(g, c, false);
+            Title(g, c, "Top Memory Apps", "Apps using the most RAM right now");
+            Outline(g, ViewAll(c), "View all", "appsall");
+            int x = c.X + Ui.S(24), w = c.Width - Ui.S(48), y = c.Y + Ui.S(82), rh = Ui.S(58);
+            if (top.Count == 0) { TextRenderer.DrawText(g, "Collecting...", Ui.Base, new Rectangle(x, y, w, Ui.S(40)), Ui.Muted, L); return; }
+            for (int i = 0; i < top.Count; i++)
+            {
+                var a = top[i];
+                var row = new Rectangle(x, y, w, rh);
+                var av = new Rectangle(x, row.Y + (rh - Ui.S(40)) / 2, Ui.S(40), Ui.S(40));
+                var tone = new[] { Blue, Green, Amber, Color.FromArgb(139, 92, 246) }[i % 4];
+                using (var b = new LinearGradientBrush(av, Ui.Mix(tone, Color.White, 0.25), tone, LinearGradientMode.ForwardDiagonal)) g.FillEllipse(b, av);
+                string name = string.IsNullOrEmpty(a.Key) ? "?" : a.Key;
+                TextRenderer.DrawText(g, name.Substring(0, 1).ToUpperInvariant(), Ui.Bold, av, Color.White, C);
+                int tx = av.Right + Ui.S(14), statusW = Ui.S(86), memW = Ui.S(84);
+                int textW = row.Right - statusW - memW - Ui.S(16) - tx;
+                int n; procCount.TryGetValue(a.Key ?? "", out n);
+                TextRenderer.DrawText(g, name, Ui.Bold, new Rectangle(tx, row.Y + Ui.S(9), textW, Ui.S(20)), Ui.Text, L);
+                TextRenderer.DrawText(g, n + (n == 1 ? " process" : " processes"), Ui.Small, new Rectangle(tx, row.Y + Ui.S(30), textW, Ui.S(18)), Ui.Muted, L);
+                TextRenderer.DrawText(g, Fmt.Bytes(a.Value), Ui.Base, new Rectangle(row.Right - statusW - memW - Ui.S(8), row.Y, memW, rh), Ui.Text, L | TextFormatFlags.Right);
+                long gb = 1L << 30;
+                string status = a.Value > 2 * gb ? "Heavy" : a.Value > gb / 2 ? "Normal" : "Light";
+                Color st = status == "Heavy" ? Amber : status == "Normal" ? Blue : Green;
+                Pill(g, new Rectangle(row.Right - statusW, row.Y + (rh - Ui.S(26)) / 2, statusW, Ui.S(26)), status, st);
+                if (i < top.Count - 1) using (var p = new Pen(Ui.Line)) g.DrawLine(p, tx, row.Bottom, row.Right, row.Bottom);
+                y += rh;
             }
         }
 

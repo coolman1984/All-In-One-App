@@ -47,7 +47,7 @@ namespace StickyPro
             Store.Load();
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Nexus = Store.Settings.Design != "classic";
+            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq";
             Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
@@ -503,19 +503,19 @@ namespace StickyPro
             bool fontChanged = Ui.Base.Size != Store.Settings.UiFontSize || (Store.Settings.UiFont.Length > 0 && Ui.FontName != Store.Settings.UiFont);
             if (fontChanged) Ui.InitFonts(Store.Settings.UiFont, Store.Settings.UiFontSize);
             if (main != null && !main.IsDisposed) main.SetDockVisible(Store.Settings.DockVisible);
-            bool designChanged = Ui.Nexus != (Store.Settings.Design != "classic");
+            bool designChanged = Ui.Nexus != (Store.Settings.Design != "classic") || Ui.Navy != (Store.Settings.Design == "serq");
             if (Ui.Dark != Store.Settings.Dark || Ui.ThemeIndex != Store.Settings.Theme || fontChanged || designChanged) ApplyTheme();
         }
 
         public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }
         public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, i)); Store.MarkSettings(); ApplyTheme(); }
-        public void SetDesign(string d) { Store.Settings.Design = d == "classic" ? "classic" : "nexus"; Store.MarkSettings(); ApplyTheme(); }
+        public void SetDesign(string d) { Store.Settings.Design = d == "classic" || d == "nexus" ? d : "serq"; Store.MarkSettings(); ApplyTheme(); }
 
         void ApplyTheme()
         {
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Nexus = Store.Settings.Design != "classic";
+            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq";
             Ui.ThemeMenu(tray.ContextMenuStrip);
             string page = null;
             bool wasVisible = false;

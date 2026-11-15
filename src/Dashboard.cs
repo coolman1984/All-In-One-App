@@ -47,7 +47,8 @@ namespace StickyPro
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics; g.Clear(Parent == null ? Ui.Bg : Parent.BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var path = Ui.Round(new Rectangle(0, 0, Width - 1, Height - 1), Ui.S(10)))
+            if (Ui.Navy) Ui.FillCard(g, new Rectangle(Ui.S(3), Ui.S(1), Width - Ui.S(7), Height - Ui.S(7)), Ui.S(14), hover || Focused);
+            else using (var path = Ui.Round(new Rectangle(0, 0, Width - 1, Height - 1), Ui.S(10)))
             { using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path); using (var p = new Pen(hover || Focused ? Ui.Accent : Ui.Line)) g.DrawPath(p, path); }
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
             TextRenderer.DrawText(g, Text, Ui.Small, new Rectangle(Ui.S(14), Ui.S(10), Width - Ui.S(28), Ui.S(20)), Ui.Muted, flags);
@@ -215,7 +216,7 @@ namespace StickyPro
             if (Ui.Nexus)
             {
                 // White rounded cards, one per section.
-                gap = Ui.S(16); colW = (width - gap * (columns - 1)) / columns;
+                gap = Ui.S(18); colW = (width - gap * (columns - 1)) / columns;
                 foreach (var s in sections)
                 {
                     int c = columns == 3 ? s.Column : columns == 2 ? (s.Column == 0 ? 0 : 1) : 0, x = c * (colW + gap);
@@ -257,12 +258,8 @@ namespace StickyPro
             }
             if (Ui.Nexus)
                 foreach (var s in sections)
-                    if (s.Card.IntersectsWith(clip))
-                        using (var path = Ui.Round(new Rectangle(s.Card.X, s.Card.Y, s.Card.Width - 1, s.Card.Height - 1), Ui.S(14)))
-                        {
-                            using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path);
-                            using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
-                        }
+                    if (Rectangle.Inflate(s.Card, Ui.S(8), Ui.S(8)).IntersectsWith(clip))
+                        Ui.FillCard(g, new Rectangle(s.Card.X, s.Card.Y, s.Card.Width - 1, s.Card.Height - 1), Ui.S(Ui.Navy ? 18 : 14), false);
             if (welcome.Width > 0 && welcome.IntersectsWith(clip))
             {
                 using (var path = Ui.Round(welcome, Ui.S(8))) { using (var b = new SolidBrush(Ui.SelBg)) g.FillPath(b, path); }

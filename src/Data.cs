@@ -166,7 +166,8 @@ namespace StickyPro
         public List<string> Swatches = new List<string>();
         public bool WelcomeHidden;
         public Dictionary<string, int> PaneSizes = new Dictionary<string, int>();
-        public string Design = "";           // "" (not chosen yet -> nexus) | nexus | classic
+        public string Design = "";           // "" (not chosen yet -> serq) | serq | nexus | classic
+        public int DesignRev;                // 2 = the SerQ default was applied once
         public List<TermWorkspace> TermWorkspaces = new List<TermWorkspace>();
         public int TermLast;
         public List<string> TermRecent = new List<string>();
@@ -286,8 +287,9 @@ namespace StickyPro
             foreach (var w in Settings.TermWorkspaces) { if (w.Panes == null) w.Panes = new List<TermPane>(); w.Panes.RemoveAll(p => p == null); }
             if (Settings.TermRecent == null) Settings.TermRecent = new List<string>();
             if (string.IsNullOrEmpty(Settings.TermShell)) Settings.TermShell = "pwsh";
-            // New design: switch once to the Nexus look with its indigo accent; "classic" stays available in Settings.
-            if (string.IsNullOrEmpty(Settings.Design)) { Settings.Design = "nexus"; Settings.Theme = 6; }
+            // New design: switch once to the SerQ look (navy sidebar, blue accent); Nexus and Classic stay available in Settings.
+            if (string.IsNullOrEmpty(Settings.Design) || (Settings.DesignRev < 2 && Settings.Design == "nexus")) { Settings.Design = "serq"; Settings.Theme = Ui.SerqTheme; }
+            Settings.DesignRev = 2;
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
             if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
 

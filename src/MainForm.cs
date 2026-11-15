@@ -126,6 +126,21 @@ namespace StickyPro
             nav.Width = Ui.S(230);
             nav.BackColor = Ui.Sidebar; nav.ForeColor = Ui.SidebarText;
             nav.Padding = new Padding(0, Ui.S(6), 0, Ui.S(6));
+            if (Ui.Navy)
+            {
+                // Floating navy card: continues the rounded top drawn by the top bar, rounded at the bottom.
+                nav.BackColor = Ui.Bg;
+                nav.Padding = new Padding(Ui.S(12), Ui.S(4), Ui.S(2), Ui.S(26));
+                nav.Resize += delegate { nav.Invalidate(); };
+                nav.Paint += (s, e) =>
+                {
+                    var g = e.Graphics; g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    var r = new Rectangle(Ui.S(12), -Ui.S(40), nav.Width - Ui.S(14), nav.Height + Ui.S(40) - Ui.S(14));
+                    Ui.Shadow(g, r, Ui.S(18));
+                    using (var path = Ui.Round(r, Ui.S(18))) using (var b = new SolidBrush(Ui.Sidebar)) g.FillPath(b, path);
+                };
+                typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(nav, true, null);
+            }
             var navigation = new Panel { Dock = DockStyle.Fill, AutoScroll = true, AutoScrollMinSize = Ui.S(0, 336), BackColor = Ui.Sidebar };
             Ui.DarkScroll(navigation);
             nav.Controls.Add(navigation);
@@ -210,8 +225,8 @@ namespace StickyPro
                 nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
             };
             nav.SizeChanged += delegate { topBar.Invalidate(); topBar.PerformLayout(); };
-            navGrip.BackColor = Ui.Sidebar;
-            if (Ui.Nexus) navGrip.Paint += (s, e) => { using (var pen = new Pen(Ui.Line)) e.Graphics.DrawLine(pen, 0, 0, 0, navGrip.Height); };
+            navGrip.BackColor = Ui.Navy ? Ui.Bg : Ui.Sidebar;
+            if (Ui.Nexus && !Ui.Navy) navGrip.Paint += (s, e) => { using (var pen = new Pen(Ui.Line)) e.Graphics.DrawLine(pen, 0, 0, 0, navGrip.Height); };
             Resize += adaptNav; adaptNav(this, EventArgs.Empty);
 
             Ui.Theme(this);

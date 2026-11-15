@@ -196,29 +196,41 @@ namespace StickyPro
         void PaintNexus(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Ui.Card);
+            g.Clear(Ui.Navy ? Ui.Bg : Ui.Card);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            using (var b = new SolidBrush(Ui.Sidebar)) g.FillRectangle(b, brandRect);
-            using (var p = new Pen(Ui.Line))
+            if (Ui.Navy)
             {
-                g.DrawLine(p, 0, Height - 1, Width, Height - 1);
-                g.DrawLine(p, brandRect.Right - 1, 0, brandRect.Right - 1, Height);
+                // Top of the floating navy sidebar card (the sidebar panel paints the rest).
+                var card = new Rectangle(Ui.S(12), Ui.S(12), brandRect.Width - Ui.S(14), Height + Ui.S(40));
+                Ui.Shadow(g, card, Ui.S(18));
+                using (var path = Ui.Round(card, Ui.S(18))) using (var b = new SolidBrush(Ui.Sidebar)) g.FillPath(b, path);
+            }
+            else
+            {
+                using (var b = new SolidBrush(Ui.Sidebar)) g.FillRectangle(b, brandRect);
+                using (var p = new Pen(Ui.Line))
+                {
+                    g.DrawLine(p, 0, Height - 1, Width, Height - 1);
+                    g.DrawLine(p, brandRect.Right - 1, 0, brandRect.Right - 1, Height);
+                }
             }
             // Brand
             if (logo == null) logo = Ui.Logo(Ui.S(30));
             bool wide = brandRect.Width >= Ui.S(150);
-            int lx = wide ? Ui.S(20) : (brandRect.Width - logo.Width) / 2;
-            g.DrawImage(logo, lx, (Height - logo.Height) / 2);
+            int off = Ui.Navy ? Ui.S(12) : 0, cy = Ui.Navy ? Ui.S(6) : 0;
+            int lx = wide ? Ui.S(20) + off : off + (brandRect.Width - off - Ui.S(2) - logo.Width) / 2;
+            g.DrawImage(logo, lx, (Height - logo.Height) / 2 + cy);
             if (wide)
-                TextRenderer.DrawText(g, App.Name, Ui.Title, new Rectangle(lx + logo.Width + Ui.S(10), 0, brandRect.Width - lx - logo.Width - Ui.S(14), Height), Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, App.Name, Ui.Title, new Rectangle(lx + logo.Width + Ui.S(10), cy, brandRect.Width - lx - logo.Width - Ui.S(14), Height), Ui.Navy ? Color.White : Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             // Search
             if (!searchRect.IsEmpty)
             {
                 bool hot = hover as string == "search";
+                Ui.Shadow(g, searchRect, Ui.S(10));
                 using (var path = Ui.Round(searchRect, Ui.S(10)))
                 {
-                    using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Bg)) g.FillPath(b, path);
+                    using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Navy ? Ui.Card : Ui.Bg)) g.FillPath(b, path);
                     using (var p = new Pen(hot ? Ui.Accent : Ui.Line)) g.DrawPath(p, path);
                 }
                 var ir = new Rectangle(searchRect.X + Ui.S(4), searchRect.Y, Ui.S(32), searchRect.Height);
@@ -265,10 +277,11 @@ namespace StickyPro
         {
             var r = c.Bounds;
             bool hot = ReferenceEquals(hover, c);
+            Ui.Shadow(g, r, Ui.S(10));
             using (var path = Ui.Round(r, Ui.S(10)))
             {
                 using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                using (var p = new Pen(hot ? Color.FromArgb(140, c.Tint) : Ui.Line)) g.DrawPath(p, path);
+                using (var p = new Pen(hot ? Color.FromArgb(140, c.Tint) : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
             }
             int gd = Ui.S(26);
             var gr = new Rectangle(r.X + Ui.S(6), r.Y + (r.Height - gd) / 2, gd, gd);

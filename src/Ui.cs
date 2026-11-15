@@ -47,8 +47,11 @@ namespace StickyPro
         }
 
         // Colour themes: the accent (and the classic sidebar colour) follow the theme.
-        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo" };
-        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230) };
+        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo", "SerQ blue" };
+        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230), Color.FromArgb(51, 102, 240) };
+        public const int SerqTheme = 7;
+        // SerQ design: Nexus layout with a floating navy sidebar, blue-grey canvas and soft card shadows.
+        public static bool Navy;
         public static int ThemeIndex;
         public static Color ThemeColor(int i) { return themeBase[Math.Max(0, Math.Min(themeBase.Length - 1, i))]; }
         // Nexus design (clean white sidebar, soft grey canvas, white cards) or the classic solid-colour sidebar.
@@ -67,6 +70,32 @@ namespace StickyPro
                 default: return H("#F43F5E");
             }
         }
+        // Soft drop shadow under a rounded card (SerQ look); a no-op in the other designs.
+        public static void Shadow(Graphics g, Rectangle r, int radius)
+        {
+            if (!Navy) return;
+            var old = g.SmoothingMode; g.SmoothingMode = SmoothingMode.AntiAlias;
+            int steps = 6;
+            for (int i = steps; i >= 1; i--)
+            {
+                var s = new Rectangle(r.X - i + 1, r.Y - i + S(4), r.Width + 2 * i - 2, r.Height + 2 * i - S(2));
+                using (var path = Round(s, radius + i))
+                using (var b = new SolidBrush(Color.FromArgb(Dark ? 14 : 7, 30, 45, 90))) g.FillPath(b, path);
+            }
+            g.SmoothingMode = old;
+        }
+        // Card with optional shadow, fill and hairline border.
+        public static void FillCard(Graphics g, Rectangle r, int radius, bool hot)
+        {
+            Shadow(g, r, radius);
+            var old = g.SmoothingMode; g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Round(r, radius))
+            {
+                using (var b = new SolidBrush(Card)) g.FillPath(b, path);
+                using (var p = new Pen(hot ? Mix(Line, Accent, 0.6) : Navy ? Mix(Line, Card, 0.4) : Line)) g.DrawPath(p, path);
+            }
+            g.SmoothingMode = old;
+        }
         public static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
         static Color TB { get { return ThemeColor(ThemeIndex); } }
         public static Font NoteFont = new Font("Segoe UI", 11f);
@@ -78,29 +107,29 @@ namespace StickyPro
         public static bool Dark;
         public static Color Accent { get { return Dark ? Mix(TB, Color.White, 0.45) : Mix(TB, Color.Black, 0.08); } }
         public static Color AccentFill { get { return Mix(TB, Color.Black, 0.08); } }
-        public static Color Bg { get { return Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
-        public static Color Card { get { return Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
-        public static Color Field { get { return Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
+        public static Color Bg { get { return Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
+        public static Color Card { get { return Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
+        public static Color Field { get { return Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
         public static Color Nav { get { return Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
         // Nexus: white sidebar with dark text; classic: PicPick-style solid colour sidebar with white text.
-        public static Color Sidebar { get { return Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
-        public static Color SidebarSel { get { return Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
-        public static Color SidebarHover { get { return Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
-        public static Color SidebarText { get { return Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
-        public static Color SidebarMuted { get { return Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
+        public static Color Sidebar { get { return Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
+        public static Color SidebarSel { get { return Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
+        public static Color SidebarHover { get { return Navy ? (Dark ? H("#1A2550") : H("#233270")) : Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
+        public static Color SidebarText { get { return Navy ? (Dark ? H("#E3E8F7") : H("#E8EDFB")) : Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
+        public static Color SidebarMuted { get { return Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
         public static Color Header { get { return Nexus ? Text : Dark ? Mix(TB, Color.White, 0.5) : TB; } }
-        public static Color Line { get { return Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
-        public static Color Text { get { return Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
-        public static Color Muted { get { return Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
+        public static Color Line { get { return Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
+        public static Color Text { get { return Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
+        public static Color Muted { get { return Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
         public static Color SelBg { get { return Nexus ? (Dark ? Mix(TB, H("#171A21"), 0.72) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
-        public static Color HoverBg { get { return Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
-        public static Color PressBg { get { return Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
+        public static Color HoverBg { get { return Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
+        public static Color PressBg { get { return Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
         public static Color AccentHover { get { return Mix(TB, Color.Black, 0.2); } }
         public static Color AccentPressed { get { return Mix(TB, Color.Black, 0.3); } }
         public static Color Success { get { return Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
         public static Color Danger { get { return Dark ? Color.FromArgb(255, 143, 143) : Color.FromArgb(196, 43, 48); } }
         public static Color Warning { get { return Dark ? Color.FromArgb(249, 202, 101) : Color.FromArgb(151, 98, 0); } }
-        public static Color Track { get { return Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
+        public static Color Track { get { return Navy ? (Dark ? H("#232B42") : H("#EDF1F8")) : Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
         public static Color Canvas { get { return Dark ? Color.FromArgb(28, 28, 28) : Color.FromArgb(225, 225, 225); } }
         public static Color Overlay { get { return Color.FromArgb(36, 36, 36); } }
         public static Color OverlayField { get { return Color.FromArgb(60, 60, 60); } }
@@ -1141,13 +1170,19 @@ namespace StickyPro
             bool narrow = Width < Ui.S(100);
             var pill = new Rectangle(Ui.S(10), Ui.S(2), Width - Ui.S(20), Height - Ui.S(4));
             if (selected || hover || Focused)
-                using (var path = Ui.Round(pill, Ui.S(8)))
+                using (var path = Ui.Round(pill, Ui.S(Ui.Navy ? 10 : 8)))
                 {
                     using (var b = new SolidBrush(selected ? Ui.SidebarSel : Ui.SidebarHover)) g.FillPath(b, path);
-                    if (Focused && !selected) using (var p = new Pen(Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(p, path);
+                    if (selected && Ui.Navy)
+                    {
+                        using (var p = new Pen(Color.FromArgb(150, 110, 145, 255))) g.DrawPath(p, path);
+                        using (var b = new SolidBrush(Color.FromArgb(120, 160, 255))) g.FillRectangle(b, pill.Right - Ui.S(3), pill.Y + Ui.S(8), Ui.S(3), pill.Height - Ui.S(16));
+                    }
+                    if (Focused && !selected) using (var p = new Pen(Ui.Navy ? Ui.SidebarMuted : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(p, path);
                 }
             var iconRect = narrow ? new Rectangle(0, 0, Width, Height) : new Rectangle(pill.X + Ui.S(8), 0, Ui.S(26), Height);
-            TextRenderer.DrawText(g, Glyph, Ui.Icon(12f), iconRect, selected ? Ui.Accent : Ui.SidebarMuted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            var iconColor = Ui.Navy ? (selected ? Color.White : Ui.SidebarMuted) : selected ? Ui.Accent : Ui.SidebarMuted;
+            TextRenderer.DrawText(g, Glyph, Ui.Icon(12f), iconRect, iconColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             if (narrow) return;
             int tx = pill.X + Ui.S(42), right = pill.Right - Ui.S(8);
             if (!string.IsNullOrEmpty(Badge))
@@ -1155,11 +1190,11 @@ namespace StickyPro
                 var size = TextRenderer.MeasureText(Badge, Ui.Small, Size.Empty, TextFormatFlags.NoPadding);
                 var br = new Rectangle(right - size.Width - Ui.S(14), (Height - Ui.S(20)) / 2, size.Width + Ui.S(14), Ui.S(20));
                 using (var path = Ui.Round(br, Ui.S(6)))
-                using (var b = new SolidBrush(Ui.SelBg)) g.FillPath(b, path);
-                TextRenderer.DrawText(g, Badge, Ui.Small, br, Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                using (var b = new SolidBrush(Ui.Navy ? Ui.AccentFill : Ui.SelBg)) g.FillPath(b, path);
+                TextRenderer.DrawText(g, Badge, Ui.Small, br, Ui.Navy ? Color.White : Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
                 right = br.Left - Ui.S(6);
             }
-            TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(tx, 0, Math.Max(1, right - tx), Height), Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, Text, selected ? Ui.Bold : Ui.Base, new Rectangle(tx, 0, Math.Max(1, right - tx), Height), Ui.Navy && !selected ? Ui.Mix(Ui.SidebarText, Ui.Sidebar, 0.12) : Ui.Navy ? Color.White : Ui.SidebarText, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
     }
 
@@ -1175,7 +1210,7 @@ namespace StickyPro
         {
             var g = e.Graphics;
             g.Clear(Ui.Sidebar);
-            if (Width < Ui.S(100)) { using (var b = new SolidBrush(Ui.Line)) g.FillRectangle(b, Ui.S(14), Height / 2, Width - Ui.S(28), 1); return; }
+            if (Width < Ui.S(100)) { using (var b = new SolidBrush(Ui.Navy ? Ui.SidebarSel : Ui.Line)) g.FillRectangle(b, Ui.S(14), Height / 2, Width - Ui.S(28), 1); return; }
             TextRenderer.DrawText(g, Text, Ui.Small, new Rectangle(Ui.S(22), Ui.S(10), Width - Ui.S(30), Height - Ui.S(10)), Ui.SidebarMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
     }

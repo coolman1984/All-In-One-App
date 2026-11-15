@@ -40,9 +40,11 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
 
 ## New in this version
-- **Nexus design** (default): white sidebar grouped into General / Tools / System / Support, soft grey canvas, white rounded
-  cards, top bar with a search pill (Ctrl+K). Home is a dashboard with KPI cards, a live CPU & RAM bar chart, clipboard
-  week bars, a top-memory-apps table and a library donut. Settings > Design switches back to Classic (blue sidebar).
+- **SerQ design** (default): floating navy sidebar grouped into General / Tools / System / Support, blue-grey canvas,
+  white rounded cards with soft shadows, blue accent. Home: "Welcome back" header with New task, Terminals, a reminders
+  bell and your initials; System Overview (live CPU area chart, memory and average CPU); Your Library donut; four KPI
+  cards (tasks due, clips, files opened, urgent tags) with day-over-day changes; Storage with a funnel; Top Memory Apps
+  with Heavy / Normal / Light pills. Settings > Design also offers Nexus (white sidebar) and Classic (blue sidebar).
 - **Terminals** page: open 1, 2, 3, 4, 2 x 2, 5, 6, 3 x 2 or 4 x 2 terminals at once. Each pane has its own folder, shell
   (PWSH 7, Windows PowerShell, cmd) and start command (`claude`, `claude --continue`, `codex`, ...). "Separate windows" tiles
   real Windows Terminal windows side by side on the screen under the mouse; "One window, split panes" uses Windows Terminal
