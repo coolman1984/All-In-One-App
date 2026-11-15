@@ -244,6 +244,9 @@ namespace StickyPro
             Controls.Add(l);
         }
 
+        // Hide a tab that is always on screen anyway (wide split views).
+        public void ShowTab(int i, bool show) { if (i >= 0 && i < tabs.Count && tabs[i].Visible != show) tabs[i].Visible = show; }
+
         public void Select(int i)
         {
             if (i < 0 || i >= tabs.Count) return;
@@ -1101,6 +1104,9 @@ namespace StickyPro
         void ApplyVisibility()
         {
             split = Wide;
+            // Split: Processes is always on the left, so its tab hides and the strip shows which tab fills the right side.
+            tabs.ShowTab(0, !split);
+            if (split && tabs.Selected != rightTab) { tabs.Select(rightTab); return; }
             for (int k = 0; k < views.Length; k++) views[k].Visible = split ? (k == 0 || k == rightTab) : k == selected;
             kpis.Visible = split || selected == 0;   // the performance strip belongs to Processes
             host.PerformLayout();

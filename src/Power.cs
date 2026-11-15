@@ -333,14 +333,17 @@ namespace StickyPro
         public PowerPage()
         {
             Dock = DockStyle.Fill; Visible = false;
-            host = new Panel { Dock = DockStyle.Fill };
+            host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, Ui.S(4), 0, 0) };
+            host.Layout += delegate { Arrange(); };
             Controls.Add(host);
-            tabs = new TabStrip();
+            // Tabs sit in the header bar instead of a row of their own.
+            tabs = new TabStrip { Dock = DockStyle.None, AutoSize = true, Margin = new Padding(0) };
             tabs.Add("Windows (always on top)"); tabs.Add("Quick actions"); tabs.Add("Hosts file"); tabs.Add("What is using a file");
             tabs.Changed += Show;
-            Controls.Add(tabs);
+            Resize += delegate { if (Wide != split) Show(selected); };
             var bar = MainForm.Bar();
             bar.Controls.Add(MainForm.Heading("Power tools"));
+            bar.Controls.Add(tabs);
             bar.Controls.Add(Ui.Btn("Quick run  " + Hotkeys.Get("run"), delegate { QuickRunForm.Open(); }, true));
             Controls.Add(bar);
             Ui.Theme(this);
@@ -349,16 +352,51 @@ namespace StickyPro
 
         public void SelectTab(int i) { tabs.Select(i); }
 
-        void Show(int i)
+        // Wide windows: the window list stays on the left and the chosen tool fills the right (its tab is hidden then).
+        int selected, rightTab = 1;
+        bool split;
+        bool Wide { get { return Width >= Ui.S(1400); } }
+
+        Control View(int i)
         {
             if (views[i] == null)
             {
                 views[i] = i == 0 ? WindowsView() : i == 1 ? ActionsView() : i == 2 ? HostsView() : WhoView();
-                views[i].Dock = DockStyle.Fill; host.Controls.Add(views[i]); Ui.Theme(views[i]);
+                views[i].Dock = DockStyle.None; views[i].Visible = false; host.Controls.Add(views[i]); Ui.Theme(views[i]);
             }
-            for (int k = 0; k < views.Length; k++) if (views[k] != null) views[k].Visible = k == i;
-            if (i == 0) { var r = views[0].Tag as Action; if (r != null) r(); }
+            return views[i];
         }
+
+        void Show(int i)
+        {
+            selected = i;
+            if (i > 0) rightTab = i;
+            split = Wide;
+            tabs.ShowTab(0, !split);
+            if (split && tabs.Selected != rightTab) { tabs.Select(rightTab); return; }
+            bool wasVisible0 = views[0] != null && views[0].Visible;
+            SuspendLayout();
+            if (split) { View(0); View(rightTab); } else View(i);
+            for (int k = 0; k < views.Length; k++) if (views[k] != null) views[k].Visible = split ? (k == 0 || k == rightTab) : k == i;
+            ResumeLayout(true);
+            host.PerformLayout();
+            if (views[0] != null && views[0].Visible && !wasVisible0) { var r = views[0].Tag as Action; if (r != null) r(); }
+        }
+
+        void Arrange()
+        {
+            var r = host.DisplayRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return;
+            if (split && views[0] != null && views[rightTab] != null)
+            {
+                int gap = Ui.S(16), left = (r.Width - gap) * 48 / 100;
+                Fit(views[0], new Rectangle(r.X, r.Y, left, r.Height));
+                Fit(views[rightTab], new Rectangle(r.X + left + gap, r.Y, r.Width - left - gap, r.Height));
+            }
+            else if (views[selected] != null) Fit(views[selected], r);
+        }
+
+        static void Fit(Control c, Rectangle r) { if (c.Bounds != r) c.Bounds = r; }
 
         Control WindowsView()
         {

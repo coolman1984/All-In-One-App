@@ -608,19 +608,52 @@ namespace StickyPro
             Dock = DockStyle.Fill; Visible = false;
             Action<string> st = s => owner.Status(s);
             views = new Control[] { new BookmarksPanel(st), new ExtensionsPanel(st) };
-            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, Ui.S(4), 0, 0) };
-            foreach (var v in views) { v.Visible = false; host.Controls.Add(v); }
+            host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, Ui.S(4), 0, 0) };
+            foreach (var v in views) { v.Visible = false; v.Dock = DockStyle.None; host.Controls.Add(v); }
+            host.Layout += delegate { Arrange(); };
             Controls.Add(host);
             var top = MainForm.Bar();
             top.Controls.Add(MainForm.Heading("Chrome"));
             tabs = new TabStrip { Dock = DockStyle.None, AutoSize = true, Margin = new Padding(0) };
             tabs.Add("Bookmarks"); tabs.Add("Extensions");
-            tabs.Changed += i => { for (int k = 0; k < views.Length; k++) views[k].Visible = k == i; };
+            tabs.Changed += i => { selected = i; ApplyVisibility(); };
+            Resize += delegate { if (Wide != split) ApplyVisibility(); };
             top.Controls.Add(tabs);
             top.Controls.Add(Ui.Btn("Open Chrome", delegate { Hidden.Open(ChromeInfo.Exe); }));
             Controls.Add(top);
             tabs.Select(0);
         }
         public void SelectTab(string id) { tabs.Select(id == "extensions" ? 1 : 0); }
+
+        // Wide windows show bookmarks and extensions side by side (no tabs); narrow windows show one tab at a time.
+        readonly Panel host;
+        int selected;
+        bool split;
+        bool Wide { get { return Width >= Ui.S(1300); } }
+
+        void ApplyVisibility()
+        {
+            split = Wide;
+            tabs.Visible = !split;
+            SuspendLayout();
+            for (int k = 0; k < views.Length; k++) views[k].Visible = split || k == selected;
+            ResumeLayout(true);
+            host.PerformLayout();
+        }
+
+        void Arrange()
+        {
+            var r = host.DisplayRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return;
+            if (split)
+            {
+                int gap = Ui.S(16), left = (r.Width - gap) * 58 / 100;
+                Fit(views[0], new Rectangle(r.X, r.Y, left, r.Height));
+                Fit(views[1], new Rectangle(r.X + left + gap, r.Y, r.Width - left - gap, r.Height));
+            }
+            else Fit(views[Math.Max(0, selected)], r);
+        }
+
+        static void Fit(Control c, Rectangle r) { if (c.Bounds != r) c.Bounds = r; }
     }
 }
