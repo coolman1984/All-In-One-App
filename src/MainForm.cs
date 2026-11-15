@@ -122,6 +122,7 @@ namespace StickyPro
             Controls.Add(dock);
 
             var nav = new Panel();
+            navPanel = nav;
             nav.Dock = DockStyle.Left;
             nav.Width = Ui.S(230);
             nav.BackColor = Ui.Sidebar; nav.ForeColor = Ui.SidebarText;
@@ -219,11 +220,14 @@ namespace StickyPro
             Controls.Add(topBar);
             var navGrip = PaneGrip.Attach(nav, "nav", Ui.S(56));
             // Sidebar: drag its edge to any width (narrow = icons only). Small windows fold it automatically.
-            EventHandler adaptNav = delegate
-            {
-                bool compact = Width < Ui.S(820);
-                nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
-            };
+            // Round edge buttons: fold the sidebar to icons / hide the quick launch bar, so pages get the space.
+            navToggle = new EdgeToggle(); dockToggle = new EdgeToggle();
+            Controls.Add(navToggle); Controls.Add(dockToggle);
+            navToggle.Click += delegate { Store.Settings.PaneSizes["nav.collapsed"] = NavCollapsed ? 0 : 1; Store.MarkSettings(); AdaptNav(nav); };
+            dockToggle.Click += delegate { Store.Settings.DockVisible = !dock.Visible; Store.MarkSettings(); SetDockVisible(Store.Settings.DockVisible); };
+            EventHandler place = delegate { PlaceToggles(nav); };
+            nav.SizeChanged += place; dock.VisibleChanged += place; dock.SizeChanged += place; topBar.SizeChanged += place; Resize += place;
+            EventHandler adaptNav = delegate { AdaptNav(nav); };
             nav.SizeChanged += delegate { topBar.Invalidate(); topBar.PerformLayout(); };
             navGrip.BackColor = Ui.Navy ? Ui.Bg : Ui.Sidebar;
             if (Ui.Nexus && !Ui.Navy) navGrip.Paint += (s, e) => { using (var pen = new Pen(Ui.Line)) e.Graphics.DrawLine(pen, 0, 0, 0, navGrip.Height); };
@@ -236,6 +240,30 @@ namespace StickyPro
             Store.PromptsChanged += OnPrompts;
             Store.ClipsChanged += OnClips;
             ShowPage("dashboard");
+        }
+
+        readonly EdgeToggle navToggle, dockToggle;
+        Panel navPanel;
+        bool NavCollapsed { get { int v; return Store.Settings.PaneSizes.TryGetValue("nav.collapsed", out v) && v == 1; } }
+        void AdaptNav(Panel nav)
+        {
+            bool compact = Width < Ui.S(820) || NavCollapsed;
+            nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
+            PlaceToggles(nav);
+        }
+        void PlaceToggles(Panel nav)
+        {
+            nav = nav ?? navPanel;
+            if (navToggle == null || dockToggle == null || nav == null || topBar == null) return;
+            int d = navToggle.Width, y = topBar.Bottom + Ui.S(10);
+            navToggle.PointsLeft = nav.Width > Ui.S(80);
+            navToggle.Tip = navToggle.PointsLeft ? "Fold the sidebar to icons" : "Expand the sidebar";
+            navToggle.Location = new Point(nav.Right - d / 2 - Ui.S(2), y);
+            dockToggle.PointsLeft = !dock.Visible;
+            dockToggle.Tip = dock.Visible ? "Hide the quick launch bar" : "Show the quick launch bar";
+            dockToggle.Location = new Point(dock.Visible ? dock.Left - d / 2 : ClientSize.Width - d - Ui.S(4), y);
+            navToggle.BringToFront(); dockToggle.BringToFront();
+            navToggle.Invalidate(); dockToggle.Invalidate();
         }
 
         public void UpdateShortcutHelp()
@@ -357,7 +385,7 @@ namespace StickyPro
         public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); }
         public void AddTerminalFolder(string folder) { ShowPage("terminals"); terminals.UseFolder(folder); }
         public void RefreshLaunchers() { shortcuts.RefreshLaunchers(); }
-        public void SetDockVisible(bool v) { dock.Visible = v; }
+        public void SetDockVisible(bool v) { dock.Visible = v; PlaceToggles(null); }
 
         public void StartNewPrompt() { ShowPage("prompts"); prompts.NewPrompt(); }
         public void UpdatePaused() { clips.UpdatePaused(); }

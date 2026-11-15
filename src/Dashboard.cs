@@ -573,18 +573,22 @@ namespace StickyPro
             Height = Ui.S(128);
             update = () => { if (Live) RefreshMetrics(); }; ProcessSampler.Updated += update;
         }
-        int Columns { get { return Width >= Ui.S(860) ? 4 : 2; } }
+        // Always one row when there is any room; small windows get short cards (no detail line) so the list keeps the height.
+        int Columns { get { return Width >= Ui.S(520) ? 4 : 2; } }
+        bool Compact { get { return Width < Ui.S(1100) || (Parent != null && Parent.Height < Ui.S(820)); } }
+        int CardH { get { return Compact ? Ui.S(72) : Ui.S(108); } }
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
             int rows = (cards.Length + Columns - 1) / Columns;
-            int want = rows * Ui.S(116) + Ui.S(12);
+            int want = rows * (CardH + Ui.S(8)) + Ui.S(4);
             if (Height != want) Height = want;
             Arrange();
         }
+        protected override void OnParentChanged(EventArgs e) { base.OnParentChanged(e); if (Parent != null) Parent.Resize += delegate { OnResize(EventArgs.Empty); Invalidate(); }; }
         void Arrange()
         {
-            int cols = Columns, gap = Ui.S(14), top = Ui.S(6), h = Ui.S(108);
+            int cols = Columns, gap = Ui.S(Compact ? 10 : 14), top = Ui.S(6), h = CardH;
             int w = Math.Max(Ui.S(120), (Width - gap * (cols - 1)) / cols);
             for (int i = 0; i < cards.Length; i++)
                 cards[i].Bounds = new Rectangle((i % cols) * (w + gap), top + (i / cols) * (h + Ui.S(8)), w, h);
@@ -633,13 +637,14 @@ namespace StickyPro
                 var body = new Rectangle(r.X + Ui.S(3), r.Y + Ui.S(1), r.Width - Ui.S(7), r.Height - Ui.S(7));
                 Ui.FillCard(g, body, Ui.S(14), i == hot);
                 if (!Ui.Navy) using (var p = new Pen(i == hot ? Ui.Accent : Ui.Line)) using (var path = Ui.Round(body, Ui.S(14))) g.DrawPath(p, path);
-                // chart area: right 45% of the card
-                int chartW = c.Trend != null ? body.Width * 38 / 100 : 0;
+                // chart area: right part of the card
+                bool compact = Compact;
+                int chartW = c.Trend != null ? body.Width * (compact ? 34 : 38) / 100 : 0;
                 int textW = body.Width - chartW - Ui.S(28);
-                using (var b = new SolidBrush(c.Color)) g.FillEllipse(b, body.X + Ui.S(16), body.Y + Ui.S(17), Ui.S(8), Ui.S(8));
-                TextRenderer.DrawText(g, c.Title, Ui.Bold, new Rectangle(body.X + Ui.S(30), body.Y + Ui.S(10), textW, Ui.S(22)), Ui.Muted, flags | TextFormatFlags.VerticalCenter);
-                TextRenderer.DrawText(g, c.Value, Ui.Kpi, new Rectangle(body.X + Ui.S(14), body.Y + Ui.S(32), textW + Ui.S(14), Ui.S(38)), Ui.Text, flags | TextFormatFlags.VerticalCenter);
-                TextRenderer.DrawText(g, c.Detail, Ui.Small, new Rectangle(body.X + Ui.S(16), body.Y + (c.Fraction >= 0 ? Ui.S(66) : Ui.S(72)), body.Width - chartW - Ui.S(24), Ui.S(20)), Ui.Muted, flags);
+                using (var b = new SolidBrush(c.Color)) g.FillEllipse(b, body.X + Ui.S(16), body.Y + Ui.S(compact ? 13 : 17), Ui.S(8), Ui.S(8));
+                TextRenderer.DrawText(g, c.Title, Ui.Bold, new Rectangle(body.X + Ui.S(30), body.Y + Ui.S(compact ? 6 : 10), textW, Ui.S(22)), Ui.Muted, flags | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, c.Value, compact ? Ui.Big : Ui.Kpi, new Rectangle(body.X + Ui.S(14), body.Y + Ui.S(compact ? 26 : 32), textW + Ui.S(14), Ui.S(compact ? 26 : 38)), Ui.Text, flags | TextFormatFlags.VerticalCenter);
+                if (!compact) TextRenderer.DrawText(g, c.Detail, Ui.Small, new Rectangle(body.X + Ui.S(16), body.Y + (c.Fraction >= 0 ? Ui.S(66) : Ui.S(72)), body.Width - chartW - Ui.S(24), Ui.S(20)), Ui.Muted, flags);
                 if (c.Fraction >= 0)
                 {
                     var bar = new Rectangle(body.X + Ui.S(16), body.Bottom - Ui.S(14), body.Width - Ui.S(32), Ui.S(6));

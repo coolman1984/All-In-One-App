@@ -27,6 +27,9 @@ namespace StickyPro
             for (int i = 0; i < args.Length - 1; i++)
                 if (args[i] == "--make-icon") { File.WriteAllBytes(args[i + 1], Ui.IcoBytes()); return; }
 
+            // MCP server for AI agents (stdio). Runs as its own small process and talks to the running app.
+            if (Array.Exists(args, a => a.ToLowerInvariant() == "--mcp")) { McpServer.Run(args); return; }
+
             if (exit)
             {
                 try { using (var ev = EventWaitHandle.OpenExisting(ExitEventName)) ev.Set(); } catch { }
@@ -58,6 +61,8 @@ namespace StickyPro
             var exitEv = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
             var app = new App(startup);
             if (page != null) app.ShowMain(page);
+            try { AppApi.Start(); } catch (Exception ex) { App.Log("App API: " + ex.Message); }
+            if (Store.Settings.OverlayOn) Ui.Later(1500, () => { try { Overlay.Set(true); } catch (Exception ex) { App.Log("Overlay: " + ex.Message); } });
             if (perf) Ui.Later(2500, Perf.Run);
             ThreadPool.RegisterWaitForSingleObject(showEv, delegate
             {

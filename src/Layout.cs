@@ -6,6 +6,35 @@ using System.Windows.Forms;
 
 namespace StickyPro
 {
+    // Small round button that sits on the edge of a side panel (sidebar, quick launch bar) and folds / unfolds it.
+    class EdgeToggle : Control
+    {
+        public bool PointsLeft;
+        bool hot;
+        readonly ToolTip tip = new ToolTip();
+        string tipText;
+        public string Tip { set { if (value != tipText) { tipText = value; tip.SetToolTip(this, value); } } }
+        public EdgeToggle()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+            Size = new Size(Ui.S(24), Ui.S(24)); Cursor = Cursors.Hand; TabStop = false;
+            using (var path = new System.Drawing.Drawing2D.GraphicsPath()) { path.AddEllipse(0, 0, Width, Height); Region = new Region(path); }
+            AccessibleRole = AccessibleRole.PushButton; AccessibleName = "Fold or unfold the side panel";
+        }
+        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics; g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var r = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var b = new SolidBrush(hot ? Ui.AccentFill : Ui.Card)) g.FillEllipse(b, r);
+            using (var p = new Pen(hot ? Ui.AccentFill : Ui.Line)) g.DrawEllipse(p, r);
+            TextRenderer.DrawText(g, PointsLeft ? "" : "", Ui.Icon(7.5f), new Rectangle(0, 0, Width, Height), hot ? Color.White : Ui.Text,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        }
+        protected override void Dispose(bool disposing) { if (disposing) tip.Dispose(); base.Dispose(disposing); }
+    }
+
     static class LayoutKit
     {
         public static FlowLayoutPanel Actions(DockStyle dock, params Control[] controls)

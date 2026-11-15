@@ -102,7 +102,7 @@ namespace StickyPro
         int FillTarget { get { return FillIndex >= 0 && FillIndex < Columns.Count ? FillIndex : Columns.Count - 1; } }
         // Optional: share the free width between several columns (weight per column, 0 = fixed). Overrides FillIndex.
         public int[] Weights;
-        int[] designWidths;
+        int[] designWidths, applied;   // applied = widths this code set (their change notices arrive later, after filling)
         void FillLastColumn()
         {
             if (filling || Columns.Count == 0 || !IsHandleCreated || View != View.Details) return;
@@ -112,7 +112,7 @@ namespace StickyPro
                 if (Weights != null)
                 {
                     if (designWidths == null || designWidths.Length != Columns.Count)
-                    { designWidths = new int[Columns.Count]; for (int i = 0; i < Columns.Count; i++) designWidths[i] = Columns[i].Width; }
+                    { designWidths = new int[Columns.Count]; for (int i = 0; i < Columns.Count; i++) designWidths[i] = Columns[i].Width; applied = new int[Columns.Count]; }
                     int total = 0, wsum = 0;
                     for (int i = 0; i < Columns.Count; i++) { total += designWidths[i]; if (i < Weights.Length) wsum += Weights[i]; }
                     int extra = Math.Max(0, ClientSize.Width - total - 1);
@@ -124,6 +124,7 @@ namespace StickyPro
                         if (wsum > 0 && i < Weights.Length && Weights[i] > 0) add = i == lastW ? extra - given : extra * Weights[i] / wsum;
                         given += add;
                         int cw = designWidths[i] + add;
+                        applied[i] = cw;
                         if (Columns[i].Width != cw) Columns[i].Width = cw;
                     }
                     return;
@@ -139,7 +140,10 @@ namespace StickyPro
             finally { filling = false; }
         }
         int lastFillW = -1;
-        protected override void OnResize(EventArgs e) { base.OnResize(e); if (ClientSize.Width != lastFillW) { lastFillW = ClientSize.Width; FillLastColumn(); } }
+        // Fill whenever the width is known for real: a resize before the handle exists, or while hidden, used to be
+        // remembered and then skipped, so the columns never stretched on wide windows.
+        protected override void OnResize(EventArgs e) { base.OnResize(e); if (IsHandleCreated && ClientSize.Width != lastFillW) { lastFillW = ClientSize.Width; FillLastColumn(); } }
+        protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); if (Visible && IsHandleCreated) { lastFillW = ClientSize.Width; FillLastColumn(); } }
         protected override void OnColumnWidthChanged(ColumnWidthChangedEventArgs e)
         {
             base.OnColumnWidthChanged(e);
@@ -150,6 +154,7 @@ namespace StickyPro
                 if (designWidths != null && e.ColumnIndex < designWidths.Length)
                 {
                     int w = Columns[e.ColumnIndex].Width;
+                    if (applied != null && e.ColumnIndex < applied.Length && applied[e.ColumnIndex] == w) return;   // our own fill, not a drag
                     if (e.ColumnIndex >= Weights.Length || Weights[e.ColumnIndex] == 0) designWidths[e.ColumnIndex] = w;
                     else { Weights = (int[])Weights.Clone(); Weights[e.ColumnIndex] = 0; designWidths[e.ColumnIndex] = w; }
                 }
@@ -1026,8 +1031,9 @@ namespace StickyPro
             Dock = DockStyle.Fill;
             Action<string> st = s => owner.Status(s);
             views = new Control[] { new ProcessesPanel(st), new StartupPanel(st), new DrivesPanel(st), new UninstallPanel(st) };
-            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, Ui.S(4), 0, 0) };
-            foreach (var v in views) { v.Visible = false; host.Controls.Add(v); }
+            host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, Ui.S(4), 0, 0) };
+            foreach (var v in views) { v.Visible = false; v.Dock = DockStyle.None; host.Controls.Add(v); }
+            host.Layout += delegate { ArrangeViews(); };
             Controls.Add(host);
 
             var top = MainForm.Bar();
@@ -1039,13 +1045,16 @@ namespace StickyPro
             tabs.Add("Drives & cleanup");
             tabs.Add("Uninstall");
             var kpis = new SystemKpis();
+            this.kpis = kpis;
             tabs.Changed += i =>
             {
+                selected = i;
+                if (i > 0) rightTab = i;
                 SuspendLayout();
-                for (int k = 0; k < views.Length; k++) views[k].Visible = k == i;
-                kpis.Visible = i == 0;   // the performance strip belongs to Processes; other tabs get the full height
+                ApplyVisibility();
                 ResumeLayout(true);
             };
+            Resize += delegate { bool s = Wide; if (s != split) { split = s; SuspendLayout(); ApplyVisibility(); ResumeLayout(true); } };
             top.Controls.Add(tabs);
             var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Min(2, Math.Max(0, tabs.Selected))] }, null); });
             top.Controls.Add(pop);
@@ -1055,5 +1064,36 @@ namespace StickyPro
         }
 
         public void SelectTab(string id) { int i = Array.IndexOf(ids, id); if (i >= 0) tabs.Select(i); }
+
+        // Wide windows: Processes stays on the left and the chosen other tab (Startup / Drives / Uninstall) fills the right,
+        // instead of one list with a wide empty area. Narrow windows: one tab at a time.
+        readonly Panel host;
+        readonly SystemKpis kpis;
+        int selected, rightTab = 1;
+        bool split;
+        bool Wide { get { return Width >= Ui.S(1450); } }
+
+        void ApplyVisibility()
+        {
+            split = Wide;
+            for (int k = 0; k < views.Length; k++) views[k].Visible = split ? (k == 0 || k == rightTab) : k == selected;
+            kpis.Visible = split || selected == 0;   // the performance strip belongs to Processes
+            host.PerformLayout();
+        }
+
+        void ArrangeViews()
+        {
+            var r = host.DisplayRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return;
+            if (split)
+            {
+                int gap = Ui.S(16), left = (r.Width - gap) * 54 / 100;
+                SetBoundsIfChanged(views[0], new Rectangle(r.X, r.Y, left, r.Height));
+                SetBoundsIfChanged(views[rightTab], new Rectangle(r.X + left + gap, r.Y, r.Width - left - gap, r.Height));
+            }
+            else SetBoundsIfChanged(views[selected], r);
+        }
+
+        static void SetBoundsIfChanged(Control c, Rectangle r) { if (c.Bounds != r) c.Bounds = r; }
     }
 }

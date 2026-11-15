@@ -172,10 +172,51 @@ namespace StickyPro
         public int TermLast;
         public List<string> TermRecent = new List<string>();
         public string TermShell = "pwsh";    // shell for "PWSH here": pwsh | powershell | cmd
+
+        // Appearance (Settings > Appearance)
+        public string HeadingFont = "";      // "" = same as UiFont
+        public float HeadingScale = 1f;      // 0.85 .. 1.4, size of page titles and card titles
+        public string MonoFont = "";         // "" = Cascadia Mono / Consolas (paths, commands, code)
+        public float MonoFontSize = 10f;
+        public string Density = "normal";    // compact | normal | roomy (list row height, paddings)
+        public string AccentColor = "";      // "#RRGGBB" overrides the theme accent; "" = theme colour
+        public int CornerRadius = -1;        // -1 = design default, else 0..24 px
+        public bool Shadows = true;          // card shadows
+        public bool Animations = true;       // hover fades, overlay dock magnification
+        public string UserName = "";         // shown where the app greets or signs (prompts {{name}}); "" = Windows user
+        public string AppTitle = "";         // window / sidebar title; "" = All in One
+        // Sidebar management
+        public Dictionary<string, string> PageNames = new Dictionary<string, string>();   // page key -> your name for it
+        public List<string> NavOrder = new List<string>();     // page keys in your order (missing ones keep the default place)
+        public List<string> NavHidden = new List<string>();    // page keys hidden from the sidebar
+        public List<string> NavFavorites = new List<string>(); // page keys pinned in a Favorites group at the top
+        // Desktop overlay (dock, menu bar, hot corners, window overview)
+        public bool OverlayOn;
+        public bool OverlayDock = true, OverlayMenuBar = true, OverlayHotCorner = true, OverlayMagnify = true, OverlayAutoHide;
+        public int OverlayDockSize = 56;     // icon size in px at 100 % scale
+        public string OverlayDockEdge = "bottom";   // bottom | left | right
+        public string OverlayCorner = "topleft";    // hot corner that opens the window overview
+        public List<DockItem> OverlayApps = new List<DockItem>();   // pinned dock apps
+    }
+
+    // Generic management record for an item in any tab (folder, workspace, bookmark, program, process, ...):
+    // favourite, manual order, colour label, tags, note and usage. Scope = tab ("explorer", "terminals", ...),
+    // Id = a stable id inside that tab (usually a path or URL). Saved in data\meta.json.
+    public class ItemMeta
+    {
+        public string Scope = "", Id = "";
+        public bool Fav;
+        public int Order;                    // manual order inside the scope (0 = none)
+        public string Color = "";            // colour label name or #RRGGBB, "" = none
+        public string Tags = "";             // comma separated
+        public string Note = "";
+        public string Name = "";             // your display name for the item ("" = default)
+        public int Uses;
+        public long Used, Created;           // ticks
     }
 
     // Terminals page: one pane = folder + shell + optional start command (e.g. claude).
-    public class TermPane { public string Folder = ""; public string Shell = "pwsh"; public string Command = ""; }
+    public class TermPane { public string Folder = ""; public string Shell = "pwsh"; public string Command = ""; public string Name = ""; public string Color = ""; }
     public class TermWorkspace { public string Name = "My terminals"; public string Layout = "4"; public string Mode = "tiled"; public List<TermPane> Panes = new List<TermPane>(); }
 
     static class Store
@@ -191,6 +232,11 @@ namespace StickyPro
         public static List<TaggedFile> Tagged = new List<TaggedFile>();
         public static List<TagCategory> TagCats = new List<TagCategory>();
         public static List<TaskItem> Tasks = new List<TaskItem>();
+        public static List<ItemMeta> Meta = new List<ItemMeta>();
+        public static event Action MetaChanged;
+        static bool metaDirty;
+        public static void MarkMeta() { metaDirty = true; Kick(); }
+        public static void RaiseMeta() { var h = MetaChanged; if (h != null) h(); }
         public static event Action TasksChanged;
         static bool tasksDirty;
         public static void MarkTasks() { tasksDirty = true; Kick(); }
@@ -216,7 +262,7 @@ namespace StickyPro
         public static void RaiseCards() { var h = CardsChanged; if (h != null) h(); }
         static System.Windows.Forms.Timer saveTimer;
         static readonly HashSet<string> recovered = new HashSet<string>();
-        public static bool Pending { get { return notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty; } }
+        public static bool Pending { get { return notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty || metaDirty; } }
         public static void StopSaver() { if (saveTimer != null) { saveTimer.Dispose(); saveTimer = null; } }
 
         public static string NewId() { return Guid.NewGuid().ToString("N"); }
@@ -232,7 +278,7 @@ namespace StickyPro
 
         public static void Load()
         {
-            Dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+            Dir = DataFolder();
             ImgDir = Path.Combine(Dir, "images");
             Directory.CreateDirectory(Dir);
             Directory.CreateDirectory(ImgDir);
@@ -295,6 +341,26 @@ namespace StickyPro
             foreach (var w in Settings.TermWorkspaces) { if (w.Panes == null) w.Panes = new List<TermPane>(); w.Panes.RemoveAll(p => p == null); }
             if (Settings.TermRecent == null) Settings.TermRecent = new List<string>();
             if (string.IsNullOrEmpty(Settings.TermShell)) Settings.TermShell = "pwsh";
+            foreach (var w in Settings.TermWorkspaces) foreach (var p in w.Panes) { if (p.Name == null) p.Name = ""; if (p.Color == null) p.Color = ""; }
+            Meta = Read<List<ItemMeta>>("meta.json") ?? new List<ItemMeta>();
+            Meta.RemoveAll(m => m == null || string.IsNullOrEmpty(m.Scope) || string.IsNullOrEmpty(m.Id));
+            foreach (var m in Meta) { if (m.Color == null) m.Color = ""; if (m.Tags == null) m.Tags = ""; if (m.Note == null) m.Note = ""; if (m.Name == null) m.Name = ""; }
+            var s = Settings;
+            if (s.HeadingFont == null) s.HeadingFont = ""; if (s.MonoFont == null) s.MonoFont = ""; if (s.AccentColor == null) s.AccentColor = "";
+            if (s.UserName == null) s.UserName = ""; if (s.AppTitle == null) s.AppTitle = "";
+            if (s.Density != "compact" && s.Density != "roomy") s.Density = "normal";
+            if (float.IsNaN(s.HeadingScale) || s.HeadingScale < 0.85f || s.HeadingScale > 1.4f) s.HeadingScale = 1f;
+            if (float.IsNaN(s.MonoFontSize) || s.MonoFontSize < 7 || s.MonoFontSize > 20) s.MonoFontSize = 10f;
+            if (s.CornerRadius > 24) s.CornerRadius = 24;
+            if (s.PageNames == null) s.PageNames = new Dictionary<string, string>();
+            if (s.NavOrder == null) s.NavOrder = new List<string>();
+            if (s.NavHidden == null) s.NavHidden = new List<string>();
+            if (s.NavFavorites == null) s.NavFavorites = new List<string>();
+            if (s.OverlayApps == null) s.OverlayApps = new List<DockItem>();
+            s.OverlayApps.RemoveAll(d => d == null || string.IsNullOrEmpty(d.Path));
+            if (s.OverlayDockSize < 32 || s.OverlayDockSize > 128) s.OverlayDockSize = 56;
+            if (s.OverlayDockEdge != "left" && s.OverlayDockEdge != "right") s.OverlayDockEdge = "bottom";
+            if (string.IsNullOrEmpty(s.OverlayCorner)) s.OverlayCorner = "topleft";
             // New design: switch once to the SerQ look (navy sidebar, blue accent); Nexus and Classic stay available in Settings.
             if (string.IsNullOrEmpty(Settings.Design) || (Settings.DesignRev < 2 && Settings.Design == "nexus")) { Settings.Design = "serq"; Settings.Theme = Ui.SerqTheme; }
             Settings.DesignRev = 2;
@@ -304,6 +370,46 @@ namespace StickyPro
             saveTimer = new System.Windows.Forms.Timer();
             saveTimer.Interval = 700;
             saveTimer.Tick += delegate { saveTimer.Stop(); asyncSave = true; try { SaveNow(); } finally { asyncSave = false; } };
+        }
+
+        // Where all data lives. Default: "data" next to the exe. The user can choose any folder (Settings > Data);
+        // the choice is kept in data-location.txt next to the exe, so the app finds it before loading anything.
+        public static string LocationFile { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data-location.txt"); } }
+        public static string DefaultDir { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data"); } }
+        public static string DataFolder()
+        {
+            try
+            {
+                if (File.Exists(LocationFile))
+                {
+                    string p = File.ReadAllText(LocationFile).Trim();
+                    if (p.Length > 0 && Path.IsPathRooted(p)) { Directory.CreateDirectory(p); return p; }
+                }
+            }
+            catch (Exception ex) { App.Log("Data folder: " + ex.Message + " - using the default."); }
+            return DefaultDir;
+        }
+        // Copies every data file to newDir and points the app there (takes effect after a restart). Old files stay.
+        public static string MoveDataTo(string newDir)
+        {
+            try
+            {
+                newDir = Path.GetFullPath(newDir);
+                if (string.Equals(newDir.TrimEnd('\\'), Dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return "That is already the data folder.";
+                SaveNow(); FlushWrites();
+                Directory.CreateDirectory(newDir);
+                foreach (var f in Directory.GetFiles(Dir, "*", SearchOption.AllDirectories))
+                {
+                    string rel = f.Substring(Dir.TrimEnd('\\').Length + 1);
+                    string to = Path.Combine(newDir, rel);
+                    Directory.CreateDirectory(Path.GetDirectoryName(to));
+                    if (!File.Exists(to)) File.Copy(f, to);
+                }
+                if (string.Equals(newDir.TrimEnd('\\'), DefaultDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { if (File.Exists(LocationFile)) File.Delete(LocationFile); }
+                else File.WriteAllText(LocationFile, newDir, new UTF8Encoding(false));
+                return null;
+            }
+            catch (Exception ex) { return ex.Message; }
         }
 
         static T Read<T>(string name) where T : class
@@ -414,6 +520,7 @@ namespace StickyPro
                 case "history.json": historyDirty = true; break;
                 case "activity.json": activityDirty = true; break;
                 case "tasks.json": tasksDirty = true; break;
+                case "meta.json": metaDirty = true; break;
                 default: taggedDirty = true; break;
             }
             if (saveTimer != null) { saveTimer.Interval = 5000; saveTimer.Start(); }
@@ -462,6 +569,7 @@ namespace StickyPro
                 activityWait = false;
             }
             if (tasksDirty) tasksDirty = !Safe("tasks.json", Tasks.ToList());
+            if (metaDirty) metaDirty = !Safe("meta.json", Meta.ToList());
             if (taggedDirty)
             {
                 bool filesOk = Safe("tagged.json", Tagged.ToList());
@@ -469,7 +577,7 @@ namespace StickyPro
                 taggedDirty = !filesOk || !catsOk;
             }
             bool actWaiting = activityDirty && activityWait;
-            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || taggedDirty || tasksDirty || (activityDirty && !actWaiting)))
+            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || taggedDirty || tasksDirty || metaDirty || (activityDirty && !actWaiting)))
             {
                 saveTimer.Interval = 5000;
                 saveTimer.Start();
