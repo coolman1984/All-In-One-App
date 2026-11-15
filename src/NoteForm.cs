@@ -100,7 +100,7 @@ namespace StickyPro
             header.Controls.Add(btnClose);
             Controls.Add(header);
 
-            saveTimer.Interval = 450;
+            saveTimer.Interval = 1200;
             saveTimer.Tick += delegate { Flush(); };
 
             if (!string.IsNullOrEmpty(n.Rtf))
@@ -119,6 +119,7 @@ namespace StickyPro
             UpdatePin();
             UpdateClock();
             toolbar.Visible = false;
+            rtb.Modified = false;
             loading = false;
         }
 
@@ -188,6 +189,7 @@ namespace StickyPro
             rtb.Select(Math.Min(sel, rtb.TextLength), 0);
             loading = wasLoading;
             UpdateRtlButton();
+            if (!wasLoading) Touch();
         }
 
         void UpdateRtlButton()
@@ -310,12 +312,23 @@ namespace StickyPro
 
         protected override void OnMove(EventArgs e) { base.OnMove(e); SaveBounds(); }
         protected override void OnResize(EventArgs e) { base.OnResize(e); SaveBounds(); }
+        protected override void OnResizeEnd(EventArgs e) { base.OnResizeEnd(e); CommitBounds(); }
 
+        // Bounds are kept in memory while the window moves; they are marked for saving when the drag ends,
+        // on deactivate, on close and on every Flush (so also on app exit).
+        bool boundsDirty;
         void SaveBounds()
         {
             if (loading || WindowState != FormWindowState.Normal || !Visible) return;
             N.X = Left; N.Y = Top; N.W = Width;
             if (expandedHeight == 0) N.H = Height;
+            boundsDirty = true;
+        }
+
+        void CommitBounds()
+        {
+            if (!boundsDirty) return;
+            boundsDirty = false;
             Store.MarkNotes();
         }
 
@@ -323,21 +336,37 @@ namespace StickyPro
         {
             saveTimer.Stop();
             if (loading || IsDisposed) return;
-            string rtf;
-            try { rtf = rtb.Rtf; } catch { return; }
-            if (rtf != N.Rtf)
+            if (rtb.Modified)
             {
-                N.Rtf = rtf;
-                N.Text = rtb.Text;
-                N.Modified = Store.Now();
-                Store.MarkNotes();
-                Store.RaiseNotes();
+                string rtf = null;
+                try { rtf = rtb.Rtf; } catch { }
+                if (rtf != null)
+                {
+                    rtb.Modified = false;
+                    if (rtf != N.Rtf)
+                    {
+                        N.Rtf = rtf;
+                        N.Text = rtb.Text;
+                        N.Modified = Store.Now();
+                        Store.MarkNotes();
+                        Store.RaiseNotes();
+                    }
+                }
             }
             float z = rtb.ZoomFactor;
             if (Math.Abs(z - N.Zoom) > 0.001f) { N.Zoom = z; Store.MarkNotes(); }
+            CommitBounds();
         }
 
-        public void SetPlainText(string text) { rtb.Text = text; ApplyRtl(); Flush(); }
+        // Formatting, direction and pasted pictures do not always raise TextChanged: flag them so the next Flush saves them.
+        void Touch()
+        {
+            if (loading) return;
+            rtb.Modified = true;
+            saveTimer.Stop(); saveTimer.Start();
+        }
+
+        public void SetPlainText(string text) { rtb.Text = text; rtb.Modified = true; ApplyRtl(); Flush(); }
         public void FocusText() { Activate(); rtb.Focus(); rtb.SelectionStart = rtb.TextLength; }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -346,7 +375,8 @@ namespace StickyPro
             if (!Deleting && !Exiting)
             {
                 bool empty = rtb.Text.Trim().Length == 0 && (N.Rtf == null || N.Rtf.IndexOf("\\pict", StringComparison.Ordinal) < 0 && N.Rtf.IndexOf("\\object", StringComparison.Ordinal) < 0);
-                if (empty && e.CloseReason == CloseReason.UserClosing && N.RemindAt == 0) { Store.Notes.Remove(N); Store.MarkNotes(); Store.RaiseNotes(); }
+                bool hasTags = (N.Tags ?? "").Trim().Length > 0;
+                if (empty && e.CloseReason == CloseReason.UserClosing && N.RemindAt == 0 && !hasTags) { Store.Notes.Remove(N); Store.MarkNotes(); Store.RaiseNotes(); }
                 else if (e.CloseReason == CloseReason.UserClosing) { N.Open = false; Store.MarkNotes(); Store.RaiseNotes(); }
             }
             base.OnFormClosing(e);
@@ -364,16 +394,68 @@ namespace StickyPro
         void ToggleStyle(FontStyle s)
         {
             var selected = rtb.SelectionFont;
-            var f = selected ?? rtb.Font;
-            try { using (var styled = new Font(f, f.Style ^ s)) rtb.SelectionFont = styled; } catch { }
-            finally { if (selected != null) selected.Dispose(); }
+            if (selected != null)
+            {
+                try { using (var styled = new Font(selected, selected.Style ^ s)) rtb.SelectionFont = styled; } catch { }
+                finally { selected.Dispose(); }
+            }
+            else ToggleStyleMixed(s);
+            Touch();
             rtb.Focus();
+        }
+
+        // Mixed fonts in the selection: apply the style run by run so sizes and faces are kept.
+        void ToggleStyleMixed(FontStyle s)
+        {
+            int selStart = rtb.SelectionStart, selLen = rtb.SelectionLength;
+            if (selLen <= 0) return;
+            int end = selStart + selLen;
+            var runStarts = new System.Collections.Generic.List<int>();
+            var runLens = new System.Collections.Generic.List<int>();
+            var runFonts = new System.Collections.Generic.List<Font>();
+            try
+            {
+                int pos = selStart;
+                while (pos < end)
+                {
+                    rtb.Select(pos, 1);
+                    Font f = rtb.SelectionFont ?? (Font)rtb.Font.Clone();
+                    int last = runStarts.Count - 1;
+                    if (last >= 0 && runStarts[last] + runLens[last] == pos && SameFont(runFonts[last], f))
+                    {
+                        runLens[last] = runLens[last] + 1;
+                        f.Dispose();
+                    }
+                    else { runStarts.Add(pos); runLens.Add(1); runFonts.Add(f); }
+                    pos++;
+                }
+                bool add = false;
+                foreach (var f in runFonts) if ((f.Style & s) == 0) { add = true; break; }
+                for (int i = 0; i < runStarts.Count; i++)
+                {
+                    Font f = runFonts[i];
+                    FontStyle ns = add ? (f.Style | s) : (f.Style & ~s);
+                    rtb.Select(runStarts[i], runLens[i]);
+                    try { using (var styled = new Font(f, ns)) rtb.SelectionFont = styled; } catch { }
+                }
+            }
+            finally
+            {
+                foreach (var f in runFonts) f.Dispose();
+                rtb.Select(selStart, selLen);
+            }
+        }
+
+        static bool SameFont(Font a, Font b)
+        {
+            return a.Name == b.Name && a.Size == b.Size && a.Style == b.Style && a.Unit == b.Unit;
         }
 
         void ToggleBullets()
         {
             rtb.SelectionBullet = !rtb.SelectionBullet;
             rtb.BulletIndent = Ui.S(12);
+            Touch();
             rtb.Focus();
         }
 
@@ -409,6 +491,7 @@ namespace StickyPro
             {
                 Clipboard.SetDataObject(d, false, 10, 60);
                 rtb.Paste(DataFormats.GetFormat(DataFormats.Bitmap));
+                Touch();
             }
             finally
             {

@@ -204,7 +204,14 @@ namespace StickyPro
         {
             var r = Sel(); if (r == null) return;
             if (MessageBox.Show(this, "End " + r.Process + " (PID " + r.Pid + ")? Unsaved work in it is lost.", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            try { Process.GetProcessById(r.Pid).Kill(); Thread.Sleep(300); Scan(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, App.Name); }
+            try
+            {
+                Process.GetProcessById(r.Pid).Kill();
+                var tm = new System.Windows.Forms.Timer { Interval = 300 };
+                tm.Tick += delegate { tm.Stop(); tm.Dispose(); if (!IsDisposed) Scan(); };
+                tm.Start();
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, App.Name); }
         }
     }
 
@@ -393,10 +400,12 @@ namespace StickyPro
 
         Control ActionsView()
         {
-            var flow = new FlowLayoutPanel { AutoScroll = true, Padding = new Padding(Ui.S(4)) };
+            var outer = new Panel { AutoScroll = true };
+            var flow = new TileHost { Dock = DockStyle.Top, Height = Ui.S(100) };
+            outer.Controls.Add(flow);
             Action<string, string, string, Action> tile = (glyph, title, sub, act) =>
             {
-                var b = new Button { Size = Ui.S(220, 74), FlatStyle = FlatStyle.Flat, BackColor = Ui.Card, ForeColor = Ui.Text, Margin = new Padding(Ui.S(4)), TextAlign = ContentAlignment.MiddleLeft, ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(Ui.S(8), 0, 0, 0) };
+                var b = new Button { Size = Ui.S(220, 84), FlatStyle = FlatStyle.Flat, BackColor = Ui.Card, ForeColor = Ui.Text, Margin = new Padding(Ui.S(4)), TextAlign = ContentAlignment.MiddleLeft, ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(Ui.S(8), 0, 0, 0) };
                 b.FlatAppearance.BorderColor = Ui.Line; b.FlatAppearance.MouseOverBackColor = Ui.HoverBg;
                 b.Image = Ui.GlyphImage(glyph, Ui.S(26), Ui.Accent);
                 b.Text = "  " + title + "\n  " + sub; b.Font = Ui.Base;
@@ -421,7 +430,17 @@ namespace StickyPro
                 string t = Path.GetTempPath(); var items = new List<string>();
                 try { items.AddRange(Directory.GetFileSystemEntries(t)); } catch { }
                 if (items.Count == 0 || MessageBox.Show(FindForm(), "Move " + items.Count + " items in your Temp folder to the Recycle Bin? Files in use are skipped.", App.Name, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                ShellOps.Run(FindForm(), ShellOps.FO_DELETE, items, null);
+                App.I.Balloon("Temp files", "Clearing " + items.Count + " items in the background...");
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    int ok = 0, skipped = 0;
+                    foreach (var item in items)
+                    {
+                        if (RecycleQuiet(item)) ok++; else skipped++;
+                    }
+                    try { App.I.Sync.BeginInvoke(new Action(() => App.I.Balloon("Temp files", "Cleared " + ok + " items, skipped " + skipped + " in use."))); }
+                    catch { }
+                });
             });
             tile("", "Quick run", Hotkeys.Get("run"), () => QuickRunForm.Open());
             tile("", "Shortcuts", "All keys in one place", () => App.I.ShowMain("shortcuts"));
@@ -431,9 +450,47 @@ namespace StickyPro
             tile("", "Environment variables", "Edit for your account", () => Hidden.Open("rundll32.exe", "sysdm.cpl,EditEnvironmentVariables"));
             tile("", "Display settings", "Resolution and scale", () => Hidden.Open("ms-settings:display"));
             tile("", "Sound", "Output and input devices", () => Hidden.Open("mmsys.cpl"));
-            return flow;
+            return outer;
         }
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHEmptyRecycleBin(IntPtr h, string root, uint flags);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct TempOp { public IntPtr hwnd; public uint wFunc; public string pFrom; public string pTo; public ushort fFlags; public bool fAnyOperationsAborted; public IntPtr hNameMappings; public string lpszProgressTitle; }
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHFileOperation(ref TempOp op);
+
+        // Recycle one path with no dialogs: ALLOWUNDO | NOCONFIRMATION | SILENT | NOERRORUI. True when it is gone.
+        static bool RecycleQuiet(string path)
+        {
+            try
+            {
+                var op = new TempOp { wFunc = 3, pFrom = path + "\0\0", fFlags = 0x40 | 0x10 | 0x4 | 0x400 };
+                int r = SHFileOperation(ref op);
+                return r == 0 && !op.fAnyOperationsAborted;
+            }
+            catch { return false; }
+        }
+
+        // Tiles in an evenly stretched grid; the host sets its own height.
+        class TileHost : Panel
+        {
+            protected override void OnLayout(LayoutEventArgs e)
+            {
+                base.OnLayout(e);
+                int w = ClientSize.Width, n = Controls.Count;
+                if (w <= 0 || n == 0) return;
+                int pad = Ui.S(4), gap = Ui.S(8), th = Ui.S(84);
+                int cols = Math.Max(1, Math.Min(8, w / Ui.S(240)));
+                int tw = Math.Max(Ui.S(120), (w - pad * 2 - gap * (cols - 1)) / cols);
+                for (int i = 0; i < n; i++)
+                {
+                    var c = Controls[i];
+                    c.SetBounds(pad + (i % cols) * (tw + gap), pad + (i / cols) * (th + gap), tw, th);
+                }
+                int rows = (n + cols - 1) / cols;
+                int h = pad * 2 + rows * th + (rows - 1) * gap;
+                if (Height != h) Height = h;
+            }
+        }
 
         Control HostsView()
         {
@@ -508,8 +565,9 @@ namespace StickyPro
         Control AppKeys()
         {
             var p = new Panel();
-            var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, AutoScroll = true, Padding = new Padding(Ui.S(8)) };
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(320))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(200))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            // Constrained to a sensible width: the table does not stretch across a wide window.
+            var t = new TableLayoutPanel { Dock = DockStyle.Left, ColumnCount = 3, AutoScroll = true, Padding = new Padding(Ui.S(8)), Width = Ui.S(320 + 200 + 190 + 16 + 24) };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(320))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(200))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(190)));
             var boxes = new Dictionary<string, HotkeyBox>();
             foreach (var a in Hotkeys.Actions)
             {
@@ -525,12 +583,20 @@ namespace StickyPro
             bar.Controls.Add(Ui.Btn("Save shortcuts", delegate
             {
                 var seen = new Dictionary<string, string>();
+                var launcherKeys = new Dictionary<string, string>();
+                foreach (var u in Store.Settings.Launchers)
+                {
+                    uint lm; Keys lk;
+                    if (u == null || string.IsNullOrEmpty(u.Keys) || !Hotkeys.Parse(u.Keys, out lm, out lk)) continue;
+                    launcherKeys[lm + ":" + (int)lk] = string.IsNullOrEmpty(u.Name) ? u.Keys : u.Name;
+                }
                 foreach (var a in Hotkeys.Actions)
                 {
                     string k = boxes[a[0]].Text.Trim(); if (k.Length == 0) continue;
                     uint mods; Keys key; if (!Hotkeys.Parse(k, out mods, out key)) { status.Text = k + " is not valid."; return; }
                     string id = mods + ":" + (int)key, other;
                     if (seen.TryGetValue(id, out other)) { status.Text = k + " is used twice: " + other + " and " + a[1]; return; }
+                    if (launcherKeys.TryGetValue(id, out other)) { status.Text = k + " is already used by launcher " + other; return; }
                     seen[id] = a[1];
                 }
                 Store.Settings.Hotkeys = Hotkeys.Actions.ToDictionary(a => a[0], a => boxes[a[0]].Text.Trim());

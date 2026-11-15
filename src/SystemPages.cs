@@ -67,7 +67,25 @@ namespace StickyPro
                 TextRenderer.DrawText(e.Graphics, e.Header.Text, Ui.Bold, r, Ui.Text, align | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             };
             DrawItem += (s, e) => { e.DrawDefault = true; };
-            DrawSubItem += (s, e) => { e.DrawDefault = true; };
+            DrawSubItem += (s, e) => { if (CustomCell != null && e.Item != null && !e.Item.Selected && CustomCell(e)) return; e.DrawDefault = true; };
+        }
+
+        // Optional custom painter for single cells (return true when the cell was painted). Selected rows keep the system look.
+        public Func<DrawListViewSubItemEventArgs, bool> CustomCell;
+
+        // Task-Manager-style heat cell: tinted background (0..1 intensity) and right-aligned text.
+        public static void HeatCell(DrawListViewSubItemEventArgs e, double intensity, Color text)
+        {
+            var g = e.Graphics; var r = e.Bounds;
+            using (var b = new SolidBrush(Ui.Card)) g.FillRectangle(b, r);
+            intensity = Math.Max(0, Math.Min(1, intensity));
+            if (intensity > 0.02)
+            {
+                var heat = Ui.Dark ? Color.FromArgb((int)(40 + 120 * intensity), 255, 176, 32) : Color.FromArgb((int)(28 + 150 * intensity), 255, 186, 0);
+                using (var b = new SolidBrush(heat)) g.FillRectangle(b, r.X + 1, r.Y, r.Width - 2, r.Height - 1);
+            }
+            var tr = r; tr.Inflate(-Ui.S(8), 0);
+            TextRenderer.DrawText(g, e.SubItem.Text, e.Item.Font ?? Ui.Base, tr, text, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -82,12 +100,34 @@ namespace StickyPro
         public int FillIndex = -1;
         bool filling; ColumnHeader minFor; int minWidth;
         int FillTarget { get { return FillIndex >= 0 && FillIndex < Columns.Count ? FillIndex : Columns.Count - 1; } }
+        // Optional: share the free width between several columns (weight per column, 0 = fixed). Overrides FillIndex.
+        public int[] Weights;
+        int[] designWidths;
         void FillLastColumn()
         {
             if (filling || Columns.Count == 0 || !IsHandleCreated || View != View.Details) return;
             filling = true;
             try
             {
+                if (Weights != null)
+                {
+                    if (designWidths == null || designWidths.Length != Columns.Count)
+                    { designWidths = new int[Columns.Count]; for (int i = 0; i < Columns.Count; i++) designWidths[i] = Columns[i].Width; }
+                    int total = 0, wsum = 0;
+                    for (int i = 0; i < Columns.Count; i++) { total += designWidths[i]; if (i < Weights.Length) wsum += Weights[i]; }
+                    int extra = Math.Max(0, ClientSize.Width - total - 1);
+                    int given = 0, lastW = -1;
+                    for (int i = 0; i < Columns.Count; i++) if (i < Weights.Length && Weights[i] > 0) lastW = i;
+                    for (int i = 0; i < Columns.Count; i++)
+                    {
+                        int add = 0;
+                        if (wsum > 0 && i < Weights.Length && Weights[i] > 0) add = i == lastW ? extra - given : extra * Weights[i] / wsum;
+                        given += add;
+                        int cw = designWidths[i] + add;
+                        if (Columns[i].Width != cw) Columns[i].Width = cw;
+                    }
+                    return;
+                }
                 int ti = FillTarget;
                 var col = Columns[ti];
                 if (!ReferenceEquals(col, minFor)) { minFor = col; minWidth = col.Width; }
@@ -100,7 +140,23 @@ namespace StickyPro
         }
         int lastFillW = -1;
         protected override void OnResize(EventArgs e) { base.OnResize(e); if (ClientSize.Width != lastFillW) { lastFillW = ClientSize.Width; FillLastColumn(); } }
-        protected override void OnColumnWidthChanged(ColumnWidthChangedEventArgs e) { base.OnColumnWidthChanged(e); if (!filling && e.ColumnIndex != FillTarget) FillLastColumn(); }
+        protected override void OnColumnWidthChanged(ColumnWidthChangedEventArgs e)
+        {
+            base.OnColumnWidthChanged(e);
+            if (filling) return;
+            if (Weights != null)
+            {
+                // The user dragged a column: keep that as its new base width, re-share the rest.
+                if (designWidths != null && e.ColumnIndex < designWidths.Length)
+                {
+                    int w = Columns[e.ColumnIndex].Width;
+                    if (e.ColumnIndex >= Weights.Length || Weights[e.ColumnIndex] == 0) designWidths[e.ColumnIndex] = w;
+                    else { Weights = (int[])Weights.Clone(); Weights[e.ColumnIndex] = 0; designWidths[e.ColumnIndex] = w; }
+                }
+                FillLastColumn();
+            }
+            else if (e.ColumnIndex != FillTarget) FillLastColumn();
+        }
         protected override void OnHandleDestroyed(EventArgs e) { header.ReleaseHandle(); base.OnHandleDestroyed(e); }
 
         // Native headers leave their unused trailing area white in dark mode.
@@ -204,11 +260,23 @@ namespace StickyPro
             lv.VirtualMode = true;
             lv.MultiSelect = true;
             lv.SmallImageList = ProcMeta.Icons;
-            lv.Columns.Add("Name", Ui.S(220));
-            lv.Columns.Add("Count / PID", Ui.S(80), HorizontalAlignment.Right);
-            lv.Columns.Add("CPU", Ui.S(64), HorizontalAlignment.Right);
-            lv.Columns.Add("Memory", Ui.S(90), HorizontalAlignment.Right);
-            lv.Columns.Add("Disk / IO", Ui.S(80), HorizontalAlignment.Right);
+            lv.Columns.Add("Name", Ui.S(280));
+            lv.Columns.Add("Count / PID", Ui.S(100), HorizontalAlignment.Right);
+            lv.Columns.Add("CPU", Ui.S(90), HorizontalAlignment.Right);
+            lv.Columns.Add("Memory", Ui.S(110), HorizontalAlignment.Right);
+            lv.Columns.Add("Disk I/O", Ui.S(100), HorizontalAlignment.Right);
+            lv.Columns.Add("Threads", Ui.S(80), HorizontalAlignment.Right);
+            lv.Columns.Add("Process", Ui.S(170));
+            lv.Columns.Add("Location", Ui.S(240));
+            lv.Weights = new[] { 2, 0, 0, 0, 0, 0, 1, 3 };
+            lv.CustomCell = e =>
+            {
+                if (e.ColumnIndex < 2 || e.ColumnIndex > 4 || e.ItemIndex < 0 || e.ItemIndex >= rows.Count) return false;
+                var p = rows[e.ItemIndex];
+                double heat = e.ColumnIndex == 2 ? p.Cpu / 25.0 : e.ColumnIndex == 3 ? p.Mem / (1536.0 * 1024 * 1024) : p.Io / (20.0 * 1024 * 1024);
+                FastList.HeatCell(e, heat, e.Item.ForeColor);
+                return true;
+            };
             lv.RetrieveVirtualItem += Retrieve;
             lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column != 0; } Rebuild(); };
             lv.KeyDown += (s, e) =>
@@ -216,7 +284,6 @@ namespace StickyPro
                 if (e.KeyCode == Keys.Delete) { EndSelected(); e.SuppressKeyPress = true; }
                 else if (e.Control && e.KeyCode == Keys.F) { search.Focus(); e.SuppressKeyPress = true; }
             };
-            lv.FillIndex = 0;
             var m = Ui.Menu();
             m.Items.Add("End task\tDel", null, delegate { EndSelected(); });
             m.Items.Add("Open file location", null, delegate
@@ -225,6 +292,13 @@ namespace StickyPro
                 if (p != null) try { Process.Start("explorer.exe", "/select,\"" + p.Path + "\""); } catch { }
             });
             m.Items.Add("Copy name", null, delegate { var p = SelectedRows().FirstOrDefault(); if (p != null) App.I.CopyText(p.Display); });
+            m.Items.Add("Copy path", null, delegate { var p = SelectedRows().FirstOrDefault(r => !string.IsNullOrEmpty(r.Path)); if (p != null) App.I.CopyText(p.Path); });
+            m.Items.Add("File properties", null, delegate
+            {
+                var p = SelectedRows().FirstOrDefault(r => !string.IsNullOrEmpty(r.Path));
+                if (p != null) ShellOps.Properties(p.Path);
+            });
+            m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Search the web for it", null, delegate
             {
                 var p = SelectedRows().FirstOrDefault();
@@ -236,7 +310,7 @@ namespace StickyPro
 
             var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 36), WrapContents = true };
             search = Ui.Search("Filter processes");
-            search.Width = Ui.S(170);
+            search.Width = Ui.S(260);
             search.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
             search.TextChanged += delegate { Rebuild(); };
             bar.Controls.Add(search);
@@ -244,10 +318,9 @@ namespace StickyPro
             group.CheckedChanged += delegate { Rebuild(); };
             bar.Controls.Add(group);
             bar.Controls.Add(Ui.Btn("End task", delegate { EndSelected(); }, true));
+            summary = new Label { AutoSize = true, Font = Ui.Bold, UseMnemonic = false, Margin = new Padding(Ui.S(16), Ui.S(9), 0, 0) };
+            bar.Controls.Add(summary);
             Controls.Add(bar);
-
-            summary = new Label { Dock = DockStyle.Top, Height = Ui.S(24), Font = Ui.Bold, TextAlign = ContentAlignment.MiddleLeft };
-            Controls.Add(summary);
 
             onUpdate = () => { if (Live) Rebuild(); };
             ProcessSampler.Updated += onUpdate;
@@ -276,7 +349,7 @@ namespace StickyPro
                     return new ProcInfo
                     {
                         Display = first.Display, Name = first.Name, Path = first.Path, Count = g.Count(), Pid = first.Pid,
-                        Mem = g.Sum(x => x.Mem), Cpu = g.Sum(x => x.Cpu), Io = g.Sum(x => x.Io), Pids = g.Select(x => x.Pid).ToList()
+                        Mem = g.Sum(x => x.Mem), Cpu = g.Sum(x => x.Cpu), Io = g.Sum(x => x.Io), Threads = g.Sum(x => x.Threads), Pids = g.Select(x => x.Pid).ToList()
                     };
                 });
             }
@@ -288,6 +361,9 @@ namespace StickyPro
                 case 1: key = p => group.Checked ? p.Count : p.Pid; break;
                 case 2: key = p => p.Cpu; break;
                 case 4: key = p => p.Io; break;
+                case 5: key = p => p.Threads; break;
+                case 6: key = p => p.Name.ToLowerInvariant(); break;
+                case 7: key = p => (p.Path ?? "").ToLowerInvariant(); break;
                 default: key = p => p.Mem; break;
             }
             var list = (sortDesc ? items.OrderByDescending(key) : items.OrderBy(key)).ToList();
@@ -314,7 +390,7 @@ namespace StickyPro
 
         void Retrieve(object sender, RetrieveVirtualItemEventArgs e)
         {
-            if (e.ItemIndex < 0 || e.ItemIndex >= rows.Count) { e.Item = new ListViewItem(""); e.Item.SubItems.AddRange(new[] { "", "", "", "" }); return; }
+            if (e.ItemIndex < 0 || e.ItemIndex >= rows.Count) { e.Item = new ListViewItem(""); e.Item.SubItems.AddRange(new[] { "", "", "", "", "", "", "" }); return; }
             var p = rows[e.ItemIndex];
             var it = new ListViewItem(p.Display);
             it.ImageIndex = ProcMeta.IconFor(p.Path);
@@ -322,6 +398,9 @@ namespace StickyPro
             it.SubItems.Add(p.Cpu < 0.05 ? "0 %" : p.Cpu.ToString("0.0") + " %");
             it.SubItems.Add(Fmt.Bytes(p.Mem));
             it.SubItems.Add(p.Io < 1024 ? "0" : Fmt.Bytes((long)p.Io) + "/s");
+            it.SubItems.Add(p.Threads.ToString());
+            it.SubItems.Add(p.Name);
+            it.SubItems.Add(string.IsNullOrEmpty(p.Path) ? "" : System.IO.Path.GetDirectoryName(p.Path));
             if (p.Mem > 500L << 20) it.ForeColor = Ui.Danger;
             e.Item = it;
         }
@@ -372,6 +451,7 @@ namespace StickyPro
             lv.Columns.Add("Publisher", Ui.S(170));
             lv.Columns.Add("Where", Ui.S(170));
             lv.Columns.Add("Command", Ui.S(400));
+            lv.Weights = new[] { 2, 0, 1, 1, 4 };
             lv.DoubleClick += delegate { Toggle(null); };
             lv.KeyDown += (s, e) => { if (e.KeyCode == Keys.Space || e.KeyCode == Keys.Enter) { Toggle(null); e.SuppressKeyPress = true; } };
             var m = Ui.Menu();
@@ -463,35 +543,55 @@ namespace StickyPro
         public DriveTile()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            Size = Ui.S(250, 64);
-            Margin = new Padding(0, 0, Ui.S(10), Ui.S(6));
+            Size = Ui.S(320, 92);
+            Margin = new Padding(0, 0, Ui.S(12), Ui.S(8));
         }
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.Clear(Parent != null ? Parent.BackColor : Ui.Bg);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            using (var path = Ui.Round(r, Ui.S(6)))
-            {
-                using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path);
-                using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
-            }
-            g.SmoothingMode = SmoothingMode.None;
-            TextRenderer.DrawText(g, Label, Ui.Bold, new Rectangle(Ui.S(10), Ui.S(5), Width - Ui.S(20), Ui.S(20)), Ui.Text, TextFormatFlags.EndEllipsis);
-            var bar = new Rectangle(Ui.S(10), Ui.S(27), Width - Ui.S(20), Ui.S(10));
-            using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bar);
+            var r = new Rectangle(Ui.S(3), Ui.S(1), Width - Ui.S(7), Height - Ui.S(7));
+            Ui.FillCard(g, r, Ui.S(12), false);
+            if (!Ui.Navy) using (var path = Ui.Round(r, Ui.S(12))) using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
+            var flags = TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+            TextRenderer.DrawText(g, Label, Ui.Bold, new Rectangle(r.X + Ui.S(14), r.Y + Ui.S(8), r.Width - Ui.S(100), Ui.S(22)), Ui.Text, flags);
+            TextRenderer.DrawText(g, (Used * 100).ToString("0") + "% used", Ui.Bold, new Rectangle(r.X + Ui.S(14), r.Y + Ui.S(8), r.Width - Ui.S(28), Ui.S(22)), Used >= 0.9 ? Ui.Danger : Ui.Muted, flags | TextFormatFlags.Right);
+            var bar = new Rectangle(r.X + Ui.S(14), r.Y + Ui.S(34), r.Width - Ui.S(28), Ui.S(10));
+            using (var path = Ui.Round(bar, Ui.S(5))) using (var b = new SolidBrush(Ui.Track)) g.FillPath(b, path);
             Color fill = Used >= 0.9 ? Color.FromArgb(218, 38, 38) : Used >= 0.75 ? Color.FromArgb(235, 150, 30) : Color.FromArgb(38, 160, 218);
-            using (var b = new SolidBrush(fill)) g.FillRectangle(b, bar.X, bar.Y, (int)(bar.Width * Math.Min(1, Used)), bar.Height);
-            TextRenderer.DrawText(g, Info, Ui.Small, new Rectangle(Ui.S(10), Ui.S(40), Width - Ui.S(20), Ui.S(18)), Ui.Muted, TextFormatFlags.EndEllipsis);
+            int fw = (int)(bar.Width * Math.Max(0, Math.Min(1, Used)));
+            if (fw > Ui.S(10)) using (var path = Ui.Round(new Rectangle(bar.X, bar.Y, fw, bar.Height), Ui.S(5))) using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+            TextRenderer.DrawText(g, Info, Ui.Small, new Rectangle(r.X + Ui.S(14), r.Y + Ui.S(50), r.Width - Ui.S(28), Ui.S(18)), Ui.Muted, flags);
             if (!string.IsNullOrEmpty(Delta))
-                TextRenderer.DrawText(g, Delta, Ui.Small, new Rectangle(Ui.S(10), Ui.S(40), Width - Ui.S(20), Ui.S(18)), Delta.StartsWith("-") ? Ui.Danger : Ui.Success, TextFormatFlags.Right);
+                TextRenderer.DrawText(g, Delta, Ui.Small, new Rectangle(r.X + Ui.S(14), r.Y + Ui.S(66), r.Width - Ui.S(28), Ui.S(18)), Delta.StartsWith("-") ? Ui.Danger : Ui.Success, flags);
         }
+    }
+
+    // Row of equal tiles that share the full width (wraps when a tile would be narrower than MinTile). Sets its own height.
+    class TileRow : Panel
+    {
+        public int MinTile = Ui.S(260), MaxTile = Ui.S(520), TileHeight = Ui.S(92);
+        public TileRow() { Dock = DockStyle.Top; Height = TileHeight; }
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            var kids = Controls.Cast<Control>().Where(c => c.Visible).ToList();
+            int n = Math.Max(1, kids.Count), gap = Ui.S(12), w = Math.Max(1, ClientSize.Width);
+            int cols = Math.Max(1, Math.Min(n, (w + gap) / (MinTile + gap)));
+            int tw = Math.Min(MaxTile, (w - gap * (cols - 1)) / cols);
+            for (int i = 0; i < kids.Count; i++)
+                kids[i].SetBounds((i % cols) * (tw + gap), (i / cols) * (TileHeight + Ui.S(6)), tw, TileHeight);
+            int rows = (kids.Count + cols - 1) / cols;
+            int h = Math.Max(TileHeight, rows * (TileHeight + Ui.S(6)));
+            if (Height != h) Height = h;
+        }
+        protected override void OnResize(EventArgs e) { base.OnResize(e); PerformLayout(); }
     }
 
     class DrivesPanel : LivePanel
     {
-        readonly FlowLayoutPanel tiles;
+        readonly TileRow tiles;
         readonly Dictionary<string, DriveTile> tileMap = new Dictionary<string, DriveTile>();
         readonly FastList lvClean, lvBig, lvFolders;
         readonly TabStrip tabs;
@@ -517,6 +617,7 @@ namespace StickyPro
             lvClean.Columns.Add("Change", Ui.S(100), HorizontalAlignment.Right);
             lvClean.Columns.Add("Files", Ui.S(80), HorizontalAlignment.Right);
             lvClean.Columns.Add("Details", Ui.S(420));
+            lvClean.Weights = new[] { 1, 0, 0, 0, 2 };
             lvClean.ItemChecked += (s, e) => { var t = e.Item.Tag as CleanTarget; if (t != null) t.Checked = e.Item.Checked; UpdateDeleteButton(); };
 
             lvBig = new FastList { Dock = DockStyle.Fill, CheckBoxes = true, Visible = false };
@@ -524,13 +625,15 @@ namespace StickyPro
             lvBig.Columns.Add("Size", Ui.S(90), HorizontalAlignment.Right);
             lvBig.Columns.Add("Modified", Ui.S(110));
             lvBig.Columns.Add("Folder", Ui.S(520));
+            lvBig.Weights = new[] { 1, 0, 0, 2 };
             lvBig.ItemChecked += delegate { UpdateDeleteButton(); };
             lvBig.DoubleClick += delegate { if (lvBig.SelectedItems.Count > 0) Reveal(((BigFile)lvBig.SelectedItems[0].Tag).Path); };
 
             lvFolders = new FastList { Dock = DockStyle.Fill, Visible = false };
             lvFolders.Columns.Add("Folder", Ui.S(520));
             lvFolders.Columns.Add("Size", Ui.S(90), HorizontalAlignment.Right);
-            lvFolders.Columns.Add("Change since last scan", Ui.S(160), HorizontalAlignment.Right);
+            lvFolders.Columns.Add("Change since last scan", Ui.S(180), HorizontalAlignment.Right);
+            lvFolders.FillIndex = 0;
             lvFolders.DoubleClick += delegate { if (lvFolders.SelectedItems.Count > 0) try { Process.Start("explorer.exe", "\"" + (string)lvFolders.SelectedItems[0].Tag + "\""); } catch { } };
 
             BuildMenus();
@@ -561,7 +664,7 @@ namespace StickyPro
             info = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, TextAlign = ContentAlignment.MiddleLeft };
             Controls.Add(info);
 
-            tiles = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 74), WrapContents = true, AutoScroll = false };
+            tiles = new TileRow();
             Controls.Add(tiles);
 
             driveTimer.Interval = 5000;
@@ -935,11 +1038,18 @@ namespace StickyPro
             tabs.Add("Startup apps");
             tabs.Add("Drives & cleanup");
             tabs.Add("Uninstall");
-            tabs.Changed += i => { for (int k = 0; k < views.Length; k++) views[k].Visible = k == i; };
+            var kpis = new SystemKpis();
+            tabs.Changed += i =>
+            {
+                SuspendLayout();
+                for (int k = 0; k < views.Length; k++) views[k].Visible = k == i;
+                kpis.Visible = i == 0;   // the performance strip belongs to Processes; other tabs get the full height
+                ResumeLayout(true);
+            };
             top.Controls.Add(tabs);
             var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Min(2, Math.Max(0, tabs.Selected))] }, null); });
             top.Controls.Add(pop);
-            Controls.Add(new SystemKpis());
+            Controls.Add(kpis);
             Controls.Add(top);
             tabs.Select(0);
         }

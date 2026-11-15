@@ -39,6 +39,9 @@ namespace StickyPro
             return dedup.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
+        // Worker thread. Store apps only (slow: waits for PowerShell).
+        public static List<InstalledApp> LoadStore() { return StoreApps().ToList(); }
+
         static void Read(List<InstalledApp> list, RegistryHive hive, RegistryView view, string kind)
         {
             try
@@ -182,6 +185,9 @@ namespace StickyPro
             string core = Clean(a.Name), pub = CleanPub(a.Publisher);
             if (a.Kind == "Store") core = Clean(a.Name.Split('(')[0]);
             if (core.Length < 4) core = a.Name.Trim();
+            // Store apps have generic names ("Photos", "Mail"): a name-only match is never "Safe" and never pre-ticked.
+            bool store = a.Kind == "Store";
+            string nameConf = store ? "Maybe" : "Safe";
             var otherLocs = all.Where(o => o != a && !string.IsNullOrEmpty(o.Location) && Directory.Exists(o.Location)).Select(o => o.Location.TrimEnd('\\')).ToList();
             string self = Application.StartupPath;
             string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
@@ -216,11 +222,11 @@ namespace StickyPro
                 foreach (var d in dirs)
                 {
                     string n = Path.GetFileName(d);
-                    if (Eq(n, core)) addFolder(d, "Safe");
+                    if (Eq(n, core)) addFolder(d, nameConf);
                     else if (pub.Length >= 4 && Eq(n, pub))
                     {
                         string inner = Path.Combine(d, core);
-                        if (Directory.Exists(inner)) addFolder(inner, "Safe");
+                        if (Directory.Exists(inner)) addFolder(inner, nameConf);
                         string[] subs; try { subs = Directory.GetDirectories(d); } catch { subs = new string[0]; }
                         if (subs.Length <= 1) addFolder(d, "Maybe");
                     }
@@ -232,11 +238,11 @@ namespace StickyPro
             foreach (var r in lnkRoots.Where(x => !string.IsNullOrEmpty(x) && Directory.Exists(x)))
                 foreach (var f in Files(r, "*.lnk", 3))
                     if (Path.GetFileNameWithoutExtension(f).IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0 && !seen.Any(s => Under(f, s)))
-                        res.Add(new Leftover { Group = "Shortcuts", Text = f, Path = f, Confidence = "Safe", Check = true });
+                        res.Add(new Leftover { Group = "Shortcuts", Text = f, Path = f, Confidence = nameConf, Check = !store });
             // Start menu folder named like the app
             foreach (var r in lnkRoots.Take(2).Where(x => !string.IsNullOrEmpty(x) && Directory.Exists(x)))
             {
-                string d = Path.Combine(r, core); if (Directory.Exists(d) && !seen.Contains(d)) { seen.Add(d); res.Add(new Leftover { Group = "Shortcuts", Text = d, Path = d, Confidence = "Safe", Check = true }); }
+                string d = Path.Combine(r, core); if (Directory.Exists(d) && !seen.Contains(d)) { seen.Add(d); res.Add(new Leftover { Group = "Shortcuts", Text = d, Path = d, Confidence = nameConf, Check = !store }); }
             }
             // Registry keys
             var regs = new List<string> { @"Software\" + core };
@@ -244,7 +250,7 @@ namespace StickyPro
             foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
                 foreach (var view in hive == RegistryHive.CurrentUser ? new[] { RegistryView.Registry64 } : new[] { RegistryView.Registry64, RegistryView.Registry32 })
                 {
-                    foreach (var k in regs) AddKey(res, hive, view, k, "Safe");
+                    foreach (var k in regs) AddKey(res, hive, view, k, nameConf);
                     if (pub.Length >= 4 && !Eq(pub, "Microsoft"))
                         try
                         {
@@ -263,7 +269,7 @@ namespace StickyPro
                                 {
                                     string cmd = (rk.GetValue(vn) ?? "").ToString();
                                     if ((a.Location.Length > 3 && cmd.IndexOf(a.Location.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) >= 0) || cmd.IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0 || Eq(vn, core))
-                                        res.Add(new Leftover { Group = "Startup entries", Text = Root(hive) + "\\" + run + "  :  " + vn + " = " + cmd, Confidence = "Safe", Check = true, Hive = hive, View = view, Key = run, ValueName = vn, IsValue = true, Hklm = hive == RegistryHive.LocalMachine });
+                                        res.Add(new Leftover { Group = "Startup entries", Text = Root(hive) + "\\" + run + "  :  " + vn + " = " + cmd, Confidence = nameConf, Check = !store, Hive = hive, View = view, Key = run, ValueName = vn, IsValue = true, Hklm = hive == RegistryHive.LocalMachine });
                                 }
                             }
                         }
@@ -321,8 +327,24 @@ namespace StickyPro
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct SHFILEOPSTRUCT { public IntPtr hwnd; public uint wFunc; public string pFrom; public string pTo; public ushort fFlags; public bool fAnyOperationsAborted; public IntPtr hNameMappings; public string lpszProgressTitle; }
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHFileOperation(ref SHFILEOPSTRUCT op);
-        public static bool Recycle(string path)
+        // True when the path is on a local fixed drive (which has a Recycle Bin). Network, removable and unknown drives: false.
+        public static bool OnFixedDrive(string path)
         {
+            try
+            {
+                string root = Path.GetPathRoot(path);
+                if (string.IsNullOrEmpty(root) || root.StartsWith("\\\\")) return false;
+                return new DriveInfo(root).DriveType == DriveType.Fixed;
+            }
+            catch { return false; }
+        }
+
+        // Recycle Bin only: paths on drives without a bin are refused (they would be deleted for good).
+        public static bool Recycle(string path) { return Recycle(path, false); }
+
+        public static bool Recycle(string path, bool allowPermanent)
+        {
+            if (!allowPermanent && !OnFixedDrive(path)) return false;
             var op = new SHFILEOPSTRUCT { wFunc = 3 /* FO_DELETE */, pFrom = path + "\0\0", fFlags = 0x40 | 0x10 | 0x4 | 0x400 /* ALLOWUNDO|NOCONFIRMATION|SILENT|NOERRORUI */ };
             return SHFileOperation(ref op) == 0 && !File.Exists(path) && !Directory.Exists(path);
         }
@@ -424,14 +446,24 @@ namespace StickyPro
             var sel = lv.CheckedItems.Cast<ListViewItem>().Select(li => (Leftover)li.Tag).Where(l => !l.InfoOnly).ToList();
             if (sel.Count == 0) return;
             if (MessageBox.Show(this, "Remove " + sel.Count + " item(s)?\n\nFiles and folders go to the Recycle Bin. Registry keys are exported to a .reg backup first.", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            // Drives without a Recycle Bin (network, removable) would delete for good: ask first.
+            bool allowPermanent = false;
+            var noBin = sel.Where(l => l.Path != null && !Leftovers.OnFixedDrive(l.Path)).ToList();
+            if (noBin.Count > 0)
+            {
+                var dr = MessageBox.Show(this, noBin.Count + " item(s) are on a drive without a Recycle Bin (network or removable) and would be deleted permanently:\n\n" + string.Join("\n", noBin.Select(l => l.Text).Take(8)) + "\n\nYes = delete them permanently\nNo = skip them\nCancel = stop", App.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                if (dr == DialogResult.Cancel) return;
+                allowPermanent = dr == DialogResult.Yes;
+            }
             btnDelete.Enabled = false;
             string backupDir = Path.Combine(Store.Dir, "uninstall-backups");
             string safeName = Regex.Replace(app.Name, @"[^\w\- ]", "_");
-            bool admin = Admin.IsAdmin;
+            bool admin = AdminCache.Is;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                int done = 0, failed = 0; long bytes = 0; var needAdmin = new List<string>(); int n = 0;
-                Directory.CreateDirectory(backupDir);
+                int done = 0, failed = 0, skipped = 0; long bytes = 0; var needAdmin = new List<string>(); int n = 0;
+                var removed = new HashSet<Leftover>();
+                try { Directory.CreateDirectory(backupDir); } catch { }
                 foreach (var l in sel)
                 {
                     n++;
@@ -441,24 +473,27 @@ namespace StickyPro
                     bool machine = l.Hklm || (l.Path != null && (l.Path.StartsWith(pf, StringComparison.OrdinalIgnoreCase) || (pf86.Length > 0 && l.Path.StartsWith(pf86, StringComparison.OrdinalIgnoreCase)) || l.Path.StartsWith(pd, StringComparison.OrdinalIgnoreCase)));
                     if (l.Path != null)
                     {
-                        if (Leftovers.Recycle(l.Path)) { done++; bytes += Math.Max(0, l.Size); }
+                        if (!allowPermanent && !Leftovers.OnFixedDrive(l.Path)) { skipped++; continue; }
+                        if (Leftovers.Recycle(l.Path, allowPermanent)) { done++; bytes += Math.Max(0, l.Size); removed.Add(l); }
                         else if (machine && !admin) needAdmin.Add(l.Text); else failed++;
                     }
                     else
                     {
                         string file = Path.Combine(backupDir, safeName + " " + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + n + ".reg");
                         if (!Leftovers.ExportKey(l, file)) { failed++; continue; }
-                        if (Leftovers.DeleteReg(l)) done++; else if (machine && !admin) needAdmin.Add(l.Text); else failed++;
+                        if (Leftovers.DeleteReg(l)) { done++; removed.Add(l); } else if (machine && !admin) needAdmin.Add(l.Text); else failed++;
                     }
                 }
+                int notRemoved = failed + skipped + needAdmin.Count;
                 try
                 {
                     BeginInvoke(new Action(() =>
                     {
                         if (IsDisposed) return;
-                        foreach (var li in lv.CheckedItems.Cast<ListViewItem>().ToList()) li.Remove();
-                        status.Text = "Removed " + done + " item(s), " + Fmt.Bytes(bytes) + " to the Recycle Bin." + (failed > 0 ? " " + failed + " failed (in use?)." : "");
-                        string msg = "Removed " + done + " item(s) (" + Fmt.Bytes(bytes) + " to the Recycle Bin)." + (failed > 0 ? "\n" + failed + " item(s) could not be removed." : "") +
+                        // Only rows that were really removed leave the list; failed ones stay ticked so you can retry.
+                        foreach (var li in lv.CheckedItems.Cast<ListViewItem>().ToList()) if (removed.Contains((Leftover)li.Tag)) li.Remove();
+                        status.Text = "Removed " + done + " item(s), " + Fmt.Bytes(bytes) + " to the Recycle Bin." + (notRemoved > 0 ? " " + notRemoved + " could not be removed." : "");
+                        string msg = "Removed " + done + " item(s) (" + Fmt.Bytes(bytes) + " to the Recycle Bin)." + (notRemoved > 0 ? "\n" + notRemoved + " item(s) could not be removed (in use, skipped, or needs admin)." : "") +
                             (needAdmin.Count > 0 ? "\n\nNeeds admin (use \"Run as admin\" and scan again):\n" + string.Join("\n", needAdmin.Take(10)) : "") + "\n\nRegistry backups: " + backupDir + "\nOpen the backups folder?";
                         if (MessageBox.Show(this, msg, App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes) Hidden.Open("explorer.exe", "\"" + backupDir + "\"");
                         btnDelete.Enabled = true;
@@ -482,6 +517,13 @@ namespace StickyPro
         }
     }
 
+    // Admin.IsAdmin builds a WindowsIdentity every time; the answer never changes while the app runs.
+    static class AdminCache
+    {
+        static bool? value;
+        public static bool Is { get { if (value == null) value = Admin.IsAdmin; return value.Value; } }
+    }
+
     class UninstallPanel : LivePanel
     {
         readonly FastList lv;
@@ -491,8 +533,10 @@ namespace StickyPro
         readonly Action<string> status;
         List<InstalledApp> all = new List<InstalledApp>();
         List<InstalledApp> rows = new List<InstalledApp>();
-        bool loaded, busy;
+        bool loaded, busy, storeLoading;
         int sortCol; bool sortDesc;
+        int reloadGen;
+        readonly System.Windows.Forms.Timer searchTimer = new System.Windows.Forms.Timer { Interval = 250 };
 
         public UninstallPanel(Action<string> status)
         {
@@ -501,6 +545,7 @@ namespace StickyPro
             lv = new FastList { Dock = DockStyle.Fill, VirtualMode = true, MultiSelect = true, SmallImageList = ProcMeta.Icons };
             lv.Columns.Add("Name", Ui.S(280)); lv.Columns.Add("Publisher", Ui.S(170)); lv.Columns.Add("Version", Ui.S(100));
             lv.Columns.Add("Installed", Ui.S(95)); lv.Columns.Add("Size", Ui.S(80), HorizontalAlignment.Right); lv.Columns.Add("Type", Ui.S(60)); lv.Columns.Add("Location", Ui.S(260));
+            lv.Weights = new[] { 3, 1, 0, 0, 0, 0, 2 }; // Name, Publisher, Version, Installed, Size, Type, Location
             lv.RetrieveVirtualItem += Retrieve;
             lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 3 || e.Column == 4; } Rebuild(); };
             lv.DoubleClick += delegate { Uninstall(false); };
@@ -510,8 +555,9 @@ namespace StickyPro
 
             var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 38), WrapContents = true };
             search = Ui.Search("Search programs"); search.Width = Ui.S(190); search.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
-            search.TextChanged += delegate { Rebuild(); };
-            filter = MainForm.Combo(Ui.S(170), "All programs", "Desktop apps", "Store apps", "Large (> 500 MB)", "Installed last 30 days");
+            searchTimer.Tick += delegate { searchTimer.Stop(); Rebuild(); };
+            search.TextChanged += delegate { searchTimer.Stop(); searchTimer.Start(); };
+            filter = MainForm.Combo(170, "All programs", "Desktop apps", "Store apps", "Large (> 500 MB)", "Installed last 30 days");
             filter.SelectedIndex = 0; filter.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
             filter.SelectedIndexChanged += delegate { Rebuild(); };
             bar.Controls.Add(search); bar.Controls.Add(filter);
@@ -522,7 +568,7 @@ namespace StickyPro
             bar.Controls.Add(Ui.Btn("Compute sizes", delegate { ComputeSizes(); }));
             bar.Controls.Add(Ui.Btn("Export CSV", delegate { ExportCsv(); }));
             bar.Controls.Add(Ui.Btn("Apps & features", delegate { Hidden.Open("ms-settings:appsfeatures"); }));
-            if (!Admin.IsAdmin) bar.Controls.Add(Ui.Btn("Run as admin", delegate { App.I.RestartElevated(); }));
+            if (!AdminCache.Is) bar.Controls.Add(Ui.Btn("Run as admin", delegate { App.I.RestartElevated(); }));
             Controls.Add(bar);
             summary = new Label { Dock = DockStyle.Top, Height = Ui.S(24), Font = Ui.Bold, TextAlign = ContentAlignment.MiddleLeft };
             Controls.Add(summary);
@@ -531,19 +577,40 @@ namespace StickyPro
 
         protected override void OnLive(bool on) { if (on && !loaded) Reload(); }
 
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { searchTimer.Stop(); searchTimer.Dispose(); }
+            base.Dispose(disposing);
+        }
+
         void Reload()
         {
             loaded = true; summary.Text = "Loading programs...";
+            int gen = ++reloadGen;
+            storeLoading = true;
             ThreadPool.QueueUserWorkItem(delegate
             {
+                // Desktop programs (registry) show at once; Store apps (PowerShell, slow) are appended when ready.
                 List<InstalledApp> list;
-                try { list = Programs.Load(true); } catch (Exception ex) { App.Log("Programs: " + ex.Message); list = new List<InstalledApp>(); }
-                UI(() => { all = list; Rebuild(); });
+                try { list = Programs.Load(false); } catch (Exception ex) { App.Log("Programs: " + ex.Message); list = new List<InstalledApp>(); }
+                UI(() => { if (gen != reloadGen) return; all = list; RebuildCore(true); });
+                List<InstalledApp> store;
+                try { store = Programs.LoadStore(); } catch (Exception ex) { App.Log("Store apps: " + ex.Message); store = new List<InstalledApp>(); }
+                UI(() =>
+                {
+                    if (gen != reloadGen) return;
+                    storeLoading = false;
+                    all = list.Concat(store).OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                    RebuildCore(true);
+                });
             });
         }
 
-        void Rebuild()
+        void Rebuild() { RebuildCore(false); }
+
+        void RebuildCore(bool keepSelection)
         {
+            var keep = keepSelection ? new HashSet<InstalledApp>(Sel()) : null;
             string q = search.Text.Trim();
             IEnumerable<InstalledApp> items = all;
             switch (filter.SelectedIndex)
@@ -566,8 +633,10 @@ namespace StickyPro
                 default: key = a => a.Name.ToLowerInvariant(); break;
             }
             rows = (sortDesc ? items.OrderByDescending(key) : items.OrderBy(key)).ToList();
-            lv.BeginUpdate(); lv.SelectedIndices.Clear(); lv.VirtualListSize = rows.Count; lv.EndUpdate(); lv.Invalidate();
-            summary.Text = rows.Count + " programs" + (rows.Count != all.Count ? " (of " + all.Count + ")" : "") + ", " + Fmt.Bytes(rows.Sum(a => a.SizeBytes)) + (Admin.IsAdmin ? "" : "   ·   Some programs need \"Run as admin\" to remove leftovers");
+            lv.BeginUpdate(); lv.SelectedIndices.Clear(); lv.VirtualListSize = rows.Count;
+            if (keep != null && keep.Count > 0) for (int i = 0; i < rows.Count; i++) if (keep.Contains(rows[i])) lv.SelectedIndices.Add(i);
+            lv.EndUpdate(); lv.Invalidate();
+            summary.Text = rows.Count + " programs" + (rows.Count != all.Count ? " (of " + all.Count + ")" : "") + ", " + Fmt.Bytes(rows.Sum(a => a.SizeBytes)) + (storeLoading ? "   ·   loading Store apps..." : "") + (AdminCache.Is ? "" : "   ·   Some programs need \"Run as admin\" to remove leftovers");
         }
 
         void Retrieve(object sender, RetrieveVirtualItemEventArgs e)

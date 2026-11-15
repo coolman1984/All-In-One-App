@@ -276,7 +276,7 @@ namespace StickyPro
             if (string.IsNullOrEmpty(path)) return 0;
             int i;
             if (iconIndex.TryGetValue(path, out i)) return i;
-            if (Icons.Images.Count >= 256 || iconIndex.Count >= 1024) return 0;
+            if (Icons.Images.Count >= 1024 || iconIndex.Count >= 2048) return 0;
             i = 0;
             try
             {

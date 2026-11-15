@@ -27,7 +27,11 @@ namespace StickyPro
         readonly List<Toggle> toggles = new List<Toggle>();
         readonly ToolTip tip = new ToolTip();
         readonly Timer clock = new Timer { Interval = 1000 };
-        readonly Action update, redraw;
+        readonly Action update, redraw, storeUpdate;
+        readonly Timer factsTimer = new Timer { Interval = 400 };
+        DashboardFacts facts; DateTime factsAt;
+        string layoutKey;
+        readonly Dictionary<string, int> widthCache = new Dictionary<string, int>();
         Bitmap logo;
         Rectangle brandRect, clockRect, moreRect, searchRect;
         bool compact;
@@ -55,9 +59,12 @@ namespace StickyPro
             foreach (var k in new[] { "theme", "awake", "wifi" }) toggles.Add(new Toggle { Key = k });
             clock.Tick += delegate { if (DateTime.Now.Minute != lastMinute) { lastMinute = DateTime.Now.Minute; Invalidate(clockRect); } };
             update = () => { if (Live) RefreshValues(); };
+            // Store events can come in bursts (typing in a note, copying): recompute the data facts once, 400 ms after the last one.
+            storeUpdate = () => { facts = null; if (Live) { factsTimer.Stop(); factsTimer.Start(); } };
+            factsTimer.Tick += delegate { factsTimer.Stop(); if (Live) RefreshValues(); };
             redraw = () => { if (!IsDisposed) Invalidate(); };
-            ProcessSampler.Updated += update; Store.ClipsChanged += update; Store.PromptsChanged += update; Store.NotesChanged += update;
-            Store.ActivityChanged += update; Store.TaggedChanged += update; Store.TasksChanged += update; Recorder.Finished += update;
+            ProcessSampler.Updated += update; Store.ClipsChanged += storeUpdate; Store.PromptsChanged += storeUpdate; Store.NotesChanged += storeUpdate;
+            Store.ActivityChanged += storeUpdate; Store.TaggedChanged += storeUpdate; Store.TasksChanged += storeUpdate; Recorder.Finished += storeUpdate;
             Awake.Changed += redraw; WiFi.Changed += redraw;
             Cursor = Cursors.Default;
         }
@@ -79,7 +86,7 @@ namespace StickyPro
 
         void RefreshValues()
         {
-            var facts = DashboardFacts.Read(Store.Now());
+            if (facts == null || (DateTime.Now - factsAt).TotalSeconds >= 60) { facts = DashboardFacts.Read(Store.Now()); factsAt = DateTime.Now; }
             var cpu = C("cpu"); cpu.Value = ProcessSampler.CpuTotal.ToString("0") + "%"; cpu.Spark = ProcessSampler.CpuHistory.ToArray();
             cpu.Tint = ProcessSampler.CpuTotal > 85 ? Red : ColorTranslator.FromHtml("#3B82F6");
             var ram = C("ram"); ram.Value = ProcessSampler.MemLoad + "%"; ram.Bar = ProcessSampler.MemLoad / 100.0;
@@ -104,13 +111,27 @@ namespace StickyPro
             var urgent = C("urgent"); urgent.Value = facts.Urgent.ToString(); urgent.Tint = facts.Urgent > 0 ? Red : Slate;
             var rec = C("rec"); rec.Value = facts.Recording; rec.Tint = facts.Recording == "Recording" ? Red : Slate;
             foreach (var c in chips) { if (c.Key != "c" && c.Key != "d") c.Visible = true; if (c.Tip == null || c.Key == "clips" || c.Key == "files" || c.Key == "urgent" || c.Key == "rec" || c.Key == "cpu") c.Tip = c.Label + ": " + c.Value; }
-            LayoutBar();
+            // Re-layout only when a chip text or visibility changed (layout measures text for every chip).
+            var sig = new System.Text.StringBuilder();
+            foreach (var c in chips) sig.Append(c.Visible ? c.Value : "\u0001").Append('\u0002');
+            string k = sig.ToString();
+            if (k != layoutKey) { layoutKey = k; LayoutBar(); }
             Invalidate();
         }
 
         // ---------- Layout ----------
         int ChipH { get { return Ui.S(38); } }
         int NaturalWidth(Chip c, bool small)
+        {
+            string ck = (small ? "s|" : "f|") + c.Value + "|" + c.Label;
+            int cached;
+            if (widthCache.TryGetValue(ck, out cached)) return cached;
+            if (widthCache.Count > 400) widthCache.Clear();
+            int w = MeasureChip(c, small);
+            widthCache[ck] = w;
+            return w;
+        }
+        int MeasureChip(Chip c, bool small)
         {
             int text = TextRenderer.MeasureText(c.Value, Ui.Bold, Size.Empty, TextFormatFlags.NoPadding).Width;
             if (!small) text = Math.Max(text, TextRenderer.MeasureText(c.Label, Ui.Small, Size.Empty, TextFormatFlags.NoPadding).Width);
@@ -450,8 +471,9 @@ namespace StickyPro
         {
             if (disposing)
             {
-                ProcessSampler.Updated -= update; Store.ClipsChanged -= update; Store.PromptsChanged -= update; Store.NotesChanged -= update;
-                Store.ActivityChanged -= update; Store.TaggedChanged -= update; Store.TasksChanged -= update; Recorder.Finished -= update;
+                ProcessSampler.Updated -= update; Store.ClipsChanged -= storeUpdate; Store.PromptsChanged -= storeUpdate; Store.NotesChanged -= storeUpdate;
+                Store.ActivityChanged -= storeUpdate; Store.TaggedChanged -= storeUpdate; Store.TasksChanged -= storeUpdate; Recorder.Finished -= storeUpdate;
+                factsTimer.Dispose();
                 Awake.Changed -= redraw; WiFi.Changed -= redraw;
                 clock.Dispose(); tip.Dispose(); if (logo != null) logo.Dispose();
             }

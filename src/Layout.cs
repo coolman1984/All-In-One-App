@@ -87,9 +87,11 @@ namespace StickyPro
                     var want = ClientSize.Width < breakpoint ? DockStyle.Bottom : DockStyle.Right;
                     if (detail.Dock != want || !sized)
                     {
-                        detail.Dock = want; sized = ClientSize.Width > 0;
+                        // Not "sized" until the real window width is known (the first layout often runs at a tiny transient size).
+                        detail.Dock = want; sized = ClientSize.Width > Ui.S(600);
                         if (want == DockStyle.Bottom) detail.Height = PaneGrip.Size(key, want, Math.Max(Ui.S(80), Math.Min(preferredHeight, ClientSize.Height / 3)), ClientSize.Height);
-                        else detail.Width = PaneGrip.Size(key, want, Math.Min(preferredWidth, ClientSize.Width * 45 / 100), ClientSize.Width);
+                        // Wide windows: the detail pane grows with the window (about a third) instead of staying a narrow strip.
+                        else detail.Width = PaneGrip.Size(key, want, Math.Min(Math.Max(preferredWidth, ClientSize.Width * 36 / 100), ClientSize.Width * 45 / 100), ClientSize.Width);
                     }
                     else if (want == DockStyle.Right && detail.Width > ClientSize.Width * 80 / 100) detail.Width = Math.Max(Ui.S(60), ClientSize.Width * 80 / 100);
                     else if (want == DockStyle.Bottom && detail.Height > ClientSize.Height * 80 / 100) detail.Height = Math.Max(Ui.S(60), ClientSize.Height * 80 / 100);

@@ -45,11 +45,17 @@ namespace StickyPro
             // in N units
             if ((m = Regex.Match(s, @"(?<=\s)in\s+(\d+)\s*(min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)(?=\s)", O)).Success)
             {
-                int n = int.Parse(m.Groups[1].Value); string u = m.Groups[2].Value.ToLowerInvariant();
-                DateTime when = u.StartsWith("m") ? now.AddMinutes(n) : u.StartsWith("h") ? now.AddHours(n) : u.StartsWith("d") ? now.AddDays(n) : now.AddDays(7 * n);
-                date = when.Date;
-                if (u.StartsWith("m") || u.StartsWith("h")) { hour = when.Hour; minute = when.Minute; relativeTime = true; }
-                s = Cut(s, m);
+                int n; string u = m.Groups[2].Value.ToLowerInvariant();
+                if (!int.TryParse(m.Groups[1].Value, out n)) n = int.MaxValue;
+                n = Math.Min(n, u.StartsWith("m") ? 5256000 : u.StartsWith("h") ? 87600 : u.StartsWith("d") ? 3650 : 520);
+                try
+                {
+                    DateTime when = u.StartsWith("m") ? now.AddMinutes(n) : u.StartsWith("h") ? now.AddHours(n) : u.StartsWith("d") ? now.AddDays(n) : now.AddDays(7 * n);
+                    date = when.Date;
+                    if (u.StartsWith("m") || u.StartsWith("h")) { hour = when.Hour; minute = when.Minute; relativeTime = true; }
+                    s = Cut(s, m);
+                }
+                catch { date = null; hour = -1; relativeTime = false; }
             }
             if (date == null)
             {
@@ -177,9 +183,21 @@ namespace StickyPro
         public void Pop()
         {
             var wa = Screen.PrimaryScreen.WorkingArea;
-            int y = wa.Bottom - Height - Ui.S(12);
-            foreach (var t in open) y = Math.Min(y, t.Top - Height - Ui.S(8));
-            Location = new Point(wa.Right - Width - Ui.S(12), Math.Max(wa.Top, y));
+            int gap = Ui.S(8);
+            int perCol = Math.Max(1, (wa.Height - Ui.S(12)) / (Height + gap));
+            Point best = new Point(wa.Right - Width - Ui.S(12), wa.Bottom - Height - Ui.S(12));
+            // First free slot: fill a column bottom-up, then continue in a column to the left.
+            for (int slot = 0; slot < 200; slot++)
+            {
+                int col = slot / perCol, row = slot % perCol;
+                var p = new Point(wa.Right - Width - Ui.S(12) - col * (Width + gap), wa.Bottom - Height - Ui.S(12) - row * (Height + gap));
+                if (p.X < wa.Left) break;
+                bool used = false;
+                foreach (var t in open) if (t.Left == p.X && t.Top == p.Y) { used = true; break; }
+                best = p;
+                if (!used) break;
+            }
+            Location = best;
             open.Add(this);
             Show();
             try { SystemSounds.Asterisk.Play(); } catch { }
@@ -285,19 +303,20 @@ namespace StickyPro
             Controls.Add(mid);
 
             // ----- right detail -----
-            detail = new Panel { Dock = DockStyle.Right, Width = Ui.S(340), Padding = new Padding(Ui.S(10), 0, 0, 0), AutoScroll = true };
+            detail = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("tasks.detail", DockStyle.Right, Ui.S(340), Ui.S(1600)), Padding = new Padding(Ui.S(10), 0, 0, 0), AutoScroll = true };
             var f = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+            fieldsPanel = f;
             f.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             tTitle = new FluentTextBox { Dock = DockStyle.Fill, Font = Ui.Bold };
-            tNotes = new FluentTextBox { Dock = DockStyle.Fill, Multiline = true, Height = Ui.S(70), ScrollBars = ScrollBars.Vertical };
+            tNotes = new FluentTextBox { Dock = DockStyle.Fill, Multiline = true, Height = Ui.S(70), MinimumSize = Ui.S(0, 70), ScrollBars = ScrollBars.Vertical };
             cDue = new CheckBox { Text = "Due date", AutoSize = true };
             cAllDay = new CheckBox { Text = "All day", AutoSize = true, Checked = true };
             dDue = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "ddd d MMM yyyy", Width = Ui.S(150) };
             dTime = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Width = Ui.S(80) };
             cRemind = new CheckBox { Text = "Remind me", AutoSize = true };
             dRemind = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "ddd d MMM yyyy  HH:mm", Width = Ui.S(200) };
-            cbRepeat = MainForm.Combo(Ui.S(150), "No repeat", "Daily", "Weekdays", "Weekly", "Monthly", "Yearly");
-            cbPriority = MainForm.Combo(Ui.S(150), "Low", "Normal", "High");
+            cbRepeat = MainForm.Combo(150, "No repeat", "Daily", "Weekdays", "Weekly", "Monthly", "Yearly");
+            cbPriority = MainForm.Combo(150, "Low", "Normal", "High");
             cbList = new ComboBox { Width = Ui.S(200), DropDownStyle = ComboBoxStyle.DropDown };
             steps = new CheckedListBox { Dock = DockStyle.Fill, Height = Ui.S(110), CheckOnClick = true, BorderStyle = BorderStyle.None, IntegralHeight = false };
             stepAdd = Ui.Search("Add a step (Enter)"); stepAdd.Dock = DockStyle.Fill;
@@ -347,7 +366,9 @@ namespace StickyPro
             Controls.Add(bar);
 
             // wiring for detail changes
-            EventHandler changed = delegate { if (!loading) { debounce.Stop(); debounce.Start(); } };
+            EventHandler changed = delegate { if (!loading) { dirty = true; debounce.Stop(); debounce.Start(); } };
+            detail.Resize += delegate { FitNotes(); };
+            detail.VisibleChanged += delegate { FitNotes(); };
             tTitle.TextChanged += changed; tNotes.TextChanged += changed;
             foreach (var c in new Control[] { dDue, dTime, dRemind }) ((DateTimePicker)c).ValueChanged += changed;
             foreach (var c in new[] { cDue, cAllDay, cRemind }) c.CheckedChanged += delegate { UpdateEnabled(); changed(null, EventArgs.Empty); };
@@ -362,11 +383,39 @@ namespace StickyPro
             ShowDetail();
         }
         string extraList;
+        TableLayoutPanel fieldsPanel;
+        bool dirty;          // true only after the user edited a detail control (or SetRemind)
+        bool reloadDetail;   // store changed: reload the detail from the model when not dirty
+        bool detailSized, fitting;
+
+        // Let the Notes box use the free height of the detail pane.
+        void FitNotes()
+        {
+            if (fitting || fieldsPanel == null || !fieldsPanel.Visible || detail.ClientSize.Height <= 0) return;
+            fitting = true;
+            try
+            {
+                fieldsPanel.PerformLayout();
+                int other = fieldsPanel.Height - tNotes.Height;
+                int h = Math.Max(Ui.S(70), detail.ClientSize.Height - other - Ui.S(8));
+                if (h != tNotes.Height) { tNotes.MinimumSize = new Size(0, h); tNotes.Height = h; }
+            }
+            finally { fitting = false; }
+        }
 
         Button Small(string text, EventHandler click) { var b = Ui.Btn(text, click); b.Font = Ui.Small; b.Height = Ui.S(26); b.Margin = new Padding(0, Ui.S(2), Ui.S(4), 0); return b; }
 
-        void OnTasks() { if (Visible) RefreshAll(); else Stale = true; }
-        protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); if (Visible && Stale) RefreshAll(); }
+        void OnTasks() { reloadDetail = true; if (Visible) RefreshAll(); else Stale = true; }
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (Visible && !detailSized && Width > Ui.S(300))
+            {
+                detailSized = true;
+                detail.Width = PaneGrip.Size("tasks.detail", DockStyle.Right, Math.Max(Ui.S(340), Width * 28 / 100), Width);
+            }
+            if (Visible && Stale) RefreshAll();
+        }
         public void FocusQuick() { quick.Focus(); }
 
         protected override void Dispose(bool disposing)
@@ -469,7 +518,7 @@ namespace StickyPro
             var sel = Selected(); if (sel.Count == 0) return;
             if (MessageBox.Show(FindForm(), "Delete " + sel.Count + " task(s)?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             foreach (var t in sel) Store.Tasks.Remove(t);
-            editing = null;
+            editing = null; dirty = false; debounce.Stop();
             Store.MarkTasks(); Store.RaiseTasks();
         }
 
@@ -512,12 +561,24 @@ namespace StickyPro
         void ShowDetail()
         {
             var sel = Selected();
-            if (sel.Count > 1) { SaveDetail(); editing = null; multi.Visible = true; multiLabel.Text = sel.Count + " tasks selected"; foreach (Control c in detail.Controls) if (c != multi) c.Visible = false; return; }
+            if (sel.Count > 1) { SaveDetail(); editing = null; dirty = false; multi.Visible = true; multiLabel.Text = sel.Count + " tasks selected"; foreach (Control c in detail.Controls) if (c != multi) c.Visible = false; return; }
             multi.Visible = false; foreach (Control c in detail.Controls) if (c != multi) c.Visible = true;
             var t = sel.Count == 1 ? sel[0] : null;
-            if (t == editing && t != null) return;
+            if (t == editing && t != null)
+            {
+                // Same task: only refresh from the model after a store change, and never over unsaved user edits.
+                if (reloadDetail && !dirty) { reloadDetail = false; LoadDetail(t); }
+                FitNotes();
+                return;
+            }
             SaveDetail();
-            editing = t;
+            editing = t; dirty = false; reloadDetail = false;
+            LoadDetail(t);
+            FitNotes();
+        }
+
+        void LoadDetail(TaskItem t)
+        {
             loading = true;
             try
             {
@@ -550,13 +611,15 @@ namespace StickyPro
 
         void UpdateEnabled() { dDue.Enabled = cDue.Checked; cAllDay.Enabled = cDue.Checked; dTime.Enabled = cDue.Checked && !cAllDay.Checked; dRemind.Enabled = cRemind.Checked; }
 
-        void SetRemind(DateTime when) { if (editing == null) return; loading = true; cRemind.Checked = true; dRemind.Value = Clamp(when); loading = false; UpdateEnabled(); SaveDetail(); }
+        void SetRemind(DateTime when) { if (editing == null) return; loading = true; cRemind.Checked = true; dRemind.Value = Clamp(when); loading = false; UpdateEnabled(); dirty = true; SaveDetail(); }
 
         void SaveDetail()
         {
             debounce.Stop();
             var t = editing;
-            if (t == null || !Store.Tasks.Contains(t)) return;
+            if (t == null || !dirty) return;
+            dirty = false;
+            if (!Store.Tasks.Contains(t)) return;
             t.Title = tTitle.Text.Trim();
             t.Notes = tNotes.Text.Replace("\r\n", "\n");
             if (cDue.Checked) { t.DueHasTime = !cAllDay.Checked; t.Due = (dDue.Value.Date + (t.DueHasTime ? dTime.Value.TimeOfDay : TimeSpan.Zero)).Ticks; }

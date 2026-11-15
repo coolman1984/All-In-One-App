@@ -42,22 +42,42 @@ namespace StickyPro
             return sysList;
         }
         static readonly Dictionary<string, int> extIcons = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        static readonly Dictionary<string, int> fileIcons = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        static bool PerFile(string path, bool dir)
+        {
+            if (dir) return false;
+            string ext = Path.GetExtension(path);
+            return ext.Equals(".exe", StringComparison.OrdinalIgnoreCase) || ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) || ext.Equals(".ico", StringComparison.OrdinalIgnoreCase) || ext.Length == 0;
+        }
+        // True for files whose icon depends on the file itself (exe, lnk, ico, no extension): slow, so callers may resolve them on a worker.
+        public static bool NeedsPerFile(string path) { return PerFile(path, false); }
+        public static bool TryGetFileIcon(string path, out int idx) { lock (fileIcons) return fileIcons.TryGetValue(path, out idx); }
+        // Cheap extension-based icon (no disk access), used as a placeholder while the real one resolves.
+        public static int GenericIconIndex(string path) { return Resolve(path, false, false); }
         public static int IconIndex(string path, bool dir)
         {
+            bool perFile = PerFile(path, dir);
+            int c;
+            if (perFile && TryGetFileIcon(path, out c)) return c;
+            int i = Resolve(path, dir, perFile);
+            if (perFile) lock (fileIcons) { if (fileIcons.Count > 20000) fileIcons.Clear(); fileIcons[path] = i; }
+            return i;
+        }
+        static int Resolve(string path, bool dir, bool perFile)
+        {
             string ext = dir ? "<dir>" : Path.GetExtension(path);
-            bool perFile = !dir && (ext.Equals(".exe", StringComparison.OrdinalIgnoreCase) || ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) || ext.Equals(".ico", StringComparison.OrdinalIgnoreCase) || ext.Length == 0);
             int i;
-            if (!perFile && extIcons.TryGetValue(ext, out i)) return i;
+            if (!perFile) lock (extIcons) { if (extIcons.TryGetValue(ext, out i)) return i; }
             var info = new SHFILEINFO();
             uint flags = 0x4000 | 0x1;
             if (!perFile) flags |= 0x10; // USEFILEATTRIBUTES (fast, no disk access)
             SHGetFileInfo(perFile ? path : (dir ? "folder" : "file" + ext), dir ? 0x10u : 0x80u, ref info, (uint)Marshal.SizeOf(info), flags);
-            if (!perFile) extIcons[ext] = info.iIcon;
+            if (!perFile) lock (extIcons) extIcons[ext] = info.iIcon;
             return info.iIcon;
         }
     }
 
-    class Entry { public string Path, Name, Type; public long Size; public DateTime Modified; public bool Dir; public int Icon = -1; }
+    class Entry { public string Path, Name, Type; public long Size; public DateTime Modified; public bool Dir; public int Icon = -1; public bool IconQueued; }
 
     class FolderPane : Panel
     {
@@ -73,6 +93,10 @@ namespace StickyPro
         bool active;
         int loadId;
         FileSystemWatcher watcher;
+        string selectAfterLoad;
+        bool shown, pausedWatch;
+        readonly Queue<Entry> iconQueue = new Queue<Entry>();
+        bool iconWorker;
         readonly System.Windows.Forms.Timer refreshSoon = new System.Windows.Forms.Timer { Interval = 400 };
         readonly Panel head;
 
@@ -153,6 +177,7 @@ namespace StickyPro
                 MessageBox.Show(FindForm(), "Folder not found:\n" + path, App.Name); address.Text = Current; return;
             }
             if (record && Current != path) { back.Add(Current); fwd.Clear(); }
+            if (!string.Equals(Current, path, StringComparison.OrdinalIgnoreCase)) lv.SelectedIndices.Clear();
             Current = path; address.Text = path.Length == 0 ? "This PC" : path; filter.Text = "";
             Watch();
             Load(true);
@@ -164,20 +189,45 @@ namespace StickyPro
             if (Current.Length == 0) return;
             var parent = Directory.GetParent(Current.TrimEnd('\\') + (Current.EndsWith(":") ? "\\" : ""));
             string old = Current;
+            // Load is asynchronous: remember the folder we came from and select it when the listing arrives.
+            selectAfterLoad = old;
             Navigate(parent == null || old.TrimEnd('\\').Length <= 2 ? "" : parent.FullName);
-            int i = rows.FindIndex(r => string.Equals(r.Path.TrimEnd('\\'), old.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
-            if (i >= 0) SelectIndex(i);
+            selectAfterLoad = null;
+        }
+
+        void StopWatch()
+        {
+            if (watcher != null) { try { watcher.EnableRaisingEvents = false; watcher.Dispose(); } catch { } watcher = null; }
+        }
+
+        // Called by the Explorer page: panes that are hidden (page not visible, or removed by a smaller layout) release their watcher.
+        public void SetShown(bool on)
+        {
+            if (on == shown) return;
+            shown = on;
+            if (on)
+            {
+                Watch();
+                if (pausedWatch) { pausedWatch = false; Load(false); }
+            }
+            else
+            {
+                pausedWatch = watcher != null;
+                StopWatch();
+                refreshSoon.Stop();
+            }
         }
 
         void Watch()
         {
-            if (watcher != null) { watcher.EnableRaisingEvents = false; watcher.Dispose(); watcher = null; }
-            if (Current.Length == 0) return;
+            StopWatch();
+            if (!shown || Current.Length == 0) return;
             try
             {
-                watcher = new FileSystemWatcher(Current) { IncludeSubdirectories = false, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.LastWrite };
-                FileSystemEventHandler h = (s, e) => { try { BeginInvoke(new Action(() => { refreshSoon.Stop(); refreshSoon.Start(); })); } catch { } };
-                watcher.Created += h; watcher.Deleted += h; watcher.Changed += h; watcher.Renamed += (s, e) => h(s, null);
+                // Names only: size / last-write events fire continuously during downloads and caused reload storms.
+                watcher = new FileSystemWatcher(Current) { IncludeSubdirectories = false, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName };
+                FileSystemEventHandler h = (s, e) => { try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => { if (!IsDisposed) { refreshSoon.Stop(); refreshSoon.Start(); } })); } catch { } };
+                watcher.Created += h; watcher.Deleted += h; watcher.Renamed += (s, e) => h(s, null);
                 watcher.EnableRaisingEvents = true;
             }
             catch { }
@@ -187,7 +237,8 @@ namespace StickyPro
         {
             int id = ++loadId;
             string path = Current;
-            var keep = new HashSet<string>(SelectedPaths(), StringComparer.OrdinalIgnoreCase);
+            string selectName = selectAfterLoad; selectAfterLoad = null;
+            var keep = new HashSet<string>(resetScroll ? new List<string>() : SelectedPaths(), StringComparer.OrdinalIgnoreCase);
             foot.Text = "Loading...";
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -227,7 +278,10 @@ namespace StickyPro
                     {
                         if (id != loadId || IsDisposed) return;
                         all = list; Apply();
-                        if (keep.Count > 0) { lv.SelectedIndices.Clear(); for (int i = 0; i < rows.Count; i++) if (keep.Contains(rows[i].Path)) lv.SelectedIndices.Add(i); }
+                        int si = -1;
+                        if (selectName != null) si = rows.FindIndex(r => string.Equals(r.Path.TrimEnd('\\'), selectName.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+                        if (si >= 0) SelectIndex(si);
+                        else if (keep.Count > 0) { lv.SelectedIndices.Clear(); for (int i = 0; i < rows.Count; i++) if (keep.Contains(rows[i].Path)) lv.SelectedIndices.Add(i); }
                         else if (resetScroll && rows.Count > 0) SelectIndex(0);
                         if (error != null) foot.Text = error;
                     }));
@@ -255,13 +309,47 @@ namespace StickyPro
         {
             if (e.ItemIndex < 0 || e.ItemIndex >= rows.Count) { e.Item = new ListViewItem(""); e.Item.SubItems.AddRange(new[] { "", "", "" }); return; }
             var r = rows[e.ItemIndex];
-            if (r.Icon < 0) r.Icon = ShellOps.IconIndex(r.Path, r.Dir && r.Type != "Drive") ;
-            if (r.Type == "Drive" && r.Icon <= 0) r.Icon = ShellOps.IconIndex(r.Path, false);
-            var it = new ListViewItem(r.Name) { ImageIndex = r.Icon };
+            int icon = r.Icon;
+            if (icon < 0)
+            {
+                if (r.Dir) icon = r.Icon = ShellOps.IconIndex(r.Path, r.Type != "Drive");
+                else if (!ShellOps.NeedsPerFile(r.Path)) icon = r.Icon = ShellOps.IconIndex(r.Path, false);
+                else
+                {
+                    // exe / lnk / ico / no extension: resolved once per path on a worker; show the generic icon meanwhile.
+                    int cached;
+                    if (ShellOps.TryGetFileIcon(r.Path, out cached)) icon = r.Icon = cached;
+                    else { icon = ShellOps.GenericIconIndex(r.Path); QueueIcon(r); }
+                }
+            }
+            var it = new ListViewItem(r.Name) { ImageIndex = icon };
             it.SubItems.Add(r.Type == "Drive" ? (r.Size > 0 ? Fmt.Bytes(r.Size) + " free" : "") : r.Dir ? "" : Fmt.Bytes(r.Size));
             it.SubItems.Add(r.Modified == DateTime.MinValue ? "" : r.Modified.ToString("yyyy-MM-dd HH:mm"));
             it.SubItems.Add(r.Type);
             e.Item = it;
+        }
+
+        void QueueIcon(Entry r)
+        {
+            lock (iconQueue)
+            {
+                if (r.IconQueued) return;
+                r.IconQueued = true;
+                iconQueue.Enqueue(r);
+                if (iconWorker) return;
+                iconWorker = true;
+            }
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                while (true)
+                {
+                    Entry e;
+                    lock (iconQueue) { if (iconQueue.Count == 0) { iconWorker = false; break; } e = iconQueue.Dequeue(); }
+                    try { e.Icon = ShellOps.IconIndex(e.Path, false); } catch { e.IconQueued = false; }
+                    bool last; lock (iconQueue) last = iconQueue.Count == 0;
+                    if (last) try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => { if (!IsDisposed) lv.Invalidate(); })); } catch { }
+                }
+            });
         }
 
         void SelectIndex(int i) { lv.SelectedIndices.Clear(); lv.SelectedIndices.Add(i); try { lv.Items[i].Focused = true; lv.EnsureVisible(i); } catch { } }
@@ -300,12 +388,13 @@ namespace StickyPro
             if (h) { e.SuppressKeyPress = true; e.Handled = true; }
         }
 
-        public void Transfer(IEnumerable<string> files, string target, bool move)
+        // Returns true only when the shell operation ran and was not aborted.
+        public bool Transfer(IEnumerable<string> files, string target, bool move)
         {
             var list = files.Where(f => !string.Equals(Path.GetDirectoryName(f.TrimEnd('\\')), target.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) || !move).ToList();
-            if (list.Count == 0 || string.IsNullOrEmpty(target)) return;
+            if (list.Count == 0 || string.IsNullOrEmpty(target)) return false;
             var owner = FindForm();
-            ShellOps.Run(owner, move ? ShellOps.FO_MOVE : ShellOps.FO_COPY, list, target);
+            return ShellOps.Run(owner, move ? ShellOps.FO_MOVE : ShellOps.FO_COPY, list, target);
         }
 
         void ClipCopy(bool cut)
@@ -329,8 +418,7 @@ namespace StickyPro
                 bool move = false;
                 var eff = data.GetData("Preferred DropEffect") as MemoryStream;
                 if (eff != null) { var b = new byte[4]; eff.Read(b, 0, 4); move = (BitConverter.ToInt32(b, 0) & 2) != 0; }
-                Transfer(files, Current, move);
-                if (move) Clipboard.Clear();
+                if (Transfer(files, Current, move) && move) Clipboard.Clear();
             }
             catch (Exception ex) { foot.Text = "Paste failed: " + ex.Message; }
         }
@@ -398,7 +486,7 @@ namespace StickyPro
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { if (watcher != null) watcher.Dispose(); refreshSoon.Dispose(); }
+            if (disposing) { StopWatch(); refreshSoon.Dispose(); }
             base.Dispose(disposing);
         }
     }
@@ -443,7 +531,20 @@ namespace StickyPro
             Ui.Theme(this);
         }
 
-        protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); if (Visible && !started) { started = true; Arrange(); } }
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (Visible && !started) { started = true; Arrange(); }
+            ApplyShown();
+        }
+
+        // Only panes that are on screen keep a file watcher.
+        void ApplyShown()
+        {
+            int count = Math.Min(panes.Count, grid.Controls.Count);
+            bool vis = Visible && !IsDisposed;
+            for (int i = 0; i < panes.Count; i++) panes[i].SetShown(vis && i < count);
+        }
 
         void Arrange()
         {
@@ -469,6 +570,7 @@ namespace StickyPro
                 for (int i = 0; i < count; i++) { panes[i].Margin = new Padding(Ui.S(2)); grid.Controls.Add(panes[i], i % cols, i / cols); }
             });
             if (active == null || panes.IndexOf(active) >= count) SetActive(panes[0]);
+            ApplyShown();
         }
 
         void SetActive(FolderPane p)
@@ -478,7 +580,14 @@ namespace StickyPro
             SavePaths();
         }
 
-        void SavePaths() { Store.Settings.ExplorerPaths = panes.Select(p => p.Current).ToList(); Store.MarkSettings(); }
+        void SavePaths()
+        {
+            var cur = panes.Select(p => p.Current).ToList();
+            var old = Store.Settings.ExplorerPaths;
+            if (old != null && old.Count == cur.Count && old.SequenceEqual(cur)) return; // nothing changed: do not dirty the settings
+            Store.Settings.ExplorerPaths = cur;
+            Store.MarkSettings();
+        }
 
         void CopyNext(FolderPane from, bool move)
         {
@@ -501,7 +610,8 @@ namespace StickyPro
         static readonly List<QuickDock> docks = new List<QuickDock>();
         readonly FlowLayoutPanel flow;
         readonly ToolTip tip = new ToolTip();
-        readonly List<Image> images = new List<Image>();
+        // Dock icons by item path; owned by this dock, disposed when the path leaves the dock or the dock closes.
+        readonly Dictionary<string, Image> iconCache = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
 
         public QuickDock()
         {
@@ -555,7 +665,7 @@ namespace StickyPro
                     if (d.ShowDialog(FindForm()) == DialogResult.OK) foreach (var f in d.FileNames) AddItem(Path.GetFileNameWithoutExtension(f), f, "");
             });
             m.Items.Add("Folder...", null, delegate { using (var d = new FolderBrowserDialog()) if (d.ShowDialog(FindForm()) == DialogResult.OK) AddItem(Path.GetFileName(d.SelectedPath.TrimEnd('\\')), d.SelectedPath, ""); });
-            m.Items.Add("Web address...", null, delegate { var u = Ui.Ask("Add web address", "Address", "https://", FindForm()); if (!string.IsNullOrEmpty(u) && u.Length > 8) { var n = Ui.Ask("Add web address", "Name", new Uri(u.Contains("://") ? u : "https://" + u).Host, FindForm()); AddItem(n, u, ""); } });
+            m.Items.Add("Web address...", null, delegate { var u = Ui.Ask("Add web address", "Address", "https://", FindForm()); if (!string.IsNullOrEmpty(u) && u.Length > 8) { Uri uri; string host = Uri.TryCreate(u.Contains("://") ? u : "https://" + u, UriKind.Absolute, out uri) && !string.IsNullOrEmpty(uri.Host) ? uri.Host : u; var n = Ui.Ask("Add web address", "Name", host, FindForm()); AddItem(n, u, ""); } });
             m.Items.Add("Command...", null, delegate { var c = Ui.Ask("Add command", "Program (e.g. cmd.exe, ms-settings:display)", "", FindForm()); if (string.IsNullOrEmpty(c)) return; var a = Ui.Ask("Add command", "Arguments (optional)", "", FindForm()) ?? ""; AddItem(Path.GetFileNameWithoutExtension(c), c, a); });
             var win = new ToolStripMenuItem("Windows tools");
             foreach (var t in new[] { new[] { "Device Manager", "devmgmt.msc" }, new[] { "Services", "services.msc" }, new[] { "Disk Management", "diskmgmt.msc" }, new[] { "Event Viewer", "eventvwr.msc" }, new[] { "Registry Editor", "regedit.exe" }, new[] { "Network connections", "ncpa.cpl" }, new[] { "Sound", "mmsys.cpl" }, new[] { "Power options", "powercfg.cpl" }, new[] { "System properties", "sysdm.cpl" }, new[] { "Programs and Features", "appwiz.cpl" }, new[] { "Snipping Tool", "snippingtool.exe" }, new[] { "Paint", "mspaint.exe" }, new[] { "Resource Monitor", "resmon.exe" } })
@@ -569,15 +679,28 @@ namespace StickyPro
         {
             Ui.Batch(flow, () =>
             {
-                foreach (Control c in flow.Controls.Cast<Control>().ToList()) c.Dispose();
-                foreach (var im in images) im.Dispose(); images.Clear();
-                foreach (var item in Store.Settings.Dock.ToList())
+                foreach (Control c in flow.Controls.Cast<Control>().ToList())
+                {
+                    var oldMenu = c.ContextMenuStrip;
+                    if (oldMenu != null) { c.ContextMenuStrip = null; oldMenu.Dispose(); }
+                    c.Dispose();
+                }
+                var dockItems = Store.Settings.Dock.ToList();
+                // Drop cached icons whose path is no longer in the dock.
+                var live = new HashSet<string>(dockItems.Select(d => d.Path ?? ""), StringComparer.OrdinalIgnoreCase);
+                foreach (var stale in iconCache.Keys.Where(k => !live.Contains(k)).ToList()) { iconCache[stale].Dispose(); iconCache.Remove(stale); }
+                foreach (var item in dockItems)
                 {
                     var it = item;
                     var b = new Button { Size = Ui.S(44, 42), FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 0, Ui.S(4)), BackColor = Ui.Nav, ForeColor = Ui.Text, TabStop = false, AllowDrop = true };
                     b.FlatAppearance.BorderSize = 0; b.FlatAppearance.MouseOverBackColor = Ui.HoverBg;
-                    var img = IconOf(it.Path);
-                    if (img != null) { images.Add(img); b.Image = img; } else { b.Text = it.Name.Length > 0 ? it.Name.Substring(0, 1).ToUpperInvariant() : "?"; b.Font = Ui.Big; }
+                    Image img;
+                    if (!iconCache.TryGetValue(it.Path ?? "", out img))
+                    {
+                        img = IconOf(it.Path);
+                        if (img != null) iconCache[it.Path ?? ""] = img; // missing icons are not cached, so they are retried on the next rebuild
+                    }
+                    if (img != null) b.Image = img; else { b.Text = it.Name.Length > 0 ? it.Name.Substring(0, 1).ToUpperInvariant() : "?"; b.Font = Ui.Big; }
                     tip.SetToolTip(b, it.Name + "\n" + it.Path + (it.Args.Length > 0 ? " " + it.Args : ""));
                     b.Click += delegate { Launch(it); };
                     b.DragEnter += (s, e) => { e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; };
@@ -630,13 +753,16 @@ namespace StickyPro
                 var info = new ShellOps.SHFILEINFO();
                 ShellOps.SHGetFileInfo(p, 0, ref info, (uint)Marshal.SizeOf(info), 0x100 /* ICON */ | 0x0 /* LARGE */);
                 if (info.hIcon == IntPtr.Zero) return null;
-                using (var ic = Icon.FromHandle(info.hIcon))
+                try
                 {
-                    var bmp = new Bitmap(Ui.S(28), Ui.S(28));
-                    using (var g = Graphics.FromImage(bmp)) { g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic; using (var big = ic.ToBitmap()) g.DrawImage(big, 0, 0, bmp.Width, bmp.Height); }
-                    DestroyIcon(info.hIcon);
-                    return bmp;
+                    using (var ic = Icon.FromHandle(info.hIcon))
+                    {
+                        var bmp = new Bitmap(Ui.S(28), Ui.S(28));
+                        using (var g = Graphics.FromImage(bmp)) { g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic; using (var big = ic.ToBitmap()) g.DrawImage(big, 0, 0, bmp.Width, bmp.Height); }
+                        return bmp;
+                    }
                 }
+                finally { DestroyIcon(info.hIcon); } // Icon.FromHandle does not own the handle
             }
             catch { return null; }
         }
@@ -644,7 +770,7 @@ namespace StickyPro
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { docks.Remove(this); tip.Dispose(); foreach (var im in images) im.Dispose(); }
+            if (disposing) { docks.Remove(this); tip.Dispose(); foreach (var im in iconCache.Values) im.Dispose(); iconCache.Clear(); }
             base.Dispose(disposing);
         }
     }

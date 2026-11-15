@@ -40,6 +40,19 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - Light and dark theme, note font and size, history size, all shortcuts: Settings (main window, bottom left, or tray menu).
 
 ## New in this version
+- **Wide-screen layout**: System > Processes has a Task-Manager-style performance strip (CPU and memory charts, disk bars)
+  shown only on that tab, heat-map CPU / Memory / Disk cells, and Threads, Process and Location columns. Lists share extra width
+  between their text columns (Processes, Startup, Cleanup, Big files, Chrome bookmarks, Uninstall, Activity, Tagged files).
+  Drive tiles, Quick actions and home cards stretch to the window width; the home task cards use a masonry layout (4 columns when very wide); the Terminals preview moves to the right at full height; the
+  Floating cards page is a grid; detail panes (Clips preview and others) grow to about a third of a wide window.
+- **Faster**: saving serializes on a background thread; note typing, window moves, copies and Office events no longer re-save or
+  re-scan everything; the top bar and home recompute data once after a burst of changes; search boxes are debounced; Chrome
+  bookmark search, Tagged files, Explorer icons and watchers, and the Uninstall list (registry programs first, Store apps after) no
+  longer block the window; drive queries run off the UI thread.
+- **Fixes**: the task detail no longer overwrites changes made from menus; a bookmark folder cannot be moved into itself; folder
+  menus act on the right-clicked folder; Snip delete uses the Recycle Bin for all selected snips; Explorer re-selects the folder you
+  came from and keeps cut files when a move is cancelled; Clear temp files skips files in use silently; leftover deletes keep failed
+  rows; Store-app leftovers are no longer pre-ticked on name-only matches; safer handling of odd paths and empty file clips.
 - **SerQ design** (default): floating navy sidebar grouped into General / Tools / System / Support, blue-grey canvas,
   white rounded cards with soft shadows, blue accent. Home: "Welcome back" header with New task, Terminals, a reminders
   bell and your initials; System Overview (live CPU area chart, memory and average CPU); Your Library donut; four KPI

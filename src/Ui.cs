@@ -569,8 +569,36 @@ namespace StickyPro
         {
             if (string.IsNullOrEmpty(s)) return "";
             if (s.Length > max * 3) s = s.Substring(0, max * 3);
-            s = Regex.Replace(s, @"\s+", " ").Trim();
+            // Collapse whitespace without Regex (this runs for every visible card on every paint).
+            var sb = new System.Text.StringBuilder(Math.Min(s.Length, max + 4));
+            bool space = false;
+            foreach (char ch in s)
+            {
+                if (char.IsWhiteSpace(ch)) { space = sb.Length > 0; continue; }
+                if (space) { sb.Append(' '); space = false; }
+                sb.Append(ch);
+                if (sb.Length > max) break;
+            }
+            s = sb.ToString();
             return s.Length > max ? s.Substring(0, max) + "..." : s;
+        }
+
+        // File name of the first path in a "files" clip (safe for empty text or invalid characters).
+        public static string FirstFileName(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "(no files)";
+            var parts = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return "(no files)";
+            try { string n = Path.GetFileName(parts[0].TrimEnd('\\')); return string.IsNullOrEmpty(n) ? parts[0] : n; } catch { return parts[0]; }
+        }
+
+        // Returns an action that runs `a` once, `ms` after the last call (typing in a search box, bursts of store events).
+        public static Action Debounce(Control owner, int ms, Action a)
+        {
+            var t = new Timer { Interval = ms };
+            t.Tick += delegate { t.Stop(); if (!owner.IsDisposed) a(); };
+            owner.Disposed += delegate { t.Dispose(); };
+            return () => { t.Stop(); t.Start(); };
         }
 
         // True when the first strong (letter) character is Arabic / Hebrew / Persian / Urdu.

@@ -395,6 +395,21 @@ namespace StickyPro
             LoadWs();
         }
 
+        // Wide window: the live preview sits on the right at full height (pane rows on the left);
+        // narrow window: preview on top, taller when there is room.
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            if (preview != null)
+            {
+                bool wide = ClientSize.Width >= Ui.S(1250);
+                var dock = wide ? DockStyle.Right : DockStyle.Top;
+                if (preview.Dock != dock) preview.Dock = dock;
+                if (wide) { int w = Math.Max(Ui.S(420), ClientSize.Width * 42 / 100); if (preview.Width != w) preview.Width = w; }
+                else { int h = Math.Max(Ui.S(188), Math.Min(Ui.S(320), ClientSize.Height / 4)); if (preview.Height != h) preview.Height = h; }
+            }
+            base.OnLayout(e);
+        }
+
         void FillWorkspaces()
         {
             loading = true;

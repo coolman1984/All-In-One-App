@@ -496,7 +496,7 @@ namespace StickyPro
             search = Ui.Search("Search notes and tags  (Ctrl+F)");
             search.Width = Ui.S(200);
             search.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
-            search.TextChanged += delegate { RefreshList(); };
+            var searchSoon = Ui.Debounce(search, 200, RefreshList); search.TextChanged += delegate { searchSoon(); };
             search.KeyDown += (s, e) => { if (e.KeyCode == Keys.Down || e.KeyCode == Keys.Enter) { list.Focus(); if (list.Items.Count > 0 && list.SelectedIndex < 0) list.SelectedIndex = 0; e.SuppressKeyPress = true; } };
             bar.Controls.Add(search);
             view = MainForm.Combo(120, "Active notes", "With reminder", "Archived", "All notes");
@@ -720,7 +720,7 @@ namespace StickyPro
             mid.Controls.Add(midBar);
             search = Ui.Search("Search title, text, tags, code  (Ctrl+F)");
             search.Dock = DockStyle.Top;
-            search.TextChanged += delegate { RefreshList(); };
+            var searchSoon = Ui.Debounce(search, 200, RefreshList); search.TextChanged += delegate { searchSoon(); };
             search.KeyDown += (s, e) => { if (e.KeyCode == Keys.Down) { list.Focus(); if (list.Items.Count > 0 && list.SelectedIndex < 0) list.SelectedIndex = 0; e.SuppressKeyPress = true; } };
             var searchWrap = new Panel(); searchWrap.Dock = DockStyle.Top; searchWrap.Height = Ui.S(34); searchWrap.Padding = new Padding(0, Ui.S(2), 0, Ui.S(6));
             searchWrap.Controls.Add(search);
@@ -1169,7 +1169,7 @@ namespace StickyPro
             search = Ui.Search("Search everything you copied  (Ctrl+F)");
             search.Width = Ui.S(260);
             search.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
-            search.TextChanged += delegate { RefreshList(); };
+            var searchSoon = Ui.Debounce(search, 200, RefreshList); search.TextChanged += delegate { searchSoon(); };
             search.KeyDown += (s, e) => { if (e.KeyCode == Keys.Down || e.KeyCode == Keys.Enter) { list.Focus(); if (list.Items.Count > 0 && list.SelectedIndex < 0) list.SelectedIndex = 0; e.SuppressKeyPress = true; } };
             bar.Controls.Add(search);
             filter = MainForm.Combo(120, "Everything", "Pinned", "Text", "Links", "Images", "Files", "Today", "Red", "Orange", "Yellow", "Green", "Blue", "Purple");
@@ -1200,8 +1200,8 @@ namespace StickyPro
             }
             else if (c.Kind == "files")
             {
-                var files = c.Text.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-                ci.Title = files.Length == 1 ? Path.GetFileName(files[0]) : files.Length + " files";
+                var files = (c.Text ?? "").Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+                ci.Title = files.Length == 1 ? Ui.FirstFileName(c.Text) : files.Length + " files";
                 ci.Sub = Ui.OneLine(c.Text, 200);
             }
             else
@@ -1427,7 +1427,7 @@ namespace StickyPro
                 try
                 {
                     if (c.Kind == "image") Process.Start(Store.ImagePath(c));
-                    else if (c.Kind == "files") Process.Start("explorer.exe", "/select,\"" + c.Text.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries)[0] + "\"");
+                    else if (c.Kind == "files" && !string.IsNullOrEmpty(c.Text)) Process.Start("explorer.exe", "/select,\"" + c.Text.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() + "\"");
                     else if (c.Text.StartsWith("http")) Process.Start(c.Text.Trim());
                 }
                 catch { }

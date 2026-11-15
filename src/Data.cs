@@ -199,7 +199,15 @@ namespace StickyPro
         public static event Action NotesChanged, PromptsChanged, ClipsChanged, CardsChanged, ActivityChanged, TaggedChanged;
 
         static bool notesDirty, promptsDirty, clipsDirty, settingsDirty, cardsDirty, historyDirty, activityDirty, taggedDirty;
-        public static void MarkActivity() { activityDirty = true; Kick(); }
+        static bool activityWait;
+        static int activityDue;
+        static bool ActivityWaiting() { return activityWait && unchecked(Environment.TickCount - activityDue) < 0; }
+        public static void MarkActivity()
+        {
+            activityDirty = true;
+            if (!activityWait) { activityWait = true; activityDue = unchecked(Environment.TickCount + 5000); }
+            Kick();
+        }
         public static void MarkTagged() { taggedDirty = true; Kick(); }
         public static void RaiseActivity() { var h = ActivityChanged; if (h != null) h(); }
         public static void RaiseTagged() { var h = TaggedChanged; if (h != null) h(); }
@@ -334,32 +342,58 @@ namespace StickyPro
             }
         }
 
-        // Background writer: the UI thread only serializes; disk I/O never blocks a frame.
+        // Background writer: the UI thread only takes a shallow snapshot; serialization and disk I/O
+        // happen on the worker, so they never block a frame.
         // One writer, latest content per file wins, so writes cannot overtake each other.
         static readonly object ioLock = new object();
-        static readonly Dictionary<string, string> pendingWrites = new Dictionary<string, string>();
+        static readonly Dictionary<string, object> pendingWrites = new Dictionary<string, object>();
         static bool writerBusy;
-        static void QueueWrite(string name, string json)
+        static void QueueWrite(string name, object snapshot)
         {
             lock (ioLock)
             {
-                pendingWrites[name] = json;
+                pendingWrites[name] = snapshot;
                 if (writerBusy) return;
                 writerBusy = true;
             }
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { Drain(); });
         }
+
+        // Shallow copy of a settings-like object: its own fields plus a one-level copy of every list/dictionary field,
+        // so the UI thread can keep editing while the worker serializes.
+        static T Snap<T>(T o) where T : class
+        {
+            if (o == null) return o;
+            try
+            {
+                var clone = (T)typeof(object).GetMethod("MemberwiseClone", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(o, null);
+                foreach (var f in typeof(T).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                {
+                    object v = f.GetValue(clone);
+                    if (v == null) continue;
+                    Type t = v.GetType();
+                    if (t.IsGenericType)
+                    {
+                        Type d = t.GetGenericTypeDefinition();
+                        if (d == typeof(List<>) || d == typeof(Dictionary<,>)) f.SetValue(clone, Activator.CreateInstance(t, v));
+                    }
+                }
+                return clone;
+            }
+            catch { return o; }
+        }
+
         static void Drain()
         {
             while (true)
             {
-                string name, json;
+                string name; object snapshot;
                 lock (ioLock)
                 {
                     if (pendingWrites.Count == 0) { writerBusy = false; System.Threading.Monitor.PulseAll(ioLock); return; }
-                    var first = pendingWrites.First(); name = first.Key; json = first.Value; pendingWrites.Remove(name);
+                    var first = pendingWrites.First(); name = first.Key; snapshot = first.Value; pendingWrites.Remove(name);
                 }
-                try { WriteText(name, json); }
+                try { WriteText(name, Js().Serialize(snapshot)); }
                 catch (Exception ex)
                 {
                     App.Log("Save failed " + name + ": " + ex.Message);
@@ -397,9 +431,9 @@ namespace StickyPro
         static bool asyncSave;
         static void Write(string name, object o)
         {
-            string json = Js().Serialize(o);
-            if (asyncSave) QueueWrite(name, json);
-            else { FlushWrites(); WriteText(name, json); }
+            // Async: o is already a snapshot, serialized on the worker. Sync (exit, backup, restore): serialize here.
+            if (asyncSave) QueueWrite(name, o);
+            else { string json = Js().Serialize(o); FlushWrites(); WriteText(name, json); }
         }
 
         static void Kick() { if (saveTimer != null) { saveTimer.Stop(); saveTimer.Start(); } }
@@ -418,10 +452,15 @@ namespace StickyPro
             if (notesDirty) notesDirty = !Safe("notes.json", Notes.ToList());
             if (promptsDirty) promptsDirty = !Safe("prompts.json", Prompts.ToList());
             if (clipsDirty) clipsDirty = !Safe("clips.json", Clips.ToList());
-            if (settingsDirty) settingsDirty = !Safe("settings.json", Settings);
+            if (settingsDirty) settingsDirty = !Safe("settings.json", asyncSave ? (object)Snap(Settings) : Settings);
             if (cardsDirty) cardsDirty = !Safe("cards.json", Cards.ToList());
-            if (historyDirty) historyDirty = !Safe("history.json", History);
-            if (activityDirty) activityDirty = !Safe("activity.json", Activity.ToList());
+            if (historyDirty) historyDirty = !Safe("history.json", asyncSave ? (object)Snap(History) : History);
+            // Activity is large and changes often: the timer path saves it at most about every 5 s; exit/backup saves at once.
+            if (activityDirty && (!asyncSave || !ActivityWaiting()))
+            {
+                activityDirty = !Safe("activity.json", Activity.ToList());
+                activityWait = false;
+            }
             if (tasksDirty) tasksDirty = !Safe("tasks.json", Tasks.ToList());
             if (taggedDirty)
             {
@@ -429,9 +468,15 @@ namespace StickyPro
                 bool catsOk = Safe("tagcats.json", TagCats.ToList());
                 taggedDirty = !filesOk || !catsOk;
             }
-            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty))
+            bool actWaiting = activityDirty && activityWait;
+            if (saveTimer != null && (notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || taggedDirty || tasksDirty || (activityDirty && !actWaiting)))
             {
                 saveTimer.Interval = 5000;
+                saveTimer.Start();
+            }
+            else if (saveTimer != null && actWaiting)
+            {
+                saveTimer.Interval = 700; // re-check until the activity save is due
                 saveTimer.Start();
             }
             else if (saveTimer != null) saveTimer.Interval = 700;
@@ -619,10 +664,17 @@ namespace StickyPro
 
         public static string TitleFrom(string text)
         {
-            foreach (var line in (text ?? "").Split('\n'))
+            // Walk line by line without splitting the whole text (clips can be megabytes; this runs on every paint).
+            if (string.IsNullOrEmpty(text)) return "";
+            int pos = 0, limit = Math.Min(text.Length, 64 * 1024);
+            while (pos < limit)
             {
-                var t = line.Trim();
+                int nl = text.IndexOf('\n', pos, limit - pos);
+                int end = nl < 0 ? limit : nl;
+                var t = text.Substring(pos, Math.Min(end - pos, 400)).Trim();
                 if (t.Length > 0) return t.Length > 70 ? t.Substring(0, 70) + "..." : t;
+                if (nl < 0) break;
+                pos = nl + 1;
             }
             return "";
         }

@@ -51,7 +51,10 @@ namespace StickyPro
         }
 
         // ---------- data ----------
-        public void RefreshData()
+        bool dataLoaded;
+        // live = only the sampler values (every 2 s); data = also the store facts (only when the store changed).
+        public void RefreshData() { RefreshData(true); }
+        public void RefreshData(bool data)
         {
             cpu = ProcessSampler.CpuHistory.ToArray();
             var ram = ProcessSampler.RamHistory.ToArray();
@@ -60,6 +63,16 @@ namespace StickyPro
             memDelta = Delta(ram); cpuDelta = Delta(cpu);
             cpuAvg = (cpu.Length > 0 ? cpu.Average() : cpuNow).ToString("0") + "%";
 
+            driveC = DriveSnapshot.Read("C"); driveD = DriveSnapshot.Read("D");
+            var groups = ProcessSampler.Last.GroupBy(p => p.Display).ToList();
+            top = groups.Select(g => new KeyValuePair<string, long>(g.Key, g.Sum(p => p.Mem))).OrderByDescending(k => k.Value).Take(10).ToList();
+            procCount = groups.ToDictionary(g => g.Key ?? "", g => g.Count());
+            if (data || !dataLoaded) { dataLoaded = true; RefreshStoreData(); }
+            Invalidate();
+        }
+
+        void RefreshStoreData()
+        {
             var facts = DashboardFacts.Read(Store.Now());
             long today = DateTime.Today.Ticks, yesterday = DateTime.Today.AddDays(-1).Ticks;
             int clipsY = Store.Clips.Count(c => c.Time >= yesterday && c.Time < today);
@@ -72,11 +85,6 @@ namespace StickyPro
             kpiValue[3] = facts.Urgent; kpiNote[3] = Store.Tagged.Count + " tagged in total"; kpiTrend[3] = facts.Urgent > 0 ? -1 : 1;
 
             lib[0] = Store.Notes.Count; lib[1] = Store.Prompts.Count; lib[2] = Store.Clips.Count; lib[3] = Store.Tasks.Count(t => !t.Done);
-            driveC = DriveSnapshot.Read("C"); driveD = DriveSnapshot.Read("D");
-            var groups = ProcessSampler.Last.GroupBy(p => p.Display).ToList();
-            top = groups.Select(g => new KeyValuePair<string, long>(g.Key, g.Sum(p => p.Mem))).OrderByDescending(k => k.Value).Take(4).ToList();
-            procCount = groups.ToDictionary(g => g.Key ?? "", g => g.Count());
-            Invalidate();
         }
 
         static string Vs(int now, int before)
@@ -435,10 +443,18 @@ namespace StickyPro
             Outline(g, ViewAll(c), "View all", "appsall");
             int x = c.X + Ui.S(24), w = c.Width - Ui.S(48), y = c.Y + Ui.S(82), rh = Ui.S(58);
             if (top.Count == 0) { TextRenderer.DrawText(g, "Collecting...", Ui.Base, new Rectangle(x, y, w, Ui.S(40)), Ui.Muted, L); return; }
-            for (int i = 0; i < top.Count; i++)
+            // Wide card: two columns; show as many rows as the card height holds.
+            int cols = w > Ui.S(820) ? 2 : 1, cgap = Ui.S(28);
+            int colW = (w - cgap * (cols - 1)) / cols;
+            int perCol = Math.Max(1, (c.Bottom - y - Ui.S(10)) / rh);
+            int count = Math.Min(top.Count, perCol * cols);
+            int y0 = y;
+            for (int i = 0; i < count; i++)
             {
                 var a = top[i];
-                var row = new Rectangle(x, y, w, rh);
+                int col = i / perCol;
+                x = c.X + Ui.S(24) + col * (colW + cgap); y = y0 + (i % perCol) * rh;
+                var row = new Rectangle(x, y, colW, rh);
                 var av = new Rectangle(x, row.Y + (rh - Ui.S(40)) / 2, Ui.S(40), Ui.S(40));
                 var tone = new[] { Blue, Green, Amber, Color.FromArgb(139, 92, 246) }[i % 4];
                 using (var b = new LinearGradientBrush(av, Ui.Mix(tone, Color.White, 0.25), tone, LinearGradientMode.ForwardDiagonal)) g.FillEllipse(b, av);
@@ -454,8 +470,7 @@ namespace StickyPro
                 string status = a.Value > 2 * gb ? "Heavy" : a.Value > gb / 2 ? "Normal" : "Light";
                 Color st = status == "Heavy" ? Amber : status == "Normal" ? Blue : Green;
                 Pill(g, new Rectangle(row.Right - statusW, row.Y + (rh - Ui.S(26)) / 2, statusW, Ui.S(26)), status, st);
-                if (i < top.Count - 1) using (var p = new Pen(Ui.Line)) g.DrawLine(p, tx, row.Bottom, row.Right, row.Bottom);
-                y += rh;
+                if (i % perCol < perCol - 1 && i < count - 1) using (var p = new Pen(Ui.Line)) g.DrawLine(p, tx, row.Bottom, row.Right, row.Bottom);
             }
         }
 

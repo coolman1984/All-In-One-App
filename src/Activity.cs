@@ -93,11 +93,9 @@ namespace StickyPro
         static void PollOffice(bool first)
         {
             var now = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var p in Process.GetProcesses()) { using (p) { try { names.Add(p.ProcessName); } catch { } } }
-            if (names.Contains("EXCEL")) ReadOffice("Excel.Application", "Workbooks", "Excel", now);
-            if (names.Contains("WINWORD")) ReadOffice("Word.Application", "Documents", "Word", now);
-            if (names.Contains("POWERPNT")) ReadOffice("PowerPoint.Application", "Presentations", "PowerPoint", now);
+            if (IsRunning("EXCEL")) ReadOffice("Excel.Application", "Workbooks", "Excel", now);
+            if (IsRunning("WINWORD")) ReadOffice("Word.Application", "Documents", "Word", now);
+            if (IsRunning("POWERPNT")) ReadOffice("PowerPoint.Application", "Presentations", "PowerPoint", now);
             if (now.Count == 0 && officeOpen.Count == 0) return;
             foreach (var f in now.Where(f => !officeOpen.Contains(f))) Add(officeProc[f], f, "Opened");
             if (!first || officeOpen.Count > 0)
@@ -109,6 +107,42 @@ namespace StickyPro
                 }
             officeOpen = now;
             foreach (var path in officeProc.Keys.Where(p => !now.Contains(p)).ToList()) officeProc.Remove(path);
+        }
+
+        static bool IsRunning(string processName)
+        {
+            Process[] list = null;
+            try { list = Process.GetProcessesByName(processName); return list.Length > 0; }
+            catch { return false; }
+            finally { if (list != null) foreach (var p in list) p.Dispose(); }
+        }
+
+        // Path helpers that never throw (SharePoint URLs, invalid characters).
+        internal static string SafeDir(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            if (path.IndexOf("://", StringComparison.Ordinal) >= 0) return path;
+            try { return Path.GetDirectoryName(path) ?? ""; } catch { return ""; }
+        }
+
+        internal static string SafeName(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            if (path.IndexOf("://", StringComparison.Ordinal) >= 0) return path;
+            try { return Path.GetFileName(path) ?? ""; } catch { return ""; }
+        }
+
+        internal static string SafeStem(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            if (path.IndexOf("://", StringComparison.Ordinal) >= 0) return path;
+            try { return Path.GetFileNameWithoutExtension(path) ?? ""; } catch { return ""; }
+        }
+
+        static string SafeExt(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            try { return Path.GetExtension(path) ?? ""; } catch { return ""; }
         }
 
         static void ReadOffice(string progId, string collection, string label, HashSet<string> into)
@@ -183,7 +217,8 @@ namespace StickyPro
             var titles = WindowTitles();
             foreach (var path in otherOpen.Keys.ToList())
             {
-                string name = Path.GetFileName(path), stem = Path.GetFileNameWithoutExtension(path);
+                string name = SafeName(path), stem = SafeStem(path);
+                if (name.Length == 0) { otherOpen.Remove(path); continue; }
                 bool visible = titles.Any(t => t.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0 || (stem.Length > 3 && t.IndexOf(stem, StringComparison.OrdinalIgnoreCase) >= 0));
                 if (visible) otherOpen[path] = true;
                 else if (otherOpen[path])
@@ -234,7 +269,7 @@ namespace StickyPro
 
         public static string KindOf(string path)
         {
-            switch (Path.GetExtension(path).ToLowerInvariant())
+            switch (SafeExt(path).ToLowerInvariant())
             {
                 case ".xls": case ".xlsx": case ".xlsm": case ".xlsb": case ".csv": return "Excel";
                 case ".doc": case ".docx": case ".docm": case ".rtf": return "Word";
@@ -250,6 +285,35 @@ namespace StickyPro
             return "Other";
         }
 
+        // Set of favorite paths for the duplicate check; rebuilt on demand after any favorite change.
+        static HashSet<string> favPaths;
+        static List<ActivityRecord> favSource;
+        static bool favStale = true;
+        public static void InvalidateFavs() { favStale = true; }
+        static bool IsFavPath(string path)
+        {
+            if (favStale || favPaths == null || !ReferenceEquals(favSource, Store.Activity))
+            {
+                favPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var a in Store.Activity) if (a.Fav && a.Path != null) favPaths.Add(a.Path);
+                favSource = Store.Activity;
+                favStale = false;
+            }
+            return favPaths.Contains(path);
+        }
+
+        // Raises ActivityChanged at most every 300 ms (UI thread only).
+        static System.Windows.Forms.Timer raiseTimer;
+        static void RaiseSoon()
+        {
+            if (raiseTimer == null)
+            {
+                raiseTimer = new System.Windows.Forms.Timer { Interval = 300 };
+                raiseTimer.Tick += delegate { raiseTimer.Stop(); Store.RaiseActivity(); };
+            }
+            if (!raiseTimer.Enabled) raiseTimer.Start();
+        }
+
         static void Add(string process, string path, string ev)
         {
             if (!running) return;
@@ -260,15 +324,19 @@ namespace StickyPro
             App.I.Sync.BeginInvoke(new Action(() =>
             {
                 if (!running || run != generation) return;
-                rec.Fav = Store.Activity.Any(a => a.Fav && string.Equals(a.Path, path, StringComparison.OrdinalIgnoreCase));
+                rec.Fav = IsFavPath(path);
                 Store.Activity.Insert(0, rec);
                 if (Store.Activity.Count > 20000)
                 {
-                    for (int i = Store.Activity.Count - 1; i >= 0 && Store.Activity.Count > 18000; i--)
-                        if (!Store.Activity[i].Fav) Store.Activity.RemoveAt(i);
+                    // Drop the oldest non-favorites in one pass (the list is newest-first).
+                    int excess = Store.Activity.Count - 18000;
+                    var drop = new HashSet<ActivityRecord>();
+                    for (int i = Store.Activity.Count - 1; i >= 0 && drop.Count < excess; i--)
+                        if (!Store.Activity[i].Fav) drop.Add(Store.Activity[i]);
+                    Store.Activity.RemoveAll(drop.Contains);
                 }
                 Store.MarkActivity();
-                Store.RaiseActivity();
+                RaiseSoon();
                 if (ev == "Opened" && rec.Fav && Store.Settings.ActivityAutoBackupFav) Backup(rec, null);
             }));
         }
@@ -309,6 +377,7 @@ namespace StickyPro
         readonly Label count;
         readonly Action<string> status;
         readonly Action onChange;
+        readonly System.Windows.Forms.Timer searchTimer;
         List<ActivityRecord> rows = new List<ActivityRecord>();
         bool stale = true;
         int sortCol = 5; bool sortDesc = true;
@@ -326,6 +395,7 @@ namespace StickyPro
             lv.Columns.Add("Time", Ui.S(140));
             lv.Columns.Add("Size", Ui.S(80), HorizontalAlignment.Right);
             lv.Columns.Add("Backup", Ui.S(130));
+            lv.FillIndex = 3;
             lv.RetrieveVirtualItem += Retrieve;
             lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 5 || e.Column == 6; } Fill(); };
             lv.MouseClick += (s, e) =>
@@ -363,7 +433,9 @@ namespace StickyPro
             search = Ui.Search("Search file, folder, app");
             search.Width = Ui.S(200);
             search.Margin = new Padding(0, Ui.S(4), Ui.S(6), 0);
-            search.TextChanged += delegate { Fill(); };
+            searchTimer = new System.Windows.Forms.Timer { Interval = 250 };
+            searchTimer.Tick += delegate { searchTimer.Stop(); Fill(); };
+            search.TextChanged += delegate { searchTimer.Stop(); searchTimer.Start(); };
             bar.Controls.Add(search);
             typeFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(120), Margin = new Padding(0, Ui.S(4), Ui.S(6), 0) };
             typeFilter.Items.AddRange(new object[] { "All types", "Excel", "Word", "PowerPoint", "PDF Reader", "Image Viewer", "Text Editor", "Media Player", "Other" });
@@ -408,7 +480,15 @@ namespace StickyPro
         }
 
         protected override void OnLive(bool on) { if (on && stale) Fill(); }
-        protected override void Dispose(bool disposing) { if (disposing) Store.ActivityChanged -= onChange; base.Dispose(disposing); }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                Store.ActivityChanged -= onChange;
+                if (searchTimer != null) { searchTimer.Stop(); searchTimer.Dispose(); }
+            }
+            base.Dispose(disposing);
+        }
 
         void Fill()
         {
@@ -425,8 +505,8 @@ namespace StickyPro
             {
                 case 0: key = a => a.Fav ? 1 : 0; break;
                 case 1: key = a => a.Process; break;
-                case 2: key = a => Path.GetFileName(a.Path).ToLowerInvariant(); break;
-                case 3: key = a => (Path.GetDirectoryName(a.Path) ?? "").ToLowerInvariant(); break;
+                case 2: key = a => ActivityMonitor.SafeName(a.Path).ToLowerInvariant(); break;
+                case 3: key = a => ActivityMonitor.SafeDir(a.Path).ToLowerInvariant(); break;
                 case 4: key = a => a.Event; break;
                 case 6: key = a => a.Size; break;
                 case 7: key = a => a.BackupTime; break;
@@ -450,8 +530,8 @@ namespace StickyPro
             var it = new ListViewItem(a.Fav ? "★" : "☆");
             it.UseItemStyleForSubItems = false;
             it.SubItems.Add(a.Process);
-            it.SubItems.Add(Path.GetFileName(a.Path), Ui.Text, Ui.Card, Ui.Bold);
-            it.SubItems.Add(Path.GetDirectoryName(a.Path) ?? "");
+            it.SubItems.Add(ActivityMonitor.SafeName(a.Path), Ui.Text, Ui.Card, Ui.Bold);
+            it.SubItems.Add(ActivityMonitor.SafeDir(a.Path));
             it.SubItems.Add(a.Event, a.Event == "Opened" ? Ui.Success : Ui.Muted, Ui.Card, Ui.Bold);
             it.SubItems.Add(a.Time > 0 && a.Time <= DateTime.MaxValue.Ticks ? new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss") : "");
             it.SubItems.Add(a.Size >= 0 ? Fmt.Bytes(a.Size) : "-");
@@ -475,6 +555,7 @@ namespace StickyPro
             bool on = recs.Any(r => !r.Fav);
             var paths = new HashSet<string>(recs.Select(r => r.Path), StringComparer.OrdinalIgnoreCase);
             foreach (var a in Store.Activity.Where(a => paths.Contains(a.Path))) a.Fav = on;
+            ActivityMonitor.InvalidateFavs();
             Store.MarkActivity();
             Fill();
         }
@@ -498,7 +579,11 @@ namespace StickyPro
             try
             {
                 if (File.Exists(r.Path)) Process.Start("explorer.exe", "/select,\"" + r.Path + "\"");
-                else Process.Start("explorer.exe", "\"" + Path.GetDirectoryName(r.Path) + "\"");
+                else
+                {
+                    string dir = ActivityMonitor.SafeDir(r.Path);
+                    if (dir.Length > 0) Process.Start("explorer.exe", "\"" + dir + "\"");
+                }
             }
             catch { }
         }
@@ -509,6 +594,7 @@ namespace StickyPro
             if (s.Count == 0) return;
             var set = new HashSet<ActivityRecord>(s);
             Store.Activity.RemoveAll(set.Contains);
+            ActivityMonitor.InvalidateFavs();
             Store.MarkActivity();
             Store.RaiseActivity();
             status(s.Count + " record(s) deleted. Your files were not touched.");
@@ -529,11 +615,18 @@ namespace StickyPro
             using (var d = new SaveFileDialog { Filter = "CSV (opens in Excel)|*.csv", FileName = "file-activity-" + DateTime.Now.ToString("yyyy-MM-dd") + ".csv" })
             {
                 if (d.ShowDialog(FindForm()) != DialogResult.OK) return;
-                var sb = new StringBuilder("Favorite,Process,File name,Folder,Event,Time,Size bytes,Backup\r\n");
-                foreach (var a in rows)
-                    sb.AppendLine(string.Join(",", new[] { a.Fav ? "yes" : "", a.Process, Path.GetFileName(a.Path), Path.GetDirectoryName(a.Path) ?? "", a.Event, new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss"), a.Size.ToString(), a.Backup ?? "" }.Select(Csv)));
-                File.WriteAllText(d.FileName, sb.ToString(), new UTF8Encoding(true));
-                status("Exported " + rows.Count + " records.");
+                try
+                {
+                    var sb = new StringBuilder("Favorite,Process,File name,Folder,Event,Time,Size bytes,Backup\r\n");
+                    foreach (var a in rows)
+                        sb.AppendLine(string.Join(",", new[] { a.Fav ? "yes" : "", a.Process, ActivityMonitor.SafeName(a.Path), ActivityMonitor.SafeDir(a.Path), a.Event, a.Time > 0 && a.Time <= DateTime.MaxValue.Ticks ? new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss") : "", a.Size.ToString(), a.Backup ?? "" }.Select(Csv)));
+                    File.WriteAllText(d.FileName, sb.ToString(), new UTF8Encoding(true));
+                    status("Exported " + rows.Count + " records.");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(FindForm(), "Could not export the records: " + ex.Message, App.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
             }
         }
 

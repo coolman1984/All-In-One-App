@@ -80,7 +80,7 @@ namespace StickyPro
 
             search = Ui.Search(mode == "clips" ? "Search clipboard" : mode == "prompts" ? "Search prompts" : "Search notes");
             search.Dock = DockStyle.Top;
-            search.TextChanged += delegate { Fill(); };
+            var fillSoon = Ui.Debounce(search, 200, Fill); search.TextChanged += delegate { fillSoon(); };
             search.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Down) { list.Focus(); if (list.Items.Count > 0 && list.SelectedIndex < 0) list.SelectedIndex = 0; e.SuppressKeyPress = true; }
@@ -131,7 +131,7 @@ namespace StickyPro
             if (c != null)
             {
                 if (c.Kind == "image") { ci.Title = "Image " + c.ImgW + " x " + c.ImgH; ci.Thumb = Thumbs.Get(c, Ui.S(80), list.ItemHeight - Ui.S(18)); }
-                else if (c.Kind == "files") ci.Title = Path.GetFileName(c.Text.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries)[0]);
+                else if (c.Kind == "files") ci.Title = Ui.FirstFileName(c.Text);
                 else ci.Title = Ui.OneLine(Store.TitleFrom(c.Text), 100);
                 ci.Sub = c.Kind == "image" ? "" : Ui.OneLine(c.Text, 140);
                 ci.Meta = (c.Pinned ? "PINNED  ·  " : "") + Ui.Ago(c.Time);
@@ -600,14 +600,14 @@ namespace StickyPro
     class CardsPage : Panel
     {
         readonly MainForm owner;
-        readonly CardList list;
+        readonly CardGrid list;
         public bool Stale = true;
 
         public CardsPage(MainForm owner)
         {
             this.owner = owner;
             Dock = DockStyle.Fill;
-            list = new CardList { Dock = DockStyle.Fill };
+            list = new CardGrid { Dock = DockStyle.Fill, MinColumnWidth = Ui.S(380), ItemHeight = Ui.S(96), MaxColumns = 4 };
             list.Info = o =>
             {
                 var d = (CardDef)o;

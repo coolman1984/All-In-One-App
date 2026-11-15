@@ -150,7 +150,7 @@ namespace StickyPro
             if (c != null)
             {
                 if (c.Kind == "image") { ci.Title = num + "Image " + c.ImgW + " x " + c.ImgH; ci.Thumb = Thumbs.Get(c, Ui.S(90), list.ItemHeight - Ui.S(18)); }
-                else if (c.Kind == "files") { ci.Title = num + Path.GetFileName(c.Text.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries)[0]); }
+                else if (c.Kind == "files") { ci.Title = num + Ui.FirstFileName(c.Text); }
                 else ci.Title = num + Ui.OneLine(Store.TitleFrom(c.Text), 100);
                 ci.Sub = c.Kind == "image" ? "" : Ui.OneLine(c.Text, 160);
                 ci.Meta = (c.Pinned ? "PINNED  ·  " : "") + (string.IsNullOrEmpty(c.Folder) ? "" : "[" + c.Folder + "]  ·  ") + Ui.Ago(c.Time);

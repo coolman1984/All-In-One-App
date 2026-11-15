@@ -71,6 +71,12 @@ namespace StickyPro
         List<Dictionary<string, object>> shown = new List<Dictionary<string, object>>();
         bool dirty, loaded;
         string file;
+        int prevProfile = -1, loadSeq;
+        bool reverting;
+        readonly System.Windows.Forms.Timer searchTimer = new System.Windows.Forms.Timer { Interval = 250 };
+        // Lazy index of the loaded document: node -> parent, plus the flat node list. Invalidated on every mutation.
+        Dictionary<Dictionary<string, object>, Dictionary<string, object>> parents;
+        List<Dictionary<string, object>> flat;
         readonly Action<string> status;
         static readonly JavaScriptSerializer Js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 512 };
 
@@ -80,7 +86,7 @@ namespace StickyPro
             Dock = DockStyle.Fill;
             lv = new FastList { Dock = DockStyle.Fill, MultiSelect = true, AllowDrop = false };
             lv.Columns.Add("Name", Ui.S(320)); lv.Columns.Add("Address", Ui.S(360)); lv.Columns.Add("Folder", Ui.S(160)); lv.Columns.Add("Added", Ui.S(100));
-            lv.FillIndex = 1;
+            lv.Weights = new[] { 3, 4, 1, 0 };
             lv.DoubleClick += delegate { OpenSelected(false); };
             lv.KeyDown += (s, e) =>
             {
@@ -93,14 +99,28 @@ namespace StickyPro
             tree = new TreeView { Dock = DockStyle.Left, Width = PaneGrip.Size("bm.tree", DockStyle.Left, Ui.S(240), Ui.S(900)), BorderStyle = BorderStyle.None, HideSelection = false, ShowLines = false, FullRowSelect = true, ItemHeight = Ui.S(26) };
             tree.AfterSelect += delegate { if (search.Text.Length == 0) ShowFolder(); };
             tree.ContextMenuStrip = FolderMenu();
+            tree.NodeMouseClick += (s, e) => { if (e.Button == MouseButtons.Right) tree.SelectedNode = e.Node; };
+            tree.MouseDown += (s, e) => { if (e.Button == MouseButtons.Right) { var hit = tree.GetNodeAt(e.X, e.Y); if (hit != null) tree.SelectedNode = hit; } };
             Controls.Add(lv); Controls.Add(tree);
             PaneGrip.Attach(tree, "bm.tree", Ui.S(120));
 
             var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 38), WrapContents = true };
             profile = MainForm.Combo(Ui.S(200)); profile.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
-            profile.SelectedIndexChanged += delegate { if (!dirty || Confirm("Discard unsaved bookmark changes?")) LoadProfile(); };
+            profile.SelectedIndexChanged += delegate
+            {
+                if (reverting || profile.SelectedIndex < 0) return;
+                if (dirty && !Confirm("Discard unsaved bookmark changes?"))
+                {
+                    reverting = true;
+                    try { profile.SelectedIndex = prevProfile; } finally { reverting = false; }
+                    return;
+                }
+                prevProfile = profile.SelectedIndex;
+                LoadProfile();
+            };
             search = Ui.Search("Search all bookmarks"); search.Width = Ui.S(200); search.Margin = new Padding(0, Ui.S(4), Ui.S(8), 0);
-            search.TextChanged += delegate { if (search.Text.Trim().Length == 0) ShowFolder(); else ShowSearch(); };
+            searchTimer.Tick += delegate { searchTimer.Stop(); if (search.Text.Trim().Length == 0) ShowFolder(); else ShowSearch(); };
+            search.TextChanged += delegate { searchTimer.Stop(); searchTimer.Start(); };
             bar.Controls.Add(profile); bar.Controls.Add(search);
             bar.Controls.Add(Ui.Btn("Open", delegate { OpenSelected(false); }, true));
             bar.Controls.Add(Ui.Btn("Add", delegate { AddBookmark(); }));
@@ -125,24 +145,61 @@ namespace StickyPro
         {
             if (!on || loaded) return;
             loaded = true;
-            profile.Items.Clear();
-            foreach (var p in ChromeInfo.Profiles()) profile.Items.Add(new ProfileItem { Key = p.Key, Name = p.Value });
-            if (profile.Items.Count == 0) { info.Text = "Google Chrome user data was not found on this PC."; return; }
-            profile.SelectedIndex = 0;
+            info.Text = "Loading...";
+            status("Loading Chrome profiles...");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                List<KeyValuePair<string, string>> ps = null;
+                try { ps = ChromeInfo.Profiles(); } catch { }
+                UI(() =>
+                {
+                    profile.Items.Clear();
+                    if (ps != null) foreach (var p in ps) profile.Items.Add(new ProfileItem { Key = p.Key, Name = p.Value });
+                    if (profile.Items.Count == 0) { status(""); info.Text = "Google Chrome user data was not found on this PC."; return; }
+                    profile.SelectedIndex = 0;
+                });
+            });
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { searchTimer.Stop(); searchTimer.Dispose(); }
+            base.Dispose(disposing);
         }
         public class ProfileItem { public string Key, Name; public override string ToString() { return Name; } }
         string Profile { get { var p = profile.SelectedItem as ProfileItem; return p == null ? "Default" : p.Key; } }
 
         void LoadProfile()
         {
-            file = Path.Combine(ChromeInfo.UserData, Profile, "Bookmarks");
-            try { doc = File.Exists(file) ? Js.DeserializeObject(File.ReadAllText(file, Encoding.UTF8)) as Dictionary<string, object> : null; }
-            catch (Exception ex) { doc = null; info.Text = "Could not read bookmarks: " + ex.Message; }
+            string f = Path.Combine(ChromeInfo.UserData, Profile, "Bookmarks");
+            int seq = ++loadSeq;
+            // Nothing is loaded (and nothing can be saved) until the background read finishes.
+            doc = null; InvalidateIndex(); dirty = false; UpdateDirty();
+            tree.BeginUpdate(); tree.Nodes.Clear(); tree.EndUpdate();
+            lv.Items.Clear(); shown = new List<Dictionary<string, object>>();
+            info.Text = "Loading...";
+            status("Loading bookmarks...");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Dictionary<string, object> d = null; string err = null;
+                try
+                {
+                    var js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 512 };
+                    d = File.Exists(f) ? js.DeserializeObject(File.ReadAllText(f, Encoding.UTF8)) as Dictionary<string, object> : null;
+                }
+                catch (Exception ex) { err = "Could not read bookmarks: " + ex.Message; }
+                UI(() => { if (seq == loadSeq) ApplyLoaded(f, d, err); });
+            });
+        }
+
+        void ApplyLoaded(string f, Dictionary<string, object> d, string err)
+        {
+            file = f; doc = d; InvalidateIndex();
+            info.Text = err ?? "";
             dirty = false; UpdateDirty();
             tree.BeginUpdate(); tree.Nodes.Clear();
             if (doc != null)
             {
-                var roots = doc["roots"] as Dictionary<string, object>;
+                var roots = doc.ContainsKey("roots") ? doc["roots"] as Dictionary<string, object> : null;
                 foreach (var key in new[] { "bookmark_bar", "other", "synced" })
                 {
                     if (roots == null || !roots.ContainsKey(key)) continue;
@@ -152,6 +209,7 @@ namespace StickyPro
                 if (tree.Nodes.Count > 0) { tree.Nodes[0].Expand(); tree.SelectedNode = tree.Nodes[0]; }
             }
             tree.EndUpdate();
+            status("");
             int count = doc == null ? 0 : All().Count(n => Str(n, "type") == "url");
             info.Text = doc == null ? (info.Text.Length > 0 ? info.Text : "No bookmarks file for this profile.") : count + " bookmarks.  Double-click opens in Chrome.  Changes are saved to Chrome with \"Save to Chrome\" (Chrome must be closed; a backup is kept).";
         }
@@ -174,15 +232,41 @@ namespace StickyPro
         }
         static List<object> RawChildren(Dictionary<string, object> n) { Children(n); object v; if (!n.TryGetValue("children", out v) || !(v is List<object>)) { n["children"] = new List<object>(); } return (List<object>)n["children"]; }
 
-        IEnumerable<Dictionary<string, object>> All()
+        void InvalidateIndex() { parents = null; flat = null; }
+
+        void EnsureIndex()
         {
-            var roots = doc == null ? null : doc["roots"] as Dictionary<string, object>;
-            if (roots == null) yield break;
-            var stack = new Stack<Dictionary<string, object>>();
-            foreach (var v in roots.Values) { var d = v as Dictionary<string, object>; if (d != null) stack.Push(d); }
-            while (stack.Count > 0) { var n = stack.Pop(); yield return n; foreach (var c in Children(n)) stack.Push(c); }
+            if (parents != null && flat != null) return;
+            var par = new Dictionary<Dictionary<string, object>, Dictionary<string, object>>();
+            var all = new List<Dictionary<string, object>>();
+            var roots = doc == null || !doc.ContainsKey("roots") ? null : doc["roots"] as Dictionary<string, object>;
+            if (roots != null)
+            {
+                var stack = new Stack<Dictionary<string, object>>();
+                foreach (var v in roots.Values) { var d = v as Dictionary<string, object>; if (d != null) stack.Push(d); }
+                while (stack.Count > 0)
+                {
+                    var n = stack.Pop(); all.Add(n);
+                    foreach (var c in Children(n)) { par[c] = n; stack.Push(c); }
+                }
+            }
+            parents = par; flat = all;
         }
-        Dictionary<string, object> ParentOf(Dictionary<string, object> node) { return All().FirstOrDefault(p => Children(p).Contains(node)); }
+
+        IEnumerable<Dictionary<string, object>> All() { EnsureIndex(); return flat; }
+        Dictionary<string, object> ParentOf(Dictionary<string, object> node)
+        {
+            if (node == null) return null;
+            EnsureIndex();
+            Dictionary<string, object> p; return parents.TryGetValue(node, out p) ? p : null;
+        }
+        // True when target is node itself or lies anywhere inside node's subtree.
+        static bool IsInside(Dictionary<string, object> node, Dictionary<string, object> target)
+        {
+            if (node == target) return true;
+            foreach (var c in Children(node)) if (Str(c, "type") == "folder" && IsInside(c, target)) return true;
+            return false;
+        }
 
         static string ChromeTime(string s) { long v; if (!long.TryParse(s, out v) || v <= 0) return ""; try { return new DateTime(1601, 1, 1).AddTicks(v * 10).ToLocalTime().ToString("yyyy-MM-dd"); } catch { return ""; } }
         static string NowChrome() { return ((DateTime.UtcNow - new DateTime(1601, 1, 1)).Ticks / 10).ToString(); }
@@ -270,7 +354,7 @@ namespace StickyPro
             return m;
         }
 
-        void Touch() { dirty = true; UpdateDirty(); }
+        void Touch() { InvalidateIndex(); dirty = true; UpdateDirty(); }
         void UpdateDirty() { btnSave.Text = dirty ? "Save to Chrome  *" : "Save to Chrome"; btnSave.Enabled = dirty; }
 
         int NextId() { int max = 0; foreach (var n in All()) { int v; if (int.TryParse(Str(n, "id"), out v)) max = Math.Max(max, v); } return max + 1; }
@@ -311,12 +395,17 @@ namespace StickyPro
         }
         void MoveTo(Dictionary<string, object> folder)
         {
+            int skipped = 0, moved = 0;
             foreach (var n in SelNodes())
             {
-                if (n == folder) continue;
+                if (n == folder) { skipped++; continue; }
+                // A folder cannot be moved into itself or into one of its own subfolders (the subtree would be lost).
+                if (Str(n, "type") == "folder" && IsInside(n, folder)) { skipped++; continue; }
                 var p = ParentOf(n); if (p != null) RawChildren(p).Remove(n);
-                RawChildren(folder).Add(n);
+                RawChildren(folder).Add(n); moved++;
             }
+            if (skipped > 0) status(skipped + " item(s) not moved: a folder cannot be moved into itself or its own subfolder.");
+            if (moved == 0) return;
             Touch(); LoadTreeKeep();
         }
         void LoadTreeKeep()
@@ -324,7 +413,7 @@ namespace StickyPro
             var keep = CurrentFolder;
             tree.BeginUpdate(); tree.Nodes.Clear();
             var roots = doc["roots"] as Dictionary<string, object>;
-            foreach (var key in new[] { "bookmark_bar", "other", "synced" }) if (roots.ContainsKey(key)) tree.Nodes.Add(MakeNode((Dictionary<string, object>)roots[key]));
+            foreach (var key in new[] { "bookmark_bar", "other", "synced" }) if (roots != null && roots.ContainsKey(key)) tree.Nodes.Add(MakeNode((Dictionary<string, object>)roots[key]));
             tree.EndUpdate();
             foreach (var tn in AllTreeNodes(tree.Nodes)) if (tn.Tag == keep) { tree.SelectedNode = tn; break; }
             ShowFolder();

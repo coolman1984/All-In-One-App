@@ -106,21 +106,33 @@ namespace StickyPro
     {
         public string Value = "Unavailable", Detail = "";
         public double Used = -1;
-        static DateTime stamp;
-        static readonly Dictionary<string, DriveSnapshot> cache = new Dictionary<string, DriveSnapshot>();
+        static DateTime stamp = DateTime.MinValue;
+        static volatile Dictionary<string, DriveSnapshot> cache;
+        static int refreshing;
+        // Never blocks the UI: drive queries (IsReady can hang on removable or network drives) run on a worker;
+        // callers get the last known values and fresh ones on their next refresh.
         public static DriveSnapshot Read(string letter)
         {
-            if ((DateTime.Now - stamp).TotalSeconds >= 5 || cache.Count == 0)
+            if (cache == null) cache = Query();     // first call: one quick synchronous read so the UI has values
+            else if ((DateTime.Now - stamp).TotalSeconds >= 5 && System.Threading.Interlocked.Exchange(ref refreshing, 1) == 0)
             {
-                stamp = DateTime.Now; cache.Clear();
-                foreach (string drive in new[] { "C", "D" })
-                {
-                    var snapshot = new DriveSnapshot();
-                    try { var info = new DriveInfo(drive + @":\"); if (info.IsReady) { long free = info.AvailableFreeSpace, total = info.TotalSize; snapshot.Value = Fmt.Bytes(free) + " free"; snapshot.Detail = "of " + Fmt.Bytes(total); snapshot.Used = total > 0 ? 1 - free / (double)total : 0; } } catch { }
-                    cache[drive] = snapshot;
-                }
+                stamp = DateTime.Now;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate { try { cache = Query(); } finally { refreshing = 0; } });
             }
-            return cache[letter];
+            DriveSnapshot s;
+            return cache.TryGetValue(letter, out s) ? s : new DriveSnapshot();
+        }
+        static Dictionary<string, DriveSnapshot> Query()
+        {
+            stamp = DateTime.Now;
+            var map = new Dictionary<string, DriveSnapshot>();
+            foreach (string drive in new[] { "C", "D" })
+            {
+                var snapshot = new DriveSnapshot();
+                try { var info = new DriveInfo(drive + @":\"); if (info.DriveType == DriveType.Fixed && info.IsReady) { long free = info.AvailableFreeSpace, total = info.TotalSize; snapshot.Value = Fmt.Bytes(free) + " free"; snapshot.Detail = "of " + Fmt.Bytes(total); snapshot.Used = total > 0 ? 1 - free / (double)total : 0; } } catch { }
+                map[drive] = snapshot;
+            }
+            return map;
         }
     }
 
@@ -212,14 +224,18 @@ namespace StickyPro
             int top = Ui.S(58);
             if (ShowWelcome) { welcome = new Rectangle(0, top, width, Ui.S(64)); welcomeClose = new Rectangle(width - Ui.S(84), top + Ui.S(16), Ui.S(72), Ui.S(32)); top += Ui.S(80); }
             else welcome = welcomeClose = Rectangle.Empty;
-            var y = new[] { top, top, top };
+            var y = new[] { top, top, top, top };
             if (Ui.Nexus)
             {
-                // White rounded cards, one per section.
+                // White rounded cards, one per section, placed masonry-style (each into the shortest column)
+                // so no column ends far below the others; 4 columns on very wide windows.
+                if (width >= Ui.S(1700)) columns = 4;
                 gap = Ui.S(18); colW = (width - gap * (columns - 1)) / columns;
                 foreach (var s in sections)
                 {
-                    int c = columns == 3 ? s.Column : columns == 2 ? (s.Column == 0 ? 0 : 1) : 0, x = c * (colW + gap);
+                    int c = 0;
+                    for (int k = 1; k < columns; k++) if (y[k] < y[c]) c = k;
+                    int x = c * (colW + gap);
                     int cy = y[c], ix = x + Ui.S(10), iw = colW - Ui.S(20);
                     s.Header = new Rectangle(x + Ui.S(20), cy + Ui.S(10), colW - Ui.S(40), Ui.S(34));
                     int ty = cy + Ui.S(50);
@@ -228,7 +244,7 @@ namespace StickyPro
                     y[c] = s.Card.Bottom + gap;
                 }
                 dividers.Clear();
-                return Math.Max(y[0], Math.Max(y[1], y[2]));
+                return y.Max();
             }
             foreach (var s in sections)
             {
@@ -335,7 +351,9 @@ namespace StickyPro
     class DashboardPanel : LivePanel
     {
         readonly Dictionary<string, MetricTile> tiles = new Dictionary<string, MetricTile>();
-        readonly Action update;
+        readonly Action update, storeUpdate;
+        readonly Timer storeTimer = new Timer { Interval = 400 };
+        DashboardFacts facts;
         readonly TaskHome tasks;
         readonly Label liveHead;
         readonly TileGrid grid;
@@ -354,8 +372,11 @@ namespace StickyPro
             Add("notes", "Reminders due today", "notes"); Add("activity", "Files opened today", "activity"); Add("tagged", "Tagged Urgent", "tagged"); Add("record", "Screen recorder", "snip");
             if (Ui.Nexus) { board = new NexusBoard(); Controls.Add(tasks); Controls.Add(board); }
             else { Controls.Add(tasks); Controls.Add(liveHead); Controls.Add(grid); }
-            update = () => { if (Live) RefreshMetrics(); };
-            ProcessSampler.Updated += update; Store.ClipsChanged += update; Store.PromptsChanged += update; Store.NotesChanged += update; Store.ActivityChanged += update; Store.TaggedChanged += update; Recorder.Finished += update; Store.TasksChanged += update;
+            update = () => { if (Live) RefreshMetrics(false); };
+            // Store events come in bursts (typing, copying): recompute the data once, 400 ms after the last event.
+            storeUpdate = () => { if (Live) { storeTimer.Stop(); storeTimer.Start(); } };
+            storeTimer.Tick += delegate { storeTimer.Stop(); if (Live) RefreshMetrics(true); };
+            ProcessSampler.Updated += update; Store.ClipsChanged += storeUpdate; Store.PromptsChanged += storeUpdate; Store.NotesChanged += storeUpdate; Store.ActivityChanged += storeUpdate; Store.TaggedChanged += storeUpdate; Recorder.Finished += storeUpdate; Store.TasksChanged += storeUpdate;
         }
         void Add(string key, string title, string page) { var tile = new MetricTile(title, () => App.I.ShowMain(page)); tiles[key] = tile; grid.Controls.Add(tile); }
         protected override void OnLayout(LayoutEventArgs e)
@@ -402,11 +423,11 @@ namespace StickyPro
         protected override void OnResize(EventArgs e) { base.OnResize(e); PerformLayout(); }
         // Keep the live tiles in view: do not jump to the task list when it takes keyboard focus.
         protected override Point ScrollToControl(Control activeControl) { return DisplayRectangle.Location; }
-        protected override void OnLive(bool on) { ProcessSampler.Watch(this, on); if (on) RefreshMetrics(); }
-        void RefreshMetrics()
+        protected override void OnLive(bool on) { ProcessSampler.Watch(this, on); if (on) RefreshMetrics(true); }
+        void RefreshMetrics(bool data)
         {
-            if (board != null) { board.RefreshData(); return; }
-            var facts = DashboardFacts.Read(Store.Now());
+            if (board != null) { board.RefreshData(data); return; }
+            if (data || facts == null) facts = DashboardFacts.Read(Store.Now());
             tiles["cpu"].Value = ProcessSampler.CpuTotal.ToString("0") + "%"; tiles["cpu"].Trend = ProcessSampler.CpuHistory.ToArray();
             tiles["ram"].Value = ProcessSampler.MemLoad + "%"; tiles["ram"].Trend = ProcessSampler.RamHistory.ToArray();
             foreach (string drive in new[] { "C", "D" }) { var d = DriveSnapshot.Read(drive); tiles[drive].Value = d.Value; tiles[drive].Detail = d.Detail; tiles[drive].Fraction = d.Used; }
@@ -419,7 +440,7 @@ namespace StickyPro
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { ProcessSampler.Updated -= update; Store.ClipsChanged -= update; Store.PromptsChanged -= update; Store.NotesChanged -= update; Store.ActivityChanged -= update; Store.TaggedChanged -= update; Recorder.Finished -= update; Store.TasksChanged -= update; }
+            if (disposing) { ProcessSampler.Updated -= update; Store.ClipsChanged -= storeUpdate; Store.PromptsChanged -= storeUpdate; Store.NotesChanged -= storeUpdate; Store.ActivityChanged -= storeUpdate; Store.TaggedChanged -= storeUpdate; Recorder.Finished -= storeUpdate; Store.TasksChanged -= storeUpdate; storeTimer.Dispose(); }
             base.Dispose(disposing);
         }
     }
@@ -509,25 +530,124 @@ namespace StickyPro
     }
 
 
+    // Task-Manager-style performance strip: one owner-drawn control, fixed height (no AutoSize measuring),
+    // 4 cards in one row on wide windows, 2 x 2 on narrow ones. CPU and memory show a 2-minute area chart.
     class SystemKpis : LivePanel
     {
-        readonly MetricTile cpu, ram, c, d;
+        class Card { public string Title, Value, Detail, Page; public double[] Trend; public double Fraction = -1; public Color Color; public Rectangle Bounds; }
+        readonly Card[] cards;
         readonly Action update;
+        int hot = -1;
         public SystemKpis()
         {
-            Dock = DockStyle.Top; AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            var grid = new TileGrid(Ui.S(155), Ui.S(84), 4);
-            cpu = new MetricTile("CPU", () => App.I.ShowMain("system:procs")); ram = new MetricTile("RAM", () => App.I.ShowMain("system:procs"));
-            c = new MetricTile("Disk C", () => App.I.ShowMain("system:drives")); d = new MetricTile("Disk D", () => App.I.ShowMain("system:drives"));
-            grid.Controls.AddRange(new Control[] { cpu, ram, c, d }); Controls.Add(grid);
+            Dock = DockStyle.Top;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            cards = new[]
+            {
+                new Card { Title = "CPU", Page = "system:procs", Color = Color.FromArgb(51, 102, 240) },
+                new Card { Title = "Memory", Page = "system:procs", Color = Color.FromArgb(139, 92, 246) },
+                new Card { Title = "Disk C:", Page = "system:drives", Color = Color.FromArgb(16, 185, 129) },
+                new Card { Title = "Disk D:", Page = "system:drives", Color = Color.FromArgb(245, 158, 11) }
+            };
+            foreach (var c in cards) { c.Value = "..."; c.Detail = ""; }
+            Height = Ui.S(128);
             update = () => { if (Live) RefreshMetrics(); }; ProcessSampler.Updated += update;
+        }
+        int Columns { get { return Width >= Ui.S(860) ? 4 : 2; } }
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            int rows = (cards.Length + Columns - 1) / Columns;
+            int want = rows * Ui.S(116) + Ui.S(12);
+            if (Height != want) Height = want;
+            Arrange();
+        }
+        void Arrange()
+        {
+            int cols = Columns, gap = Ui.S(14), top = Ui.S(6), h = Ui.S(108);
+            int w = Math.Max(Ui.S(120), (Width - gap * (cols - 1)) / cols);
+            for (int i = 0; i < cards.Length; i++)
+                cards[i].Bounds = new Rectangle((i % cols) * (w + gap), top + (i / cols) * (h + Ui.S(8)), w, h);
         }
         protected override void OnLive(bool on) { ProcessSampler.Watch(this, on); if (on) RefreshMetrics(); }
         void RefreshMetrics()
         {
-            cpu.Value = ProcessSampler.CpuTotal.ToString("0") + "%"; ram.Value = ProcessSampler.MemLoad + "%";
-            var cd = DriveSnapshot.Read("C"); var dd = DriveSnapshot.Read("D"); c.Value = cd.Value; c.Fraction = cd.Used; d.Value = dd.Value; d.Fraction = dd.Used;
-            cpu.Invalidate(); ram.Invalidate(); c.Invalidate(); d.Invalidate();
+            var list = ProcessSampler.Last;
+            var top = list.Count == 0 ? null : list.OrderByDescending(p => p.Cpu).First();
+            cards[0].Value = ProcessSampler.CpuTotal.ToString("0") + "%";
+            cards[0].Detail = Environment.ProcessorCount + " logical cores  ·  " + list.Count + " processes" + (top != null && top.Cpu >= 1 ? "  ·  top: " + top.Display : "");
+            cards[0].Trend = ProcessSampler.CpuHistory.ToArray();
+            double used = ProcessSampler.MemTotal - (double)ProcessSampler.MemAvail;
+            cards[1].Value = ProcessSampler.MemLoad + "%";
+            cards[1].Detail = ProcessSampler.MemTotal == 0 ? "" : Fmt.Bytes((long)used) + " of " + Fmt.Bytes((long)ProcessSampler.MemTotal) + "  ·  " + Fmt.Bytes((long)ProcessSampler.MemAvail) + " free";
+            cards[1].Trend = ProcessSampler.RamHistory.ToArray();
+            for (int k = 0; k < 2; k++)
+            {
+                var snap = DriveSnapshot.Read(k == 0 ? "C" : "D");
+                var c = cards[2 + k];
+                c.Value = snap.Value; c.Fraction = snap.Used;
+                c.Detail = snap.Used >= 0 ? (snap.Used * 100).ToString("0") + "% used  ·  " + snap.Detail : "Not available";
+            }
+            Invalidate();
+        }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int h = -1; for (int i = 0; i < cards.Length; i++) if (cards[i].Bounds.Contains(e.Location)) h = i;
+            if (h != hot) { hot = h; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
+        }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); if (hot >= 0) { hot = -1; Invalidate(); } }
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+            foreach (var c in cards) if (c.Bounds.Contains(e.Location)) { App.I.ShowMain(c.Page); break; }
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics; g.Clear(Parent == null ? Ui.Bg : Parent.BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
+            if (cards[0].Bounds.Width == 0) Arrange();
+            var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+            for (int i = 0; i < cards.Length; i++)
+            {
+                var c = cards[i]; var r = c.Bounds;
+                var body = new Rectangle(r.X + Ui.S(3), r.Y + Ui.S(1), r.Width - Ui.S(7), r.Height - Ui.S(7));
+                Ui.FillCard(g, body, Ui.S(14), i == hot);
+                if (!Ui.Navy) using (var p = new Pen(i == hot ? Ui.Accent : Ui.Line)) using (var path = Ui.Round(body, Ui.S(14))) g.DrawPath(p, path);
+                // chart area: right 45% of the card
+                int chartW = c.Trend != null ? body.Width * 38 / 100 : 0;
+                int textW = body.Width - chartW - Ui.S(28);
+                using (var b = new SolidBrush(c.Color)) g.FillEllipse(b, body.X + Ui.S(16), body.Y + Ui.S(17), Ui.S(8), Ui.S(8));
+                TextRenderer.DrawText(g, c.Title, Ui.Bold, new Rectangle(body.X + Ui.S(30), body.Y + Ui.S(10), textW, Ui.S(22)), Ui.Muted, flags | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, c.Value, Ui.Kpi, new Rectangle(body.X + Ui.S(14), body.Y + Ui.S(32), textW + Ui.S(14), Ui.S(38)), Ui.Text, flags | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, c.Detail, Ui.Small, new Rectangle(body.X + Ui.S(16), body.Y + (c.Fraction >= 0 ? Ui.S(66) : Ui.S(72)), body.Width - chartW - Ui.S(24), Ui.S(20)), Ui.Muted, flags);
+                if (c.Fraction >= 0)
+                {
+                    var bar = new Rectangle(body.X + Ui.S(16), body.Bottom - Ui.S(14), body.Width - Ui.S(32), Ui.S(6));
+                    using (var path = Ui.Round(bar, Ui.S(3))) using (var b = new SolidBrush(Ui.Track)) g.FillPath(b, path);
+                    int fw = (int)(bar.Width * Math.Max(0, Math.Min(1, c.Fraction)));
+                    if (fw > Ui.S(6)) using (var path = Ui.Round(new Rectangle(bar.X, bar.Y, fw, bar.Height), Ui.S(3))) using (var b = new SolidBrush(c.Fraction > 0.9 ? Ui.Danger : c.Color)) g.FillPath(b, path);
+                }
+                if (c.Trend != null && c.Trend.Length > 1 && chartW > Ui.S(40))
+                {
+                    var area = new Rectangle(body.Right - chartW - Ui.S(10), body.Y + Ui.S(14), chartW, body.Height - Ui.S(28));
+                    using (var p = new Pen(Ui.Line) { DashStyle = DashStyle.Dot })
+                        for (int k = 1; k < 4; k++) g.DrawLine(p, area.X, area.Y + area.Height * k / 4, area.Right, area.Y + area.Height * k / 4);
+                    int n = 60; var pts = new PointF[c.Trend.Length];
+                    for (int k = 0; k < pts.Length; k++)
+                    {
+                        int slot = n - pts.Length + k;
+                        pts[k] = new PointF(area.X + slot * area.Width / (float)(n - 1), area.Bottom - (float)Math.Max(0, Math.Min(100, c.Trend[k])) * area.Height / 100f);
+                    }
+                    using (var fill = new GraphicsPath())
+                    {
+                        fill.AddLines(pts); fill.AddLine(pts[pts.Length - 1], new PointF(pts[pts.Length - 1].X, area.Bottom)); fill.AddLine(new PointF(pts[pts.Length - 1].X, area.Bottom), new PointF(pts[0].X, area.Bottom)); fill.CloseFigure();
+                        using (var b = new LinearGradientBrush(new Rectangle(area.X, area.Y - 1, area.Width, area.Height + 2), Color.FromArgb(90, c.Color), Color.FromArgb(8, c.Color), 90f)) g.FillPath(b, fill);
+                    }
+                    using (var pen = new Pen(c.Color, Ui.S(2)) { LineJoin = LineJoin.Round }) g.DrawLines(pen, pts);
+                    var last = pts[pts.Length - 1];
+                    using (var b = new SolidBrush(c.Color)) g.FillEllipse(b, last.X - Ui.S(3), last.Y - Ui.S(3), Ui.S(6), Ui.S(6));
+                }
+            }
         }
         protected override void Dispose(bool disposing) { if (disposing) ProcessSampler.Updated -= update; base.Dispose(disposing); }
     }

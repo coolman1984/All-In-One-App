@@ -493,10 +493,10 @@ $stream.Dispose()
             foreach (var m in CaptureCommands.Modes)
             {
                 string id = m[0];
-                snip.DropDownItems.Add(m[1], null, delegate { Close(); App.I.StartSnip(id, 0, false); });
+                snip.DropDownItems.Add(m[1], null, delegate { CloseThenSnip(id); });
             }
-            snip.DropDownItems.Add("Scrolling Window", null, delegate { Close(); App.I.StartSnip("scroll", 0, false); });
-            snip.DropDownItems.Add("Repeat Last Capture", null, delegate { Close(); App.I.StartSnip("repeat", 0, false); });
+            snip.DropDownItems.Add("Scrolling Window", null, delegate { CloseThenSnip("scroll"); });
+            snip.DropDownItems.Add("Repeat Last Capture", null, delegate { CloseThenSnip("repeat"); });
             snip.DropDownItems.Add(new ToolStripSeparator());
             snip.DropDownItems.Add("New blank image...", null, delegate { NewBlank(); });
             snip.DropDownItems.Add("Open image file...", null, delegate { OpenFile(this); });
@@ -904,26 +904,43 @@ $stream.Dispose()
             catch { }
         }
 
+        // Close without disposing toolstrip items while their own click / key handler is still running.
+        void CloseThenSnip(string mode)
+        {
+            try { BeginInvoke(new Action(() => { Close(); App.I.StartSnip(mode, 0, false); })); }
+            catch { }
+        }
+
+        bool ocrLoading;
+        int ocrRun;
+
         public void ShowOcr()
         {
             ocrPanel.Visible = true;
             if (ocrLang.Items.Count == 1)
             {
+                if (ocrLoading) return;
+                ocrLoading = true;
                 ocrStatus.Text = "Loading languages...";
                 ThreadPool.QueueUserWorkItem(delegate
                 {
-                    var langs = Ocr.Languages();
+                    List<string[]> langs = null;
+                    try { langs = Ocr.Languages(); } catch { }
                     try
                     {
                         BeginInvoke(new Action(() =>
                         {
-                            foreach (var l in langs) ocrLang.Items.Add(l[0] + "  " + l[1]);
-                            int idx = langs.FindIndex(l => l[0] == Store.Settings.OcrLang);
-                            if (idx >= 0) ocrLang.SelectedIndex = idx + 1;
+                            ocrLoading = false;
+                            if (langs != null && ocrLang.Items.Count == 1)
+                            {
+                                foreach (var l in langs) ocrLang.Items.Add(l[0] + "  " + l[1]);
+                                int idx = langs.FindIndex(l => l[0] == Store.Settings.OcrLang);
+                                if (idx >= 0) ocrLang.SelectedIndex = idx + 1;
+                            }
                             RunOcr();
                         }));
                     }
-                    catch { }
+                    catch { ocrLoading = false; }
                 });
             }
             else RunOcr();
@@ -933,10 +950,11 @@ $stream.Dispose()
         {
             ocrStatus.Text = "Reading text...";
             ocrText.Text = "";
+            int run = ++ocrRun;
             using (var img = Render())
                 Ocr.Run(img, Store.Settings.OcrLang, this, (text, err) =>
                 {
-                    if (IsDisposed) return;
+                    if (IsDisposed || run != ocrRun) return;
                     ocrText.Text = (text ?? "").Replace("\r\n", "\n").Replace("\n", "\r\n");
                     ocrText.RightToLeft = Ui.IsRtl(ocrText.Text) ? RightToLeft.Yes : RightToLeft.No;
                     ocrStatus.Text = err ?? ("Found " + ocrText.Lines.Length + " line(s). Edit freely, then Copy all text.");
@@ -956,7 +974,7 @@ $stream.Dispose()
                 case Keys.Control | Keys.Shift | Keys.S: Save(true); return true;
                 case Keys.Control | Keys.T: ShowOcr(); return true;
                 case Keys.Control | Keys.P: new PinnedImage(Render()).Show(); return true;
-                case Keys.Control | Keys.N: Close(); App.I.StartSnip("rect", 0, false); return true;
+                case Keys.Control | Keys.N: CloseThenSnip("rect"); return true;
                 case Keys.P: SelectTool("pen"); return true;
                 case Keys.H: SelectTool("hl"); return true;
                 case Keys.E: SelectTool("eraser"); return true;
@@ -1363,8 +1381,8 @@ $stream.Dispose()
 
             list = new CardGrid { Dock = DockStyle.Fill };
             list.SelectionMode = SelectionMode.MultiExtended;
-            list.ItemHeight = Ui.S(96);
-            list.MinColumnWidth = Ui.S(300);
+            list.ItemHeight = Ui.S(120);
+            list.MinColumnWidth = Ui.S(320);
             list.Info = o =>
             {
                 var f = (FileInfo)o;
@@ -1478,8 +1496,18 @@ $stream.Dispose()
             if (img == null) return null;
             try
             {
+                // Box of the size the card draws, with the picture fitted inside (keeps its aspect ratio).
+                h = Math.Max(1, h);
                 int w = Math.Max(1, Math.Min(maxW, img.Width * h / Math.Max(1, img.Height)));
-                return new Bitmap(img, w, Math.Max(1, h));
+                double k = Math.Min((double)w / Math.Max(1, img.Width), (double)h / Math.Max(1, img.Height));
+                int dw = Math.Max(1, (int)Math.Round(img.Width * k)), dh = Math.Max(1, (int)Math.Round(img.Height * k));
+                var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(img, new Rectangle((w - dw) / 2, (h - dh) / 2, dw, dh));
+                }
+                return bmp;
             }
             finally { img.Dispose(); }
         }
@@ -1543,11 +1571,16 @@ $stream.Dispose()
 
         void DeleteSel()
         {
-            var f = list.SelectedItem as FileInfo;
-            if (f == null) return;
-            if (MessageBox.Show(FindForm(), "Delete " + f.Name + "?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            try { File.Delete(f.FullName); } catch (Exception ex) { status(ex.Message); }
-            Image t; if (thumbs.TryGetValue(f.FullName, out t)) { if (t != null) t.Dispose(); thumbs.Remove(f.FullName); }
+            var sel = list.Selected<FileInfo>();
+            if (sel.Count == 0) return;
+            string what = sel.Count == 1 ? sel[0].Name : sel.Count + " items";
+            if (MessageBox.Show(FindForm(), "Move " + what + " to the Recycle Bin?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try { ShellOps.Run(FindForm(), ShellOps.FO_DELETE, sel.Select(f => f.FullName), null, true); }
+            catch (Exception ex) { status(ex.Message); }
+            foreach (var f in sel)
+            {
+                Image t; if (thumbs.TryGetValue(f.FullName, out t)) { if (t != null) t.Dispose(); thumbs.Remove(f.FullName); }
+            }
             Fill();
         }
     }
