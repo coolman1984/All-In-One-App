@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -77,7 +78,7 @@ namespace StickyPro
         }
     }
 
-    class Entry { public string Path, Name, Type; public long Size; public DateTime Modified; public bool Dir; public int Icon = -1; public bool IconQueued; }
+    class Entry { public string Path, Name, Type, Extra; public long Size; public DateTime Modified; public bool Dir; public int Icon = -1; public bool IconQueued; }
 
     class FolderPane : Panel
     {
@@ -104,8 +105,8 @@ namespace StickyPro
         {
             Dock = DockStyle.Fill; Padding = new Padding(Ui.S(3));
             lv = new FastList { Dock = DockStyle.Fill, VirtualMode = true, MultiSelect = true, LabelEdit = false, AllowDrop = true };
-            lv.Columns.Add("Name", Ui.S(240)); lv.Columns.Add("Size", Ui.S(80), HorizontalAlignment.Right); lv.Columns.Add("Modified", Ui.S(120)); lv.Columns.Add("Type", Ui.S(110));
-            lv.FillIndex = 0;
+            lv.Columns.Add("Name", Ui.S(240)); lv.Columns.Add("Size", Ui.S(104), HorizontalAlignment.Right); lv.Columns.Add("Modified", Ui.S(120)); lv.Columns.Add("Type", Ui.S(110));
+            lv.FillIndex = 0; lv.DropOrder = new[] { 3, 2, 1 }; lv.MinFill = Ui.S(170);
             lv.RetrieveVirtualItem += Retrieve;
             lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 1 || e.Column == 2; } Apply(); };
             lv.DoubleClick += delegate { OpenSelected(); };
@@ -179,6 +180,7 @@ namespace StickyPro
             if (record && Current != path) { back.Add(Current); fwd.Clear(); }
             if (!string.Equals(Current, path, StringComparison.OrdinalIgnoreCase)) lv.SelectedIndices.Clear();
             Current = path; address.Text = path.Length == 0 ? "This PC" : path; filter.Text = "";
+            if (record && path.Length > 3) MetaStore.Touch("folders", path.TrimEnd('\\'));
             Watch();
             Load(true);
         }
@@ -251,8 +253,8 @@ namespace StickyPro
                         {
                             string label = d.Name;
                             try { if (d.IsReady) label = (string.IsNullOrEmpty(d.VolumeLabel) ? (d.DriveType == DriveType.Fixed ? "Local Disk" : d.DriveType == DriveType.Network ? "Network" : d.DriveType == DriveType.Removable ? "USB drive" : d.DriveType.ToString()) : d.VolumeLabel) + " (" + d.Name.TrimEnd('\\') + ")"; } catch { }
-                            long free = 0; try { if (d.IsReady) free = d.AvailableFreeSpace; } catch { }
-                            list.Add(new Entry { Path = d.Name, Name = label, Dir = true, Type = "Drive", Size = free });
+                            long free = 0, total = 0; try { if (d.IsReady) { free = d.AvailableFreeSpace; total = d.TotalSize; } } catch { }
+                            list.Add(new Entry { Path = d.Name, Name = label, Dir = true, Type = total > 0 ? "Drive, " + Fmt.Bytes(total) : "Drive", Size = free, Extra = total > 0 ? (100 - free * 100 / total) + "% used" : "" });
                         }
                         foreach (var sf in new[] { Environment.SpecialFolder.Desktop, Environment.SpecialFolder.MyDocuments, Environment.SpecialFolder.UserProfile })
                         { string p = Environment.GetFolderPath(sf); if (Directory.Exists(p)) list.Add(new Entry { Path = p, Name = Path.GetFileName(p), Dir = true, Type = "Folder" }); }
@@ -312,7 +314,7 @@ namespace StickyPro
             int icon = r.Icon;
             if (icon < 0)
             {
-                if (r.Dir) icon = r.Icon = ShellOps.IconIndex(r.Path, r.Type != "Drive");
+                if (r.Dir) icon = r.Icon = ShellOps.IconIndex(r.Path, !r.Type.StartsWith("Drive"));
                 else if (!ShellOps.NeedsPerFile(r.Path)) icon = r.Icon = ShellOps.IconIndex(r.Path, false);
                 else
                 {
@@ -323,8 +325,8 @@ namespace StickyPro
                 }
             }
             var it = new ListViewItem(r.Name) { ImageIndex = icon };
-            it.SubItems.Add(r.Type == "Drive" ? (r.Size > 0 ? Fmt.Bytes(r.Size) + " free" : "") : r.Dir ? "" : Fmt.Bytes(r.Size));
-            it.SubItems.Add(r.Modified == DateTime.MinValue ? "" : r.Modified.ToString("yyyy-MM-dd HH:mm"));
+            it.SubItems.Add(r.Type.StartsWith("Drive") ? (r.Size > 0 ? Fmt.Bytes(r.Size) + " free" : "") : r.Dir ? "" : Fmt.Bytes(r.Size));
+            it.SubItems.Add(r.Extra ?? (r.Modified == DateTime.MinValue ? "" : r.Modified.ToString("yyyy-MM-dd HH:mm")));
             it.SubItems.Add(r.Type);
             e.Item = it;
         }
@@ -471,6 +473,7 @@ namespace StickyPro
             m.Items.Add("New folder\tF7", null, delegate { NewFolder(); });
             m.Items.Add("Delete (Recycle Bin)\tDel", null, delegate { Delete(false); });
             m.Items.Add(new ToolStripSeparator());
+            m.Items.Add("Add to favorites", null, delegate { foreach (var p in SelectedPaths().Where(Directory.Exists).DefaultIfEmpty(Current)) if (p.Length > 0) MetaStore.SetFav("folders", p.TrimEnd('\\'), true); });
             m.Items.Add("Add to quick launch", null, delegate { foreach (var p in SelectedPaths().DefaultIfEmpty(Current)) if (p.Length > 0) QuickDock.AddItem(Path.GetFileName(p.TrimEnd('\\')), p, ""); });
             m.Items.Add("What is using this file?", null, delegate { var f = FirstSel(); if (f != null) PowerTools.WhoUses(f.Path, FindForm()); });
             m.Items.Add("Folder size", null, delegate
@@ -496,6 +499,7 @@ namespace StickyPro
         readonly List<FolderPane> panes = new List<FolderPane>();
         readonly TableLayoutPanel grid;
         readonly ComboBox layout;
+        readonly PlacesBar places;
         FolderPane active;
         static readonly string[] Layouts = { "1", "2", "3", "4", "2x2" };
         bool started;
@@ -505,6 +509,9 @@ namespace StickyPro
             Dock = DockStyle.Fill; Visible = false;
             grid = new TableLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0) };
             Controls.Add(grid);
+            places = new PlacesBar { Dock = DockStyle.Left, Width = Ui.S(230) };
+            places.Open += path => { if (!started) { started = true; Arrange(); } var p = active ?? panes.FirstOrDefault(); if (p != null) { p.Navigate(path); p.FocusList(); } };
+            Controls.Add(places);
             var bar = MainForm.Bar();
             bar.Controls.Add(MainForm.Heading("Explorer"));
             layout = MainForm.Combo(Ui.S(150), "1 pane", "2 panes", "3 panes", "4 panes", "2 x 2 quarters");
@@ -512,6 +519,7 @@ namespace StickyPro
             int li = Array.IndexOf(Layouts, Store.Settings.ExplorerLayout); layout.SelectedIndex = li < 0 ? 1 : li;
             layout.SelectedIndexChanged += delegate { Store.Settings.ExplorerLayout = Layouts[layout.SelectedIndex]; Store.MarkSettings(); Arrange(); };
             bar.Controls.Add(layout);
+            bar.Controls.Add(Ui.Btn("Places", delegate { PlacesOff = !PlacesOff; PerformLayout(); }));
             bar.Controls.Add(Ui.Btn("Copy to next  F5", delegate { if (active != null) CopyNext(active, false); }, true));
             bar.Controls.Add(Ui.Btn("Move to next  F6", delegate { if (active != null) CopyNext(active, true); }));
             bar.Controls.Add(Ui.Btn("Same folder in all", delegate { if (active != null) foreach (var p in panes) if (p != active) p.Navigate(active.Current); }));
@@ -531,9 +539,28 @@ namespace StickyPro
             Ui.Theme(this);
         }
 
+        static bool PlacesOff
+        {
+            get { int v; return Store.Settings.PaneSizes != null && Store.Settings.PaneSizes.TryGetValue("explorer.places.off", out v) && v == 1; }
+            set { if (Store.Settings.PaneSizes == null) Store.Settings.PaneSizes = new Dictionary<string, int>(); Store.Settings.PaneSizes["explorer.places.off"] = value ? 1 : 0; Store.MarkSettings(); }
+        }
+        // The places column shows when there is room (and the user has not hidden it); narrow windows give the panes all the width.
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            if (places != null)
+            {
+                bool show = !PlacesOff && ClientSize.Width >= Ui.S(900);
+                if (places.Visible != show) places.Visible = show;
+                int w = ClientSize.Width >= Ui.S(1600) ? Ui.S(250) : Ui.S(210);
+                if (places.Width != w) places.Width = w;
+            }
+            base.OnLayout(e);
+        }
+
         protected override void OnVisibleChanged(EventArgs e)
         {
             base.OnVisibleChanged(e);
+            if (Visible && places != null) places.Reload();
             if (Visible && !started) { started = true; Arrange(); }
             ApplyShown();
         }
@@ -603,6 +630,129 @@ namespace StickyPro
 
         public void OpenPath(string path) { if (!started) { started = true; Arrange(); } if (active != null) active.Navigate(path); }
         protected override void Dispose(bool disposing) { if (disposing && panes.Count > 0) SavePaths(); base.Dispose(disposing); }
+    }
+
+    // Left side of the Explorer page: favourite folders, drives with usage bars and recently visited folders.
+    // Click opens the place in the active pane; right-click manages it (favourite, colour, name, note...).
+    class PlacesBar : Control
+    {
+        public event Action<string> Open;
+        class Row { public string Id, Name, Glyph, Free; public double Used = -1; public Color Color; public bool Head, Fav; public Rectangle R; }
+        readonly List<Row> rows = new List<Row>();
+        Row hot; int scroll, contentH;
+        bool dirty = true;
+        readonly ContextMenuStrip menu = Ui.Menu();
+        public PlacesBar()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Store.MetaChanged += OnMeta;
+            Ui.ThemeMenu(menu);
+        }
+        void OnMeta() { if (IsDisposed) return; if (InvokeRequired) { BeginInvoke((Action)OnMeta); return; } dirty = true; if (Visible) Invalidate(); }
+        protected override void Dispose(bool disposing) { if (disposing) { Store.MetaChanged -= OnMeta; menu.Dispose(); } base.Dispose(disposing); }
+        public void Reload() { dirty = true; Invalidate(); }
+
+        void Build()
+        {
+            dirty = false; rows.Clear();
+            Action<string> head = s => rows.Add(new Row { Head = true, Name = s });
+            head("Favorites");
+            var favs = MetaStore.Favorites("folders");
+            foreach (var m in favs) rows.Add(new Row { Id = m.Id, Name = MetaStore.DisplayName(m), Glyph = "", Color = MetaStore.ColorOf(m.Color), Fav = true });
+            if (favs.Count == 0)
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                foreach (var p in new[] { Environment.GetFolderPath(Environment.SpecialFolder.Desktop), Path.Combine(home, "Downloads"), Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) })
+                    if (Directory.Exists(p)) rows.Add(new Row { Id = p, Name = Path.GetFileName(p), Glyph = "" });
+            }
+            head("Drives");
+            try
+            {
+                foreach (var d in DriveInfo.GetDrives())
+                {
+                    var r = new Row { Id = d.Name, Name = d.Name.TrimEnd('\\'), Glyph = d.DriveType == DriveType.Network ? "" : d.DriveType == DriveType.Removable ? "" : "" };
+                    try { if (d.IsReady) { r.Name = (string.IsNullOrEmpty(d.VolumeLabel) ? "Local Disk" : d.VolumeLabel) + " (" + d.Name.TrimEnd('\\') + ")"; if (d.TotalSize > 0) { r.Used = 1.0 - (double)d.AvailableFreeSpace / d.TotalSize; r.Free = Fmt.Bytes(d.AvailableFreeSpace) + " free"; } } } catch { }
+                    rows.Add(r);
+                }
+            }
+            catch { }
+            var recent = MetaStore.Recent("folders", 12).Where(m => !m.Fav).ToList();
+            if (recent.Count > 0)
+            {
+                head("Recent");
+                foreach (var m in recent) rows.Add(new Row { Id = m.Id, Name = MetaStore.DisplayName(m), Glyph = "", Color = MetaStore.ColorOf(m.Color) });
+            }
+        }
+
+        void Arrange()
+        {
+            int y = Ui.S(6) - scroll;
+            foreach (var r in rows)
+            {
+                int h = r.Head ? Ui.S(28) : r.Used >= 0 ? Ui.S(54) : Ui.S(30);
+                r.R = new Rectangle(Ui.S(6), y, Width - Ui.S(12), h);
+                y += h;
+            }
+            contentH = y + scroll + Ui.S(8);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            if (dirty) Build();
+            Arrange();
+            var g = e.Graphics; g.Clear(Ui.Card); g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var p = new Pen(Ui.Line)) g.DrawLine(p, Width - 1, 0, Width - 1, Height);
+            var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
+            foreach (var r in rows)
+            {
+                if (r.R.Bottom < 0 || r.R.Top > Height) continue;
+                if (r.Head) { TextRenderer.DrawText(g, r.Name.ToUpperInvariant(), Ui.Small, new Rectangle(r.R.X + Ui.S(6), r.R.Y + Ui.S(8), r.R.Width, Ui.S(18)), Ui.Muted, flags); continue; }
+                if (r == hot) using (var path = Ui.Round(r.R, Ui.S(6))) using (var b = new SolidBrush(Ui.HoverBg)) g.FillPath(b, path);
+                var line = new Rectangle(r.R.X, r.R.Y, r.R.Width, Ui.S(30));
+                Color gc = r.Fav ? Color.FromArgb(245, 176, 40) : !r.Color.IsEmpty ? r.Color : Ui.Accent;
+                TextRenderer.DrawText(g, r.Glyph, Ui.Icon(10.5f), new Rectangle(line.X + Ui.S(4), line.Y, Ui.S(24), line.Height), gc, flags | TextFormatFlags.HorizontalCenter);
+                TextRenderer.DrawText(g, r.Name, Ui.Base, new Rectangle(line.X + Ui.S(32), line.Y, line.Width - Ui.S(36), line.Height), Ui.Text, flags);
+                if (r.Used >= 0)
+                {
+                    var bar = new Rectangle(line.X + Ui.S(34), r.R.Y + Ui.S(30), line.Width - Ui.S(44), Ui.S(5));
+                    using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bar);
+                    Color uc = r.Used > 0.9 ? Ui.Danger : r.Used > 0.8 ? Ui.Warning : Ui.Accent;
+                    using (var b = new SolidBrush(uc)) g.FillRectangle(b, bar.X, bar.Y, (int)(bar.Width * Math.Min(1, r.Used)), bar.Height);
+                    if (r.Free != null) TextRenderer.DrawText(g, r.Free, Ui.Small, new Rectangle(bar.X, r.R.Y + Ui.S(34), bar.Width, Ui.S(16)), r.Used > 0.9 ? Ui.Danger : Ui.Muted, flags);
+                }
+            }
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            int max = Math.Max(0, contentH - Height);
+            int s = Math.Max(0, Math.Min(max, scroll - e.Delta / 3));
+            if (s != scroll) { scroll = s; Invalidate(); }
+        }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            var r = rows.FirstOrDefault(x => !x.Head && x.R.Contains(e.Location));
+            if (r != hot) { hot = r; Invalidate(); Cursor = r != null ? Cursors.Hand : Cursors.Default; }
+        }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); if (hot != null) { hot = null; Invalidate(); } }
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            var r = rows.FirstOrDefault(x => !x.Head && x.R.Contains(e.Location));
+            if (r == null) return;
+            if (e.Button == MouseButtons.Left) { var o = Open; if (o != null) o(r.Id); return; }
+            if (e.Button != MouseButtons.Right) return;
+            string id = r.Id;
+            menu.Items.Clear();
+            menu.Items.Add("Open", null, delegate { var o = Open; if (o != null) o(id); });
+            Term.AddMenu(menu.Items, () => id);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Copy path", null, delegate { App.I.CopyText(id); });
+            if (id.Length > 3) menu.Items.Add(MetaStore.Menu("folders", id.TrimEnd('\\'), Path.GetFileName(id.TrimEnd('\\')), null));
+            menu.Show(this, e.Location);
+        }
     }
 
     // Narrow, customizable quick-launch strip on the right side of the main window.

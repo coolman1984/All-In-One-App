@@ -102,6 +102,9 @@ namespace StickyPro
         int FillTarget { get { return FillIndex >= 0 && FillIndex < Columns.Count ? FillIndex : Columns.Count - 1; } }
         // Optional: share the free width between several columns (weight per column, 0 = fixed). Overrides FillIndex.
         public int[] Weights;
+        // Optional: columns to hide (in this order) when the list is too narrow; MinFill = smallest width of the fill column.
+        public int[] DropOrder; public int MinFill;
+        int[] dropDesign;
         int[] designWidths, applied;   // applied = widths this code set (their change notices arrive later, after filling)
         void FillLastColumn()
         {
@@ -132,6 +135,19 @@ namespace StickyPro
                 int ti = FillTarget;
                 var col = Columns[ti];
                 if (!ReferenceEquals(col, minFor)) { minFor = col; minWidth = col.Width; }
+                if (DropOrder != null)
+                {
+                    // Narrow list: hide the least useful columns (in DropOrder) before squeezing the fill column below MinFill.
+                    if (dropDesign == null || dropDesign.Length != Columns.Count) { dropDesign = new int[Columns.Count]; for (int i = 0; i < Columns.Count; i++) dropDesign[i] = Columns[i].Width; applied = new int[Columns.Count]; }
+                    int avail = ClientSize.Width - 1, minFill = MinFill > 0 ? MinFill : Ui.S(140);
+                    var widths = (int[])dropDesign.Clone();
+                    int fixedSum = 0;
+                    for (int i = 0; i < widths.Length; i++) if (i != ti) fixedSum += widths[i];
+                    foreach (int d in DropOrder) { if (fixedSum + minFill <= avail) break; if (d != ti && d < widths.Length) { fixedSum -= widths[d]; widths[d] = 0; } }
+                    widths[ti] = Math.Max(minFill, avail - fixedSum);
+                    for (int i = 0; i < widths.Length; i++) { applied[i] = widths[i]; if (Columns[i].Width != widths[i]) Columns[i].Width = widths[i]; }
+                    return;
+                }
                 int used = 0;
                 for (int i = 0; i < Columns.Count; i++) if (i != ti) used += Columns[i].Width;
                 int w = Math.Max(minWidth, ClientSize.Width - used - 1);
@@ -160,7 +176,16 @@ namespace StickyPro
                 }
                 FillLastColumn();
             }
-            else if (e.ColumnIndex != FillTarget) FillLastColumn();
+            else
+            {
+                if (DropOrder != null && dropDesign != null && e.ColumnIndex < dropDesign.Length && e.ColumnIndex != FillTarget)
+                {
+                    int w = Columns[e.ColumnIndex].Width;
+                    if (applied != null && applied[e.ColumnIndex] == w) return;   // our own change
+                    if (w > 0) dropDesign[e.ColumnIndex] = w;                     // the user dragged it
+                }
+                if (e.ColumnIndex != FillTarget) FillLastColumn();
+            }
         }
         protected override void OnHandleDestroyed(EventArgs e) { header.ReleaseHandle(); base.OnHandleDestroyed(e); }
 

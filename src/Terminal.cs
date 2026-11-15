@@ -107,7 +107,8 @@ namespace StickyPro
         {
             string dir = Folder(p.Folder);
             string shellPart = Quote(ShellExe(p.Shell)) + " " + ShellArgs(p.Shell, p.Command);
-            return "-d " + DirArg(dir) + " --title " + Quote(Title(dir).Replace("\"", "").TrimEnd('\\')) + " " + shellPart.Replace(";", "\\;");
+            string title = string.IsNullOrWhiteSpace(p.Name) ? Title(dir) : p.Name.Trim();
+            return "-d " + DirArg(dir) + " --title " + Quote(title.Replace("\"", "").TrimEnd('\\')) + " " + shellPart.Replace(";", "\\;");
         }
 
         static Process Start(string exe, string args, string dir)
@@ -124,6 +125,7 @@ namespace StickyPro
             list.Insert(0, folder);
             while (list.Count > 20) list.RemoveAt(list.Count - 1);
             Store.MarkSettings();
+            MetaStore.Touch("folders", folder);
         }
 
         // PWSH (or the chosen shell) in one folder, optionally running a command such as "claude".
@@ -326,6 +328,7 @@ namespace StickyPro
         readonly TermPreview preview;
         readonly Button launch;
         readonly Label hint;
+        readonly ItemShelf shelf;
         bool loading;
 
         TermWorkspace Ws { get { return Term.Current; } }
@@ -366,7 +369,7 @@ namespace StickyPro
             preview = new TermPreview { Dock = DockStyle.Top, Height = Ui.S(188) };
             preview.PaneClicked += i => { if (i < rowsHost.Controls.Count) { var row = rowsHost.Controls[i] as PaneRow; if (row != null) row.FocusFolder(); } };
 
-            rowsHost = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, Ui.S(6), 0, 0) };
+            rowsHost = new FlowLayoutPanel { Dock = DockStyle.Top, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, Ui.S(6), 0, 0) };
             rowsHost.Resize += delegate { FitRows(); };
 
             // Bottom actions
@@ -381,9 +384,31 @@ namespace StickyPro
             runAll.Items.Add("(nothing - just the shell)");
             runAll.Items.AddRange(Term.Commands);
             actions.Controls.Add(runAll);
+            ComboFix.NoSelect(runAll);
             actions.Controls.Add(Ui.Btn("Apply", delegate { ApplyRunAll(); }));
             hint = new Label { Dock = DockStyle.Bottom, AutoSize = false, Height = Ui.S(22), ForeColor = Ui.Muted, Font = Ui.Small, TextAlign = ContentAlignment.MiddleLeft };
 
+            // Project folders (favourites + recent) fill the space under the pane rows.
+            shelf = new ItemShelf("folders") { Dock = DockStyle.Fill, Title = "Project folders", ExtraRecent = () => Store.Settings.TermRecent, Padding = new Padding(0, Ui.S(10), 0, 0) };
+            shelf.Open += id => UseFolder(id);
+            shelf.AddClicked += delegate
+            {
+                using (var d = new FolderBrowserDialog { Description = "Add a project folder to favorites" })
+                    if (d.ShowDialog(FindForm()) == DialogResult.OK) MetaStore.SetFav("folders", d.SelectedPath, true);
+            };
+            shelf.MenuItems = (id, m) =>
+            {
+                int n = Term.Count(Ws.Layout);
+                var into = new ToolStripMenuItem("Use in pane");
+                for (int i = 0; i < n; i++) { int k = i; into.DropDownItems.Add("Pane " + (k + 1), null, delegate { Commit(); Term.PaneAt(Ws, k).Folder = id; Store.MarkSettings(); LoadWs(); }); }
+                m.Items.Add(into);
+                m.Items.Add("Use in every pane", null, delegate { Commit(); for (int i = 0; i < n; i++) Term.PaneAt(Ws, i).Folder = id; Store.MarkSettings(); LoadWs(); });
+                m.Items.Add(new ToolStripSeparator());
+                Term.AddMenu(m.Items, () => id);
+                m.Items.Add("Open in File Explorer", null, delegate { try { System.Diagnostics.Process.Start("explorer.exe", "\"" + id + "\""); } catch { } });
+            };
+
+            Controls.Add(shelf);
             Controls.Add(rowsHost);
             Controls.Add(preview);
             Controls.Add(options);
@@ -407,6 +432,7 @@ namespace StickyPro
                 if (wide) { int w = Math.Max(Ui.S(420), ClientSize.Width * 42 / 100); if (preview.Width != w) preview.Width = w; }
                 else { int h = Math.Max(Ui.S(188), Math.Min(Ui.S(320), ClientSize.Height / 4)); if (preview.Height != h) preview.Height = h; }
             }
+            if (rowsHost != null) FitRows();
             base.OnLayout(e);
         }
 
@@ -428,7 +454,7 @@ namespace StickyPro
             var n = Ui.Ask("New workspace", "Name (for example the project)", "Workspace " + (Store.Settings.TermWorkspaces.Count + 1), FindForm());
             if (string.IsNullOrWhiteSpace(n)) return;
             var src = Ws;
-            var ws = new TermWorkspace { Name = n.Trim(), Layout = src.Layout, Mode = src.Mode, Panes = src.Panes.Select(p => new TermPane { Folder = p.Folder, Shell = p.Shell, Command = p.Command }).ToList() };
+            var ws = new TermWorkspace { Name = n.Trim(), Layout = src.Layout, Mode = src.Mode, Panes = src.Panes.Select(p => new TermPane { Folder = p.Folder, Shell = p.Shell, Command = p.Command, Name = p.Name, Color = p.Color }).ToList() };
             Store.Settings.TermWorkspaces.Add(ws);
             Store.Settings.TermLast = Store.Settings.TermWorkspaces.Count - 1;
             Store.MarkSettings();
@@ -477,6 +503,11 @@ namespace StickyPro
         {
             int w = Math.Max(Ui.S(300), rowsHost.ClientSize.Width - Ui.S(4));
             foreach (Control c in rowsHost.Controls) if (c.Width != w) c.Width = w;
+            // Pane rows take just their height (capped so the folder shelf below keeps room); scroll beyond that.
+            int content = rowsHost.Padding.Vertical + rowsHost.Controls.Cast<Control>().Sum(c => c.Height + c.Margin.Vertical);
+            int cap = Math.Max(Ui.S(110), (ClientSize.Height - Ui.S(260)) * 55 / 100);
+            int h = Math.Min(content, cap);
+            if (rowsHost.Height != h) rowsHost.Height = h;
         }
 
         void Commit() { foreach (PaneRow r in rowsHost.Controls.OfType<PaneRow>()) r.Commit(); Store.MarkSettings(); }
@@ -533,11 +564,30 @@ namespace StickyPro
             t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(118)));
             t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(170)));
             t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            var num = new Label { Text = (index + 1).ToString(), Font = Ui.Bold, ForeColor = Ui.Accent, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill };
+            var paneColor = MetaStore.ColorOf(pane.Color);
+            var num = new Label { Text = (index + 1).ToString(), Font = Ui.Bold, ForeColor = paneColor.IsEmpty ? Ui.Accent : paneColor, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill, Cursor = Cursors.Hand };
+            new ToolTip().SetToolTip(num, string.IsNullOrEmpty(pane.Name) ? "Click to name this pane or give it a color" : pane.Name + " (click to change)");
+            num.Click += delegate
+            {
+                var m = new ContextMenuStrip(); Ui.ThemeMenu(m);
+                m.Items.Add("Name this pane...", null, delegate
+                {
+                    var v = Ui.Ask("Pane name", "Name shown as the terminal tab title (empty = folder name):", pane.Name ?? "", FindForm());
+                    if (v != null) { pane.Name = v.Trim(); Raise(); }
+                });
+                foreach (var c in MetaStore.Colors)
+                {
+                    string cc = c;
+                    m.Items.Add(new ToolStripMenuItem(c, Ui.Swatch(MetaStore.ColorOf(c), Ui.S(14)), delegate { pane.Color = cc; num.ForeColor = MetaStore.ColorOf(cc); Raise(); }) { Checked = pane.Color == c });
+                }
+                m.Items.Add("No color", null, delegate { pane.Color = ""; num.ForeColor = Ui.Accent; Raise(); });
+                m.Show(num, new Point(0, num.Height));
+            };
             folder = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Dock = DockStyle.Fill, Text = pane.Folder, Margin = new Padding(0, Ui.S(2), Ui.S(6), 0) };
             foreach (var r in Store.Settings.TermRecent) folder.Items.Add(r);
             folder.Text = pane.Folder;
             folder.TextChanged += delegate { pane.Folder = folder.Text.Trim(); Raise(); };
+            ComboFix.NoSelect(folder);
             var browse = Ui.Btn("Folder...", delegate
             {
                 using (var d = new FolderBrowserDialog { SelectedPath = Term.Folder(folder.Text) })
@@ -552,6 +602,7 @@ namespace StickyPro
             command.Items.AddRange(Term.Commands);
             command.Text = pane.Command;
             command.TextChanged += delegate { pane.Command = command.Text.Trim(); Raise(); };
+            ComboFix.NoSelect(command);
             EventHandler cue = delegate { try { Native.SendMessage(command.Handle, 0x1703 /* CB_SETCUEBANNER */, IntPtr.Zero, "start command (optional)"); } catch { } };
             if (command.IsHandleCreated) cue(command, EventArgs.Empty); else command.HandleCreated += cue;
             var open = Ui.Btn("Open", delegate { Commit(); Term.Open(pane.Folder, pane.Command, pane.Shell); });
