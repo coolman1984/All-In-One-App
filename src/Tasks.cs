@@ -477,8 +477,9 @@ namespace StickyPro
             string first = Ui.OneLine(t.Notes, 70);
             int done = t.Steps.Count(s => s.Done);
             ci.Sub = (first.Length > 0 ? first : t.List) + (t.Steps.Count > 0 ? "  ·  " + done + "/" + t.Steps.Count + " steps" : "");
-            ci.Meta = TaskParse.DueText(t) + (t.Repeat != "none" ? "  ↻" : "") + (t.RemindAt > 0 ? "  ⏰" : "");
-            ci.Strip = t.Priority == 2 ? Color.FromArgb(239, 68, 68) : t.Priority == 0 ? Color.FromArgb(148, 163, 184) : Ui.Accent;
+            ci.Meta = TaskParse.DueText(t) + (t.Repeat != "none" ? "  ↻ " + t.Repeat : "") + (t.RemindAt > 0 ? "  ·  reminder" : "");
+            // Colour carries meaning only: high priority gets a red edge, everything else none.
+            if (t.Priority == 2) ci.Strip = Color.FromArgb(239, 68, 68);
             if (t.Done) ci.Fore = Ui.Muted;
             if (TaskParse.Overdue(t)) ci.SubFore = Ui.Danger;
             return ci;

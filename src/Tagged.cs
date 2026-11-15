@@ -200,8 +200,9 @@ namespace StickyPro
                     bool exists = mt == null || mt.Exists; // unknown yet: assume present until the worker answers
                     string name = Path.GetFileName(t.Path.TrimEnd('\\'));
                     if (string.IsNullOrEmpty(name)) name = t.Path;
-                    var it = new ListViewItem((t.IsFolder ? "\U0001F4C1 " : "") + name) { Tag = t, Checked = checkedIds.Contains(t.Id), Selected = selectedIds.Contains(t.Id) };
-                    if (!t.IsFolder && mt != null && mt.Exists)
+                    var it = new ListViewItem(name) { Tag = t, Checked = checkedIds.Contains(t.Id), Selected = selectedIds.Contains(t.Id) };
+                    if (t.IsFolder) it.ImageIndex = ProcMeta.FolderIcon();
+                    else if (mt != null && mt.Exists)
                     {
                         if (mt.Icon < 0) mt.Icon = ProcMeta.IconFor(t.Path);
                         it.ImageIndex = mt.Icon;

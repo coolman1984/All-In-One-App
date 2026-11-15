@@ -104,9 +104,16 @@ namespace StickyPro
 
     class DriveSnapshot
     {
-        public string Value = "Unavailable", Detail = "";
+        public string Value = "Unavailable", Detail = "", Letter = "", Label = "";
         public double Used = -1;
+        public long Free, Total;
         static DateTime stamp = DateTime.MinValue;
+        // Every fixed drive that answered, in letter order.
+        public static List<DriveSnapshot> All()
+        {
+            Read("C");
+            return cache.Values.Where(s => s.Used >= 0).OrderBy(s => s.Letter).ToList();
+        }
         static volatile Dictionary<string, DriveSnapshot> cache;
         static int refreshing;
         // Never blocks the UI: drive queries (IsReady can hang on removable or network drives) run on a worker;
@@ -126,10 +133,23 @@ namespace StickyPro
         {
             stamp = DateTime.Now;
             var map = new Dictionary<string, DriveSnapshot>();
-            foreach (string drive in new[] { "C", "D" })
+            var letters = new List<string> { "C", "D" };
+            try { foreach (var di in DriveInfo.GetDrives()) { string l = di.Name.Substring(0, 1).ToUpperInvariant(); if (di.DriveType == DriveType.Fixed && !letters.Contains(l)) letters.Add(l); } } catch { }
+            foreach (string drive in letters)
             {
-                var snapshot = new DriveSnapshot();
-                try { var info = new DriveInfo(drive + @":\"); if (info.DriveType == DriveType.Fixed && info.IsReady) { long free = info.AvailableFreeSpace, total = info.TotalSize; snapshot.Value = Fmt.Bytes(free) + " free"; snapshot.Detail = "of " + Fmt.Bytes(total); snapshot.Used = total > 0 ? 1 - free / (double)total : 0; } } catch { }
+                var snapshot = new DriveSnapshot { Letter = drive };
+                try
+                {
+                    var info = new DriveInfo(drive + @":\");
+                    if (info.DriveType == DriveType.Fixed && info.IsReady)
+                    {
+                        long free = info.AvailableFreeSpace, total = info.TotalSize;
+                        snapshot.Free = free; snapshot.Total = total;
+                        snapshot.Value = Fmt.Bytes(free) + " free"; snapshot.Detail = "of " + Fmt.Bytes(total); snapshot.Used = total > 0 ? 1 - free / (double)total : 0;
+                        try { snapshot.Label = info.VolumeLabel ?? ""; } catch { }
+                    }
+                }
+                catch { }
                 map[drive] = snapshot;
             }
             return map;
@@ -547,7 +567,7 @@ namespace StickyPro
                 new Card { Title = "CPU", Page = "system:procs", Color = Color.FromArgb(51, 102, 240) },
                 new Card { Title = "Memory", Page = "system:procs", Color = Color.FromArgb(139, 92, 246) },
                 new Card { Title = "Disk C:", Page = "system:drives", Color = Color.FromArgb(16, 185, 129) },
-                new Card { Title = "Disk D:", Page = "system:drives", Color = Color.FromArgb(245, 158, 11) }
+                new Card { Title = "Disk D:", Page = "system:drives", Color = Color.FromArgb(16, 185, 129) }
             };
             foreach (var c in cards) { c.Value = "..."; c.Detail = ""; }
             Height = Ui.S(128);
@@ -641,7 +661,7 @@ namespace StickyPro
                     using (var fill = new GraphicsPath())
                     {
                         fill.AddLines(pts); fill.AddLine(pts[pts.Length - 1], new PointF(pts[pts.Length - 1].X, area.Bottom)); fill.AddLine(new PointF(pts[pts.Length - 1].X, area.Bottom), new PointF(pts[0].X, area.Bottom)); fill.CloseFigure();
-                        using (var b = new LinearGradientBrush(new Rectangle(area.X, area.Y - 1, area.Width, area.Height + 2), Color.FromArgb(90, c.Color), Color.FromArgb(8, c.Color), 90f)) g.FillPath(b, fill);
+                        using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 50 : 34, c.Color))) g.FillPath(b, fill);   // flat fill, as in Task Manager
                     }
                     using (var pen = new Pen(c.Color, Ui.S(2)) { LineJoin = LineJoin.Round }) g.DrawLines(pen, pts);
                     var last = pts[pts.Length - 1];

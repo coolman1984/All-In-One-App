@@ -271,6 +271,25 @@ namespace StickyPro
             catch { return ""; }
         }
 
+        // The Windows folder icon (added to Icons once), used instead of a folder emoji in lists.
+        static int folderIcon = -1;
+        [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
+        public static int FolderIcon()
+        {
+            if (folderIcon >= 0) return folderIcon;
+            folderIcon = 0;
+            try
+            {
+                var info = new ShellOps.SHFILEINFO();
+                ShellOps.SHGetFileInfo("folder", 0x10, ref info, (uint)Marshal.SizeOf(info), 0x100 | 0x1 | 0x10 /* ICON | SMALLICON | USEFILEATTRIBUTES */);
+                if (info.hIcon != IntPtr.Zero)
+                    try { using (var ic = Icon.FromHandle(info.hIcon)) using (var bmp = ic.ToBitmap()) using (var scaled = new Bitmap(bmp, Icons.ImageSize)) { Icons.Images.Add(scaled); folderIcon = Icons.Images.Count - 1; } }
+                    finally { DestroyIcon(info.hIcon); }
+            }
+            catch { folderIcon = 0; }
+            return folderIcon;
+        }
+
         public static int IconFor(string path)
         {
             if (string.IsNullOrEmpty(path)) return 0;

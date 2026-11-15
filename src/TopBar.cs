@@ -15,6 +15,7 @@ namespace StickyPro
         {
             public string Key, Glyph, Label, Value, Tip, Page;
             public Color Tint;
+            public bool Alert;               // colour (Tint) only when something needs attention
             public double Bar = -1;          // 0..1 usage bar at the pill bottom
             public double[] Spark;
             public Rectangle Bounds;
@@ -51,9 +52,6 @@ namespace StickyPro
             Add("d", "", "D:", "#06B6D4", "system:drives");
             Add("apps", "", "Top app", "#F97316", "system:procs");
             Add("tasks", "", "Due today", "#64748B", "tasks");
-            Add("clips", "", "Clips", "#22C55E", "clips");
-            Add("prompts", "", "Prompts", "#6366F1", "prompts");
-            Add("files", "", "Files", "#0EA5E9", "activity");
             Add("urgent", "", "Urgent", "#64748B", "tagged");
             Add("rec", "", "Recorder", "#64748B", "snip");
             foreach (var k in new[] { "theme", "awake", "wifi" }) toggles.Add(new Toggle { Key = k });
@@ -88,29 +86,29 @@ namespace StickyPro
         {
             if (facts == null || (DateTime.Now - factsAt).TotalSeconds >= 60) { facts = DashboardFacts.Read(Store.Now()); factsAt = DateTime.Now; }
             var cpu = C("cpu"); cpu.Value = ProcessSampler.CpuTotal.ToString("0") + "%"; cpu.Spark = ProcessSampler.CpuHistory.ToArray();
-            cpu.Tint = ProcessSampler.CpuTotal > 85 ? Red : ColorTranslator.FromHtml("#3B82F6");
+            cpu.Alert = ProcessSampler.CpuTotal > 85; cpu.Tint = Red;
             var ram = C("ram"); ram.Value = ProcessSampler.MemLoad + "%"; ram.Bar = ProcessSampler.MemLoad / 100.0;
-            ram.Tint = ProcessSampler.MemLoad > 85 ? Red : ColorTranslator.FromHtml("#8B5CF6");
+            ram.Alert = ProcessSampler.MemLoad > 85; ram.Tint = ProcessSampler.MemLoad > 92 ? Red : Amber;
             ram.Tip = "RAM " + ProcessSampler.MemLoad + "% used (" + Fmt.Bytes((long)(ProcessSampler.MemTotal - ProcessSampler.MemAvail)) + " of " + Fmt.Bytes((long)ProcessSampler.MemTotal) + ")";
             foreach (var key in new[] { "c", "d" })
             {
                 var d = DriveSnapshot.Read(key.ToUpperInvariant()); var chip = C(key);
                 chip.Visible = d.Used >= 0;
                 chip.Value = d.Value.Replace(" free", "") + " free"; chip.Bar = d.Used; chip.Tip = key.ToUpperInvariant() + ": " + d.Value + " " + d.Detail;
-                chip.Tint = d.Used > 0.95 ? Red : d.Used > 0.9 ? Amber : ColorTranslator.FromHtml(key == "c" ? "#14B8A6" : "#06B6D4");
+                chip.Alert = d.Used > 0.9; chip.Tint = d.Used > 0.95 ? Red : Amber;
             }
             var top = ProcessSampler.Last.GroupBy(p => p.Display).Select(g => new { Name = g.Key, Memory = g.Sum(p => p.Mem) }).OrderByDescending(g => g.Memory).Take(3).ToList();
             var apps = C("apps");
             apps.Value = top.Count > 0 ? Ui.OneLine(top[0].Name, 14) + " " + Fmt.Bytes(top[0].Memory) : "-";
             apps.Tip = "Top memory apps:\n" + string.Join("\n", top.Select(p => p.Name + "  " + Fmt.Bytes(p.Memory)));
-            var tasks = C("tasks"); tasks.Value = facts.RemindersToday.ToString(); tasks.Tint = facts.RemindersToday > 0 ? Red : Slate;
+            var tasks = C("tasks"); tasks.Value = facts.RemindersToday.ToString(); tasks.Alert = facts.RemindersToday > 0; tasks.Tint = Red;
             tasks.Tip = "Due today / overdue tasks and reminders: " + facts.RemindersToday;
-            C("clips").Value = facts.ClipsToday + " today";
-            var pr = C("prompts"); pr.Value = facts.PromptCount.ToString(); pr.Tip = "Prompts: " + facts.PromptCount + "\nMost used: " + facts.MostUsed;
-            C("files").Value = facts.FilesToday + " today";
-            var urgent = C("urgent"); urgent.Value = facts.Urgent.ToString(); urgent.Tint = facts.Urgent > 0 ? Red : Slate;
-            var rec = C("rec"); rec.Value = facts.Recording; rec.Tint = facts.Recording == "Recording" ? Red : Slate;
-            foreach (var c in chips) { if (c.Key != "c" && c.Key != "d") c.Visible = true; if (c.Tip == null || c.Key == "clips" || c.Key == "files" || c.Key == "urgent" || c.Key == "rec" || c.Key == "cpu") c.Tip = c.Label + ": " + c.Value; }
+            var urgent = C("urgent"); urgent.Value = facts.Urgent.ToString(); urgent.Alert = true; urgent.Tint = Red;
+            var rec = C("rec"); rec.Value = facts.Recording; rec.Alert = facts.Recording == "Recording"; rec.Tint = Red;
+            // Chips that would only say "0" or "Ready" are hidden: the bar shows what needs attention.
+            foreach (var c in chips) { if (c.Key != "c" && c.Key != "d") c.Visible = true; if (c.Tip == null || c.Key == "urgent" || c.Key == "rec" || c.Key == "cpu") c.Tip = c.Label + ": " + c.Value; }
+            urgent.Visible = facts.Urgent > 0;
+            rec.Visible = facts.Recording != "Ready";
             // Re-layout only when a chip text or visibility changed (layout measures text for every chip).
             var sig = new System.Text.StringBuilder();
             foreach (var c in chips) sig.Append(c.Visible ? c.Value : "\u0001").Append('\u0002');
@@ -298,16 +296,15 @@ namespace StickyPro
         {
             var r = c.Bounds;
             bool hot = ReferenceEquals(hover, c);
-            Ui.Shadow(g, r, Ui.S(10));
+            var tone = c.Alert ? c.Tint : Ui.Muted;
             using (var path = Ui.Round(r, Ui.S(10)))
             {
                 using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                using (var p = new Pen(hot ? Color.FromArgb(140, c.Tint) : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
+                using (var p = new Pen(c.Alert ? Color.FromArgb(150, c.Tint) : hot ? Ui.Accent : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
             }
             int gd = Ui.S(26);
             var gr = new Rectangle(r.X + Ui.S(6), r.Y + (r.Height - gd) / 2, gd, gd);
-            using (var path = Ui.Round(gr, Ui.S(7))) using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 60 : 30, c.Tint))) g.FillPath(b, path);
-            TextRenderer.DrawText(g, c.Glyph, Ui.Icon(10.5f), gr, c.Tint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, c.Glyph, Ui.Icon(10.5f), gr, tone, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             int tx = gr.Right + Ui.S(8), tw = r.Right - tx - Ui.S(10);
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
             if (compact)
@@ -321,7 +318,7 @@ namespace StickyPro
             {
                 int bx = r.X + Ui.S(10), bwid = r.Width - Ui.S(20), by = r.Bottom - Ui.S(4);
                 using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bx, by, bwid, Ui.S(2));
-                using (var b = new SolidBrush(c.Tint)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
+                using (var b = new SolidBrush(c.Alert ? c.Tint : Ui.Accent)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
             }
         }
 
@@ -338,7 +335,7 @@ namespace StickyPro
         void DrawChip(Graphics g, Chip c)
         {
             var r = c.Bounds;
-            DrawPill(g, r, Color.FromArgb(235, c.Tint), ReferenceEquals(hover, c), null, null);
+            DrawPill(g, r, c.Alert ? Color.FromArgb(235, c.Tint) : Color.FromArgb(38, 255, 255, 255), ReferenceEquals(hover, c), null, null);
             int gd = Ui.S(26);
             var gr = new Rectangle(r.X + Ui.S(6), r.Y + (r.Height - gd) / 2, gd, gd);
             using (var b = new SolidBrush(Color.FromArgb(64, 255, 255, 255))) g.FillEllipse(b, gr);

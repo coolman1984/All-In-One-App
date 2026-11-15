@@ -54,10 +54,13 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
   came from and keeps cut files when a move is cancelled; Clear temp files skips files in use silently; leftover deletes keep failed
   rows; Store-app leftovers are no longer pre-ticked on name-only matches; safer handling of odd paths and empty file clips.
 - **SerQ design** (default): floating navy sidebar grouped into General / Tools / System / Support, blue-grey canvas,
-  white rounded cards with soft shadows, blue accent. Home: "Welcome back" header with New task, Terminals, a reminders
-  bell and your initials; System Overview (live CPU area chart, memory and average CPU); Your Library donut; four KPI
-  cards (tasks due, clips, files opened, urgent tags) with day-over-day changes; Storage with a funnel; Top Memory Apps
-  with Heavy / Normal / Light pills. Settings > Design also offers Nexus (white sidebar) and Classic (blue sidebar).
+  white rounded cards, one blue accent; red and amber appear only when something needs attention. Home shows only real
+  data: the date and a status line (tasks due, overdue, drives over 90 % full); CPU and memory for the last 2 minutes on a
+  fixed 0-100 % scale; Up next (your next tasks, click one to open it); today's counts (due, copied, files opened, urgent
+  tags); every fixed drive with its free space; memory by app with the app icons and share of RAM.
+  Settings > Design also offers Nexus (white sidebar) and Classic (blue sidebar).
+- **Less noise**: no emoji icons, gradients, fake drop-downs, decorative charts or made-up "Heavy / Light" labels. The top
+  bar keeps CPU, RAM, drives, top app and due tasks; the urgent and recorder chips appear only when they have something to say.
 - **Terminals** page: open 1, 2, 3, 4, 2 x 2, 5, 6, 3 x 2 or 4 x 2 terminals at once. Each pane has its own folder, shell
   (PWSH 7, Windows PowerShell, cmd) and start command (`claude`, `claude --continue`, `codex`, ...). "Separate windows" tiles
   real Windows Terminal windows side by side on the screen under the mouse; "One window, split panes" uses Windows Terminal
@@ -65,8 +68,8 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 - **PWSH here everywhere**: every folder menu in the app (Explorer panes and bar, quick launch bar, Tagged files, File
   activity, Uninstall, Drives & cleanup, Snip & record) has "PWSH here", "Claude here (in PWSH)" and "Add to my terminals
   workspace". Explorer also has "Terminal per pane". The tray menu has a Terminals submenu.
-- **Top bar**: colorful chips for CPU, RAM, disks, top app, tasks, clips, prompts and more (click to open the page); theme,
-  keep-awake and Wi-Fi switches; clock (click = date and time menu). Right-click for themes and copy values.
+- **Top bar**: chips for CPU, RAM, disks, top app and tasks due (click to open the page); theme, keep-awake and Wi-Fi
+  switches; clock (click = date and time menu). Right-click for themes and copy values.
 - **Tasks & reminders** (Ctrl+9): smart lists (Today, Upcoming, Overdue, Reminders, Completed), your own lists, priorities,
   due dates, repeats, steps, notes; reminder pop-ups with snooze; typed dates are understood.
 - **Explorer**: 1, 2, 3 or 4 panes side by side or 2 x 2. F5 copy / F6 move to the next pane, drag and drop, Ctrl+C/X/V

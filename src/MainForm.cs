@@ -197,7 +197,7 @@ namespace StickyPro
             navHome = new NavItem("", "Home");
             navHome.Click += delegate { ShowPage("dashboard"); };
             navigation.Controls.Add(navHome);
-            navTerminals = new NavItem("", "Terminals") { Badge = "NEW" };
+            navTerminals = new NavItem("", "Terminals");
             navTerminals.Click += delegate { ShowPage("terminals"); };
             // Grouped sidebar (Dock Top stacks in reverse, so add bottom-up).
             navigation.Controls.Clear();

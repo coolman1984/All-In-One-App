@@ -536,7 +536,7 @@ namespace StickyPro
             it.SubItems.Add(a.Time > 0 && a.Time <= DateTime.MaxValue.Ticks ? new DateTime(a.Time).ToString("yyyy-MM-dd HH:mm:ss") : "");
             it.SubItems.Add(a.Size >= 0 ? Fmt.Bytes(a.Size) : "-");
             if (a.Backup != null) it.SubItems.Add("✓ " + Ui.Ago(a.BackupTime), Ui.Success, Ui.Card, Ui.Base);
-            else it.SubItems.Add("⚠ SAVE!", Ui.Warning, Ui.Card, Ui.Bold);
+            else it.SubItems.Add("Not backed up", Ui.Muted, Ui.Card, Ui.Base);
             if (a.Fav) it.SubItems[0].ForeColor = Color.FromArgb(240, 180, 0);
             foreach (ListViewItem.ListViewSubItem si in it.SubItems) if (si.BackColor != Ui.Card) si.BackColor = Ui.Card;
             e.Item = it;

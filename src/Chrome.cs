@@ -290,7 +290,7 @@ namespace StickyPro
             foreach (var n in items)
             {
                 bool isFolder = Str(n, "type") == "folder";
-                var li = new ListViewItem((isFolder ? "\U0001F4C1 " : "") + Str(n, "name")) { Tag = n };
+                var li = new ListViewItem(Str(n, "name")) { Tag = n };
                 li.SubItems.Add(isFolder ? Children(n).Count + " items" : Str(n, "url"));
                 li.SubItems.Add(folder ?? Str(ParentOf(n), "name"));
                 li.SubItems.Add(ChromeTime(Str(n, "date_added")));
