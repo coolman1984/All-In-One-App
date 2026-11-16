@@ -108,7 +108,25 @@ namespace StickyPro
             string dir = Folder(p.Folder);
             string shellPart = Quote(ShellExe(p.Shell)) + " " + ShellArgs(p.Shell, p.Command);
             string title = string.IsNullOrWhiteSpace(p.Name) ? Title(dir) : p.Name.Trim();
-            return "-d " + DirArg(dir) + " --title " + Quote(title.Replace("\"", "").TrimEnd('\\')) + " " + shellPart.Replace(";", "\\;");
+            // --suppressApplicationTitle keeps the project folder name: Claude Code, Codex and others would otherwise
+            // replace the tab and window title with their own task text. Each project also gets its own tab color.
+            return "-d " + DirArg(dir) + " --title " + Quote(title.Replace("\"", "").TrimEnd('\\')) + " --suppressApplicationTitle --tabColor " + TabColor(p, dir) + " " + shellPart.Replace(";", "\\;");
+        }
+
+        // The pane's color, else the folder's color label, else a steady color picked from the folder path.
+        static string TabColor(TermPane p, string dir)
+        {
+            string name = p.Color;
+            if (string.IsNullOrEmpty(name)) { var m = MetaStore.Get("folders", dir.TrimEnd('\\')); if (m != null) name = m.Color; }
+            Color c;
+            if (!string.IsNullOrEmpty(name)) c = MetaStore.ColorOf(name);
+            else
+            {
+                string[] palette = { "#2563EB", "#16A34A", "#DC2626", "#9333EA", "#EA580C", "#0891B2", "#CA8A04", "#DB2777", "#4F46E5", "#059669" };
+                int h = 0; foreach (char ch in dir.ToLowerInvariant().TrimEnd('\\')) h = unchecked(h * 31 + ch);
+                return palette[(h & 0x7fffffff) % palette.Length];
+            }
+            return "#" + c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2");
         }
 
         static Process Start(string exe, string args, string dir)
