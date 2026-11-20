@@ -5,7 +5,8 @@ Newest first. One entry per task: date, what was asked, what was done, proof, wh
 ## 2026-11-20 — GitHub main sync
 
 - Asked to publish the current source to GitHub and sync the local checkout with main.
-- Reviewed the local branch and file inventory. The screen recording stays local. App tests were not rerun for this Git task.
+- Published the source snapshot (9f75158) as the initial GitHub main branch. GitHub had no existing branches to merge. Verified GitHub HEAD, local HEAD and origin/main pointed to 9f75158 after the push. The screen recording stays local.
+- The staged whitespace check passed outside the bundled Microsoft license, which retains its original trailing space. The default proxy returned HTTP 502. The direct HTTPS connection worked. App tests were not rerun.
 
 ## 2026-11-19 — Whole-app bug hunt and screenshots
 
