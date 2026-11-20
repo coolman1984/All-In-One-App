@@ -2,6 +2,13 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-20 — Owner's guide: how the app works
+
+- Asked for a plan-style page that explains how the whole app works, because it has grown too big to keep track of.
+- Wrote [how the app works](docs/plans/how-the-app-works.html) (Arabic, Rev 1), published as a private artifact: https://claude.ai/artifact/6gpdvk1Wm1aPhWhjQwFtWo. It covers three layers (UI, background services, data), the 20 sidebar pages in five purpose groups, code share per group (core 24%, AI 23%, PC tools 21%, files 19%, daily tools 13% of 37.5k lines; approximate file-to-group split), three end-to-end journeys, the five cross-page links (search, Send to, drag to sidebar, global hotkeys, MCP), why it feels out of control, and five steering rules with a suggested keep/freeze/trim call per group.
+- Proof: source reading (`src/MainForm.cs` page registration, `src/App.cs` background services, line counts of `src/*.cs`) and existing history. App source, tests and binaries were not changed.
+- Open: the owner decides the per-group calls; the data-safety plan above still awaits approval.
+
 ## 2026-11-20 — Plan-page workflow and the first plan (data safety at startup)
 
 - Asked to understand a shared workflow (an engineering plan written as a blog-style web page and reviewed before building, plus plain-writing rules) and apply it to this project.

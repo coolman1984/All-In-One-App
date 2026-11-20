@@ -55,7 +55,7 @@ rendering separately when they are in scope.
 
 ## Plan large changes as a page
 
-Write large or risky changes as a short plan page in `docs/plans/` and publish it for review before building. Follow the [plan page skill](../skills/plan-page/SKILL.md). The first plan is [never lose a note](plans/never-lose-a-note.html), which covers the silent data wipe when a data file is busy at startup.
+Write large or risky changes as a short plan page in `docs/plans/` and publish it for review before building. Follow the [plan page skill](../skills/plan-page/SKILL.md). The [owner's guide](plans/how-the-app-works.html) explains the app's layers, page groups and steering rules. The first plan is [never lose a note](plans/never-lose-a-note.html), which covers the silent data wipe when a data file is busy at startup.
 
 ## Carry the findings forward
 
