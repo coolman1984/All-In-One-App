@@ -209,36 +209,43 @@ namespace StickyPro
                 res.Add(new Leftover { Group = "Folders & files", Text = path, Path = path, Confidence = conf, Check = conf == "Safe" });
             };
             if (a.Kind != "Store" && !string.IsNullOrEmpty(a.Location)) addFolder(a.Location.TrimEnd('\\'), "Safe");
+            string docsRoot = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             var roots = new List<string>
             {
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                docsRoot
             };
             foreach (var root in roots.Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r)).Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                bool isDocs = !string.IsNullOrEmpty(docsRoot) && string.Equals(root, docsRoot, StringComparison.OrdinalIgnoreCase);
+                string rootConf = isDocs ? "Maybe" : nameConf;
                 string[] dirs; try { dirs = Directory.GetDirectories(root); } catch { continue; }
                 foreach (var d in dirs)
                 {
                     string n = Path.GetFileName(d);
-                    if (Eq(n, core)) addFolder(d, nameConf);
+                    if (Eq(n, core)) addFolder(d, rootConf);
                     else if (pub.Length >= 4 && Eq(n, pub))
                     {
                         string inner = Path.Combine(d, core);
-                        if (Directory.Exists(inner)) addFolder(inner, nameConf);
+                        if (Directory.Exists(inner)) addFolder(inner, rootConf);
                         string[] subs; try { subs = Directory.GetDirectories(d); } catch { subs = new string[0]; }
                         if (subs.Length <= 1) addFolder(d, "Maybe");
                     }
                     else if (core.Length >= 5 && n.StartsWith(core, StringComparison.OrdinalIgnoreCase)) addFolder(d, "Maybe");
                 }
             }
-            // Shortcuts
+            // Shortcuts (require exact match for short names < 4 chars so "Go"/"R" never match unrelated shortcuts)
             var lnkRoots = new[] { Environment.GetFolderPath(Environment.SpecialFolder.Programs), Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory) };
             foreach (var r in lnkRoots.Where(x => !string.IsNullOrEmpty(x) && Directory.Exists(x)))
                 foreach (var f in Files(r, "*.lnk", 3))
-                    if (Path.GetFileNameWithoutExtension(f).IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0 && !seen.Any(s => Under(f, s)))
-                        res.Add(new Leftover { Group = "Shortcuts", Text = f, Path = f, Confidence = nameConf, Check = !store });
+                {
+                    string stem = Path.GetFileNameWithoutExtension(f);
+                    bool match = Eq(stem, core) || (core.Length >= 4 && stem.IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (match && !seen.Any(s => Under(f, s)))
+                        res.Add(new Leftover { Group = "Shortcuts", Text = f, Path = f, Confidence = Eq(stem, core) ? nameConf : "Maybe", Check = !store && Eq(stem, core) });
+                }
             // Start menu folder named like the app
             foreach (var r in lnkRoots.Take(2).Where(x => !string.IsNullOrEmpty(x) && Directory.Exists(x)))
             {
@@ -268,8 +275,10 @@ namespace StickyPro
                                 foreach (var vn in rk.GetValueNames())
                                 {
                                     string cmd = (rk.GetValue(vn) ?? "").ToString();
-                                    if ((a.Location.Length > 3 && cmd.IndexOf(a.Location.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) >= 0) || cmd.IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0 || Eq(vn, core))
-                                        res.Add(new Leftover { Group = "Startup entries", Text = Root(hive) + "\\" + run + "  :  " + vn + " = " + cmd, Confidence = nameConf, Check = !store, Hive = hive, View = view, Key = run, ValueName = vn, IsValue = true, Hklm = hive == RegistryHive.LocalMachine });
+                                    bool byLoc = a.Location.Length > 3 && cmd.IndexOf(a.Location.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) >= 0;
+                                    bool byName = Eq(vn, core) || (core.Length >= 4 && cmd.IndexOf(core, StringComparison.OrdinalIgnoreCase) >= 0);
+                                    if (byLoc || byName)
+                                        res.Add(new Leftover { Group = "Startup entries", Text = Root(hive) + "\\" + run + "  :  " + vn + " = " + cmd, Confidence = byLoc || Eq(vn, core) ? nameConf : "Maybe", Check = !store && (byLoc || Eq(vn, core)), Hive = hive, View = view, Key = run, ValueName = vn, IsValue = true, Hklm = hive == RegistryHive.LocalMachine });
                                 }
                             }
                         }
@@ -707,10 +716,11 @@ namespace StickyPro
                     bool still = Programs.StillInstalled(a);
                     List<Leftover> left = null;
                     try { left = Leftovers.Scan(a, snapshot, false); } catch (Exception ex) { App.Log("Leftovers: " + ex.Message); }
+                    if ((still || err != null) && left != null) foreach (var item in left) item.Check = false;
                     UI(() =>
                     {
                         if (err != null) status("Could not start the uninstaller of " + app.Name + ": " + err + " - try Force remove.");
-                        else status(still ? app.Name + " is still installed (cancelled?). Leftover scan opened anyway." : app.Name + " was uninstalled. Check its leftovers.");
+                        else status(still ? app.Name + " is still installed (cancelled?). Nothing pre-selected in leftovers." : app.Name + " was uninstalled. Check its leftovers.");
                         if (left != null) new LeftoverForm(app, left).Show(FindForm());
                     });
                 }

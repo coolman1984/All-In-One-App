@@ -427,6 +427,7 @@ $stream.Dispose()
         readonly TextBox ocrText;
         readonly ComboBox ocrLang;
         readonly Label ocrStatus, info;
+        bool dirty;
         string tool = "rect";
         Color color = Color.FromArgb(230, 40, 40);
         float width = 4;
@@ -701,11 +702,12 @@ $stream.Dispose()
             undo.Push(ops);
             redo.Clear();
             ops = next;
+            dirty = true;
             Rerender();
         }
 
-        void Undo() { if (undo.Count == 0) return; redo.Push(ops); ops = undo.Pop(); Rerender(); }
-        void Redo() { if (redo.Count == 0) return; undo.Push(ops); ops = redo.Pop(); Rerender(); }
+        void Undo() { if (undo.Count == 0) return; redo.Push(ops); ops = undo.Pop(); dirty = true; Rerender(); }
+        void Redo() { if (redo.Count == 0) return; undo.Push(ops); ops = redo.Pop(); dirty = true; Rerender(); }
 
         void CanvasDown(object sender, MouseEventArgs e)
         {
@@ -800,6 +802,7 @@ $stream.Dispose()
                     img.Save(path, fmt);
                 }
                 filePath = path;
+                dirty = false;
                 Text = "Snip - " + Path.GetFileName(path);
                 info.Text = "Saved: " + path;
                 SnipPanel.RaiseChanged();
@@ -810,13 +813,13 @@ $stream.Dispose()
 
         void CopyPath()
         {
-            if ((string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
+            if ((dirty || string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
             if (App.I.CopyText(Path.GetFullPath(filePath))) info.Text = "File path copied.";
         }
 
         void CopyFile()
         {
-            if ((string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
+            if ((dirty || string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) && !Save(false)) return;
             try
             {
                 App.I.Suppress();

@@ -428,6 +428,7 @@ namespace StickyPro
             });
             RefreshCurrent();
             FocusSearch();
+            PageChangedForAssistant();
         }
 
         // Pages retain their state once visited; unused tools allocate no controls or handles.

@@ -567,14 +567,23 @@ namespace StickyPro
             ShellOps.Run(FindForm(), ShellOps.FO_DELETE, sel, null, !permanent);
         }
 
+        static bool ValidLeafName(string n)
+        {
+            if (string.IsNullOrWhiteSpace(n)) return false;
+            string t = n.Trim();
+            if (t == "." || t == ".." || t.IndexOf('\\') >= 0 || t.IndexOf('/') >= 0 || t.IndexOf(':') >= 0) return false;
+            return t.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
+        }
+
         void Rename()
         {
             var e = FirstSel(); if (e == null || Current.Length == 0) return;
             var n = Ui.Ask("Rename", "New name", e.Name, FindForm());
             if (string.IsNullOrEmpty(n) || n == e.Name) return;
+            if (!ValidLeafName(n)) { MessageBox.Show(FindForm(), "Invalid name. Use a plain file or folder name without path separators.", App.Name); return; }
             try
             {
-                string target = Path.Combine(Path.GetDirectoryName(e.Path.TrimEnd('\\')), n);
+                string target = Path.Combine(Path.GetDirectoryName(e.Path.TrimEnd('\\')), n.Trim());
                 if (e.Dir) Directory.Move(e.Path, target); else File.Move(e.Path, target);
                 Load(false);
             }
@@ -585,7 +594,8 @@ namespace StickyPro
         {
             if (Current.Length == 0) return;
             var n = Ui.Ask("New folder", "Folder name", "New folder", FindForm()); if (string.IsNullOrEmpty(n)) return;
-            try { Directory.CreateDirectory(Path.Combine(Current, n)); Load(false); } catch (Exception ex) { MessageBox.Show(FindForm(), ex.Message, App.Name); }
+            if (!ValidLeafName(n)) { MessageBox.Show(FindForm(), "Invalid folder name. Use a plain folder name without path separators.", App.Name); return; }
+            try { Directory.CreateDirectory(Path.Combine(Current, n.Trim())); Load(false); } catch (Exception ex) { MessageBox.Show(FindForm(), ex.Message, App.Name); }
         }
 
         ContextMenuStrip BuildMenu()
@@ -593,17 +603,19 @@ namespace StickyPro
             var m = Ui.Menu();
             m.Items.Add("Open\tEnter", null, delegate { OpenSelected(); });
             m.Items.Add("Open with...", null, delegate { var f = FirstSel(); if (f != null && !f.Dir) Hidden.Open("rundll32.exe", "shell32.dll,OpenAs_RunDLL " + f.Path); });
-            var viewable = FirstSel();
-            if (viewable != null && (DocumentsPage.Handles(viewable.Path) || viewable.Path.EndsWith(".mysingle", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".msg", StringComparison.OrdinalIgnoreCase)))
+            var miRead = new ToolStripMenuItem("Read in the app", null, delegate { var f = FirstSel(); if (f != null) App.I.OpenDocument(f.Path); }) { Visible = false };
+            var miPreview = new ToolStripMenuItem("Open in the app: preview (read only)", null, delegate { var f = FirstSel(); if (f != null) App.I.OpenDocument(f.Path, false); }) { Visible = false };
+            var miEdit = new ToolStripMenuItem("Open in the app: edit", null, delegate { var f = FirstSel(); if (f != null) App.I.OpenDocument(f.Path, true); }) { Visible = false };
+            m.Items.Add(miRead); m.Items.Add(miPreview); m.Items.Add(miEdit);
+            m.Opening += delegate
             {
-                bool mail = viewable.Path.EndsWith(".mysingle", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".msg", StringComparison.OrdinalIgnoreCase);
-                if (mail) m.Items.Add("Read in the app", null, delegate { App.I.OpenDocument(viewable.Path); });
-                else
-                {
-                    m.Items.Add("Open in the app: preview (read only)", null, delegate { App.I.OpenDocument(viewable.Path, false); });
-                    if (OfficeEdit.KindOf(viewable.Path) != null) m.Items.Add("Open in the app: edit", null, delegate { App.I.OpenDocument(viewable.Path, true); });
-                }
-            }
+                var viewable = FirstSel();
+                bool isMail = viewable != null && !viewable.Dir && (viewable.Path.EndsWith(".mysingle", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".msg", StringComparison.OrdinalIgnoreCase));
+                bool isDoc = viewable != null && !viewable.Dir && !isMail && DocumentsPage.Handles(viewable.Path);
+                miRead.Visible = isMail;
+                miPreview.Visible = isDoc;
+                miEdit.Visible = isDoc && OfficeEdit.KindOf(viewable.Path) != null;
+            };
             m.Items.Add("Open in Windows Explorer", null, delegate { var f = FirstSel(); Hidden.Open("explorer.exe", f == null ? "\"" + Current + "\"" : "/select,\"" + f.Path + "\""); });
             Term.AddMenu(m.Items, () => Current);
             m.Items.Add(new ToolStripSeparator());
@@ -790,6 +802,7 @@ namespace StickyPro
         List<string> OpenFolders() { if (!started) { started = true; Arrange(); } return panes.Take(grid.Controls.Count).Select(p => p.Current).Where(p => p.Length > 0).ToList(); }
         void OpenSet(FolderSet s)
         {
+            if (s == null || s.Folders == null || s.Folders.Count == 0) { App.I.Status("Folder set has no folders."); return; }
             if (!started) { started = true; Arrange(); }
             int n = Math.Max(1, Math.Min(4, s.Folders.Count));
             if (layout.SelectedIndex != n - 1) layout.SelectedIndex = n - 1; else Arrange();

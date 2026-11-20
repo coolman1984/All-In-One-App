@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>دليل العميل | All in One</title>
+<style>
+:root{--ink:#162c36;--muted:#47616a;--line:#cbd9d7;--paper:#f5f8f5;--deep:#102d36;--teal:#006b65;--mint:#98f3cc;--motion:240ms}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 "Segoe UI",Tahoma,Arial,sans-serif}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #d16924;outline-offset:3px}button{transition:background var(--motion),transform var(--motion),box-shadow var(--motion)}button:active{transform:translateY(1px)}[hidden]{display:none!important}
+.wrap{width:min(1370px,94%);margin:auto}.brandbar{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid #ffffff29;color:#d1e6e1}.brand{display:flex;gap:11px;align-items:center;font:700 17px/1.1 "Segoe UI",sans-serif;letter-spacing:.02em}.mark{position:relative;width:30px;height:30px;background:var(--mint);border-radius:8px}.mark:before,.mark:after{content:"";position:absolute;border:1.6px solid var(--deep);width:12px;height:9px;transform:skewY(-16deg);inset:7px 0 auto 7px}.mark:after{inset:13px 0 auto 11px}.date{font-size:13px}.hero{background:var(--deep);color:white;overflow:hidden}.heroGrid{display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:30px;padding:26px 0 35px}h1,h2,h3,p{margin:0}h1{font-size:clamp(38px,4.7vw,66px);line-height:1.25;letter-spacing:-.035em}h2{font-size:clamp(24px,2.6vw,36px);line-height:1.35}h3{font-size:21px}small,.quiet{color:var(--muted)}.hero p{max-width:640px;color:#d0e4df;margin:.65em 0 1em;font-size:18px}.primary,.soft,.nav button,.back,.toggle{border:1px solid var(--line);border-radius:9px;padding:7px 14px;background:#fff;font-weight:650}.primary{background:var(--mint);color:#103933;border-color:var(--mint)}.primary:hover{background:#b8ffdd}.soft:hover,.back:hover{background:#e8f4ee}.heroArt{position:relative;display:flex;justify-content:center;align-items:center;gap:7px;flex-direction:column;min-height:196px;background:radial-gradient(ellipse at center,#23605480,transparent 68%)}.heroArt:before{content:"";position:absolute;width:2px;height:90%;background:#7fbaab}.plate{position:relative;display:flex;align-items:center;justify-content:space-between;gap:22px;width:clamp(200px,72%,350px);height:42px;transform:skewY(-5deg);background:#21454b;border:1px solid #638a87;border-radius:7px;box-shadow:0 5px 0 #102a31;padding:0 16px;color:#ddf1eb;font-weight:650}.plate:first-child{background:var(--mint);border-color:#bdfbe0;color:#103933}.plate i{font:normal 16px monospace;letter-spacing:4px}.plate:hover{transform:skewY(-5deg) translateY(-3px);box-shadow:0 7px 0 #102a31}
+.nav{display:flex;flex-wrap:wrap;gap:5px;padding:14px 0;border-bottom:1px solid var(--line)}.nav button{background:transparent;border-color:transparent}.nav button[aria-current=true]{background:var(--deep);color:white}.nav .toggle{margin-inline-start:auto;font-size:13px;border:1px solid var(--line);font-weight:500}main{padding:25px 0 45px}.sectionHead{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:19px}.sectionHead p{color:var(--muted);margin-top:2px}.search{background:white;border:1px solid #aebfbb;border-radius:9px;padding:7px 12px;width:min(100%,290px)}.layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(295px,1fr);gap:19px;align-items:start}.surface,.inspector,.issue{border:1px solid var(--line);border-radius:15px;background:white}.surface{padding:17px}.inspector{position:sticky;top:14px;overflow:hidden}.insTop{background:#e5f4ed;border-bottom:1px solid #c2dace;padding:18px 21px}.eng{display:block;direction:ltr;unicode-bidi:isolate;text-align:right;color:var(--muted);font:600 12px/1.5 "Segoe UI",sans-serif;letter-spacing:.035em}.insTop h3{font-size:26px;margin:3px 0}.insBody{padding:15px 21px}.insBody h4,.issue h4{font-size:14px;margin:10px 0 4px;color:var(--teal)}.insBody p{line-height:1.6}.insBody ol{padding-inline-start:24px;margin:5px 0 11px}.insBody li{padding-inline-start:3px;margin:3px 0}.insBody li::marker{color:var(--teal);font-weight:bold}details{margin-top:15px;border-top:1px solid var(--line);padding-top:8px;font-size:13px}summary{cursor:pointer;color:var(--muted)}code{font-size:12px;direction:ltr;unicode-bidi:isolate;overflow-wrap:anywhere}.root{display:inline-flex;align-items:center;gap:8px;font-weight:700;background:var(--deep);color:white;border-radius:8px;padding:5px 12px}.root:before{content:"";background:var(--mint);width:8px;height:8px;border-radius:50%}.tree{margin-inline-start:15px;padding:5px 20px 0 0;border-inline-start:2px solid #bfd5cb}.lane{position:relative;margin:10px 0 16px;padding:10px 13px 12px;border:1px solid var(--line);border-inline-start:4px solid var(--c);border-radius:9px;background:#fafcf9}.lane:before{content:"";position:absolute;width:19px;height:2px;background:#bfd5cb;inset-inline-start:-23px;top:22px}.lane h3{font-size:17px;margin-bottom:7px}.nodes,.links,.chips{display:flex;gap:6px;flex-wrap:wrap}.node,.link,.chip{border:1px solid #cad8d5;background:white;border-radius:7px;font-size:14px;padding:4px 9px}.node:hover,.chip:hover,.link:hover{background:#edf7f1}.node[aria-pressed=true],.chip[aria-pressed=true]{background:var(--deep);border-color:var(--deep);color:white}.link{color:var(--teal);font-weight:650}.findingLink{color:#813611;background:#fff2e8;border-color:#e5bba1;margin:9px 0 0}.hint{color:var(--muted);margin:8px 0}.routePick{width:100%;background:#fff;border:1px solid #a8bcb7;border-radius:9px;padding:7px 12px}.journeyTop{margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.journeyTop select{width:auto;max-width:100%}.travel{position:relative}.station{display:block;text-align:start;background:white;border:1px solid var(--line);border-radius:9px;margin:0 14px 13px 0;padding:8px 14px;width:calc(100% - 14px);position:relative}.station:before{content:"";position:absolute;inset-inline-start:-20px;top:17px;width:9px;height:9px;border:2px solid #699189;border-radius:50%;background:white}.travel:before{content:"";position:absolute;right:0;top:19px;bottom:23px;width:2px;background:#b9cfc7}.station.active{background:#e0f4e8;border-color:#639e86}.station.active:before{background:#147858}.journeyFoot{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.mini{font-size:13px}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 18px}.kpis div{padding:12px 16px;background:#e4f1eb;border-radius:11px}.kpis strong{display:block;font:700 27px/1.25 "Segoe UI"}.issues{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.issue{padding:17px 19px}.issue h3{line-height:1.45;margin:8px 0}.flag{display:inline-block;font-weight:700;font-size:13px;color:#783a16;background:#fff0df;padding:2px 8px;border-radius:6px}.flag.open{background:#e8eefb;color:#234a73}.proof{background:#f0f4f1;border-radius:6px;padding:7px 10px;font-size:14px}.fade{animation:arrive var(--motion) ease-out both}@keyframes arrive{from{opacity:.3;transform:translateY(7px)}to{opacity:1;transform:none}}
+body.still *{animation:none!important;transition:none!important}button:disabled{opacity:.45;cursor:default}.skip{position:absolute;top:-100px;background:white;color:black;z-index:5;padding:5px 15px}.skip:focus{top:0}footer{padding:15px 0;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}@media(max-width:850px){.layout{grid-template-columns:1fr}.inspector{position:static}.heroGrid{grid-template-columns:1.4fr 1fr;gap:7px}.plate{width:90%}.issues{grid-template-columns:1fr}}@media(max-width:570px){.wrap{width:93%}.heroGrid{display:block;padding:18px 0}.heroArt{display:none}.nav{gap:2px}.nav button{padding:6px 8px;font-size:14px}.nav .toggle{margin-inline-start:0}.surface{padding:10px}.tree{margin-inline-start:7px;padding-inline-start:14px}.lane:before{width:12px;inset-inline-start:-16px}.lane{padding:8px}.sectionHead{align-items:start}.search{width:100%}.kpis{gap:5px}.kpis div{padding:7px;font-size:13px}main{padding-top:16px}}
+</style>
+<a class="skip" href="#content">انتقل للمحتوى</a>
+<header class="hero"><div class="wrap"><div class="brandbar"><div class="brand" dir="ltr"><span class="mark" aria-hidden="true"></span>All in One</div><span class="date">دليل العميل · ٢٠ نوفمبر ٢٠٢٦</span></div>
+<div class="heroGrid"><div><h1>خريطة التطبيق</h1><p>من أول مهمة لحد تسليم الملف. اختار أداة تشوف خطواتها، أو امشِ في رحلة كاملة وشوف إيه اللي يحصل عند كل قرار.</p><button class="primary" id="tourStart">ابدأ رحلة مراجعة مستند ←</button></div>
+<div class="heroArt" aria-label="طبقات الدليل"><button class="plate" data-view="map">أدوات التطبيق<i aria-hidden="true">▦</i></button><button class="plate" data-view="journeys">خطوات الشغل<i aria-hidden="true">⇄</i></button><button class="plate" data-view="audit">نتيجة الاختبار<i aria-hidden="true">✓</i></button></div></div></div></header>
+<nav class="wrap nav" aria-label="أقسام الدليل"><button data-view="map">خريطة الأدوات</button><button data-view="journeys">رحلات الشغل</button><button data-view="audit">النتائج والأولويات</button><button id="motion" class="toggle" aria-pressed="true">الحركة مفعّلة</button></nav>
+<main id="content" class="wrap" tabindex="-1">
+<section id="map"><div class="sectionHead"><div><h2>إيه اللي تقدر تعمله؟</h2><p>كل فرع بيجمع أدوات لهدف واحد. اضغط على اسم الأداة عشان تفتح تفاصيلها.</p></div><input id="search" class="search" type="search" aria-label="ابحث عن أداة" placeholder="ابحث بالعربي أو باسم الزر الأصلي"></div>
+<div class="layout"><div class="surface"><span class="root">مساحة العمل</span><div id="tree" class="tree"></div><p id="empty" class="hint" hidden>مفيش أداة بالاسم ده. جرّب كلمة أقصر.</p></div><aside class="inspector" id="detail" tabindex="-1" aria-label="تفاصيل الأداة"></aside></div></section>
+<section id="journeys" hidden><div class="sectionHead"><div><h2>رحلات الشغل</h2><p>تابع مثال من البداية للنهاية. عند نقطة القرار، اختار الفرع اللي عايز تشوفه.</p></div></div><div class="journeyTop"><label for="journeySelect">اختار رحلة</label><select id="journeySelect" class="routePick"></select></div><div class="layout"><div class="surface"><div id="stations" class="travel"></div><div class="journeyFoot"><button id="prev" class="soft">السابق</button><button id="next" class="primary">التالي</button><button id="play" class="soft">تشغيل تلقائي</button></div></div><aside id="stepDetail" class="inspector" aria-live="polite"></aside></div></section>
+<section id="audit" hidden><div class="sectionHead"><div><h2>إيه اللي لسه محتاج شغل؟</h2><p>الاختبارات نجحت في مسارات كتير، لكن لقينا عيوب تمسّ حفظ الشغل واختيار وضع فتح الملف.</p></div></div><div id="metrics" class="kpis"></div><div class="chips" id="issueFilter" aria-label="تصفية النتائج"></div><p id="auditNote" class="hint"></p><div id="issues" class="issues"></div><details><summary>نطاق الاختبار ودليله</summary><div id="evidence"></div></details></section>
+</main><footer class="wrap">الدليل بيشتغل من غير إنترنت. اختياراتك هنا بتشرح التطبيق ومش بتغيّر أي ملف.</footer>
+<script>
+// Customer names are Arabic. The second label is the matching control or feature in the Windows app.
+const groups=[
+ ["يومي ومهامي","#338771"],["ملفاتي ومستنداتي","#366ba5"],["المساعدون والتنفيذ","#7959a3"],["الشاشة وأدوات ويندوز","#a66039"],["التنقّل والحفظ والإعدادات","#447e90"]
+];
+const toolsList=[];
+function tool(id,group,name,label,goal,steps,result,condition,related,source){
+ toolsList.push({id,group,name,label,goal,steps:steps.split("|"),result,condition,related:related.split(" "),source});
+}
+tool("dashboard",0,"الرئيسية","Home / Dashboard","تبدأ يومك بالمهام المستحقة وحالة الجهاز.","راجع المستحق والمتأخر|افتح المهمة من قائمتها|راجع استهلاك الذاكرة ومساحة الأقراص عند الحاجة","بتوصل من الملخص للقائمة اللي تقدر تتصرف منها.","الأعداد بتعكس البيانات الموجودة على الجهاز.", "tasks system:procs", "Dashboard.cs");
+tool("tasks",0,"المهام والتذكيرات","Tasks & reminders","تحوّل شغل مطلوب لمهمة بموعد وخطوات.","أضف عنوان أو ابعت نص من أداة تانية|حدّد القائمة والأولوية والموعد والتذكير والتكرار|علّم الخطوات المنتهية، وأجّل التذكير أو كمّل المهمة","مهمة المرة الواحدة بتظهر في المكتمل. المتكررة بتفضل مفتوحة بالموعد التالي وبتبدأ خطواتها من جديد.","الكتابة الحرة للتواريخ بتتعرف على تعبيرات إنجليزية محددة. راجع الموعد قبل الاعتماد عليه.","dashboard notes", "Tasks.cs · Data.cs / CompleteTask");
+tool("notes",0,"الملاحظات اللاصقة","Notes","تسيب فكرة قدامك على سطح المكتب وترجعلها بسرعة.","اعمل ملاحظة أو ابعت لها نص|نسّق الكلام وأضف صورة أو تذكير أو وسوم|ثبّتها فوق النوافذ أو أرشفها","الملاحظة محفوظة ضمن بيانات التطبيق وتقدر تفتحها تاني.","دي ملاحظة داخل التطبيق. ملفات الملاحظات النصية ليها محرر مستقل.","clips markdown cards", "NoteForm.cs · MainForm.cs");
+tool("prompts",0,"النصوص الجاهزة","Prompts","تعيد استخدام تعليمات أو ردود متكررة.","اكتب النص وصنّفه أو استورده|حط أماكن للبيانات المتغيّرة، واختار اختصار كتابة لو محتاج|عند الاستخدام املأ الفراغات والصق النتيجة","الأصل يفضل متاح للتعديل، مع نسخ سابقة تقدر ترجع لها.","الاختصار العام واللصق بيعتمدوا على النافذة اللي عليها التركيز.","clips agents shortcuts/0", "MainForm.cs / PromptsPage · Snippets.cs · QuickPopup.cs");
+tool("clips",0,"سجل النسخ","Clipboard","ترجع لنص أو صورة أو مجموعة ملفات نسختها قبل كده.","انسخ عنصر والتسجيل مفعّل|دور عليه، ثبّته أو نظّمه في مجلد|الصق النص، استخدم طابور اللصق أو ابعته لمهمة","تقدر تعيد استخدام المنسوخ أو تحوله لشغل جديد.","الإيقاف المؤقت والعناصر المعلّمة خاصة بيأثروا على اللي بيتسجل. المثبّت أو المنظّم في مجلد مستثنى من التنظيف التلقائي.","tasks notes prompts", "App.cs / OnClipboardUpdate · QuickPopup.cs · MainForm.cs");
+tool("cards",0,"البطاقات العائمة","Floating cards","تتابع أداة صغيرة جنب شغلك من غير فتح النافذة الرئيسية.","أنشئ بطاقة واختار نوعها|افتحها واضبط مكانها وحجمها|استخدمها للملاحظات أو الحافظة أو المتابعة أو الالتقاط","بطاقة منفصلة بتعرض نفس بيانات الأداة.","الأنواع محددة في التطبيق، ومنها لوحة المتابعة والنسخ والعمليات والأقراص وبدء التشغيل واللقطات والنشاط والوسوم.","dashboard clips snip", "Cards.cs / Features.All");
+tool("explorer",1,"مستكشف الملفات","Explorer","تشتغل على ملفات ومجلدات جنب بعض.","افتح من جزء لحد أربع أجزاء|حدّد المصدر والوجهة للنسخ أو النقل|افتح الملف بنقرتين في برنامجه، أو اختار معاينة أو تعديل من قائمته","النسخ والنقل بيغيّروا ملفات الجهاز. إرسال الملف لأداة تانية بيفتح مسار شغل جديد.","قائمة الزر اليمين فيها اختيار صريح للمعاينة. قائمة الإرسال المشتركة ليها ملاحظة في النتائج.","documents markdown tagged terminals", "Explorer.cs · AppLinks.cs");
+tool("documents",1,"المستندات","Documents","تقرأ مستند أو تعدّل ملف مكتبي داخل تبويب.","افتح ملف وحدّد معاينة أو تعديل|للتحرير بيحاول التطبيق يفتح البرنامج المكتبي المناسب|احفظ التغييرات، أو راجع طلب الحفظ عند القفل","التعديل الناجح بيتحفظ في الملف الأصلي. ملفات الرسم والمستندات الثابتة بتتعرض للمعاينة.","التحرير محتاج البرنامج المكتبي المثبّت. الملف المقفول أو المحمي ممكن يفتح قراءة فقط أو يطلع رسالة خطأ.","explorer browser assistant", "DocumentsPage.cs / Open, Show, DropEdit · OfficeEdit.cs · OfficeView.cs");
+tool("markdown",1,"دفتر الملفات النصية","Markdown notes","تجمع ملاحظات مترابطة في مجلد عادي.","اختار مجلد الدفتر أو افتح ملف|اكتب في وضع تحرير أو عرض مزدوج، واستخدم القوالب والملاحظات اليومية|اتبع الروابط والوسوم أو افتح خريطة العلاقات، واطبع أو صدّر","النص بيتحفظ تلقائيًا في ملفه، والروابط بتوصّل الملاحظات ببعض.","لو حصل خطأ حفظ، سيب التبويب مفتوح وانسخ النص لمكان آمن. تصدير المستند الثابت محتاج عارض الويب.","browser documents assistant", "MarkdownPage.cs / Save, AllClosed · MdGraph.cs · MdWeb.cs");
+tool("browser",1,"المتصفح والتقارير","Browser","تفتح صفحة أو تقرير أو رسالة بريد محفوظة.","افتح رابط أو ملف في تبويب|استخدم البحث ووضع القراءة والمفضلة والتنزيلات وتكبير الموقع|احفظ تقرير أو لقطة، أو احفظ نص المقال داخل دفتر الملاحظات","قصاصة المقال بتتحفظ مع عنوان المصدر في مجلد القصاصات داخل الدفتر.","لازم تضيف دفتر قبل حفظ المقال. عرض الصفحات محتاج محرك المتصفح. بعض صيغ البريد بتحتاج برنامج البريد أو معالجة النصوص.","markdown chrome mail", "Browser.cs / SaveAsNote, ReadingMode, OpenPath");
+tool("mail",1,"البريد المحفوظ","Browser · Open file","تقرأ رسالة محفوظة من غير إعادة إرسالها.","اختار ملف الرسالة من المتصفح أو المستكشف|التطبيق يحدد الصيغة ويفتحها بالقارئ المناسب|اقرأ الصفحة الناتجة داخل تبويب المتصفح","بيتعرض محتوى الرسالة محليًا.","الرسالة القياسية لها قارئ داخلي. صيغة أوتلوك بتحتاج أوتلوك، وبريد الشركة المحمي محتاج بيئة الشركة وبرنامج معالجة النصوص.","browser explorer", "Mail.cs · Browser.cs / OpenPath");
+tool("activity",1,"نشاط الملفات","File activity","تعرف إيه اللي اتفتح أو اتعدّل ضمن المصادر اللي التطبيق بيراقبها.","فعّل المتابعة من الإعدادات|رشّح السجل وحدّد الملف|افتح مجلده أو اعمل نسخة من الملفات المختارة","بيظهر سجل أحداث تقدر ترجع منه للملف.","التغطية مرتبطة بالمصادر والإعدادات المتاحة. السجل لوحده مش نسخة من الملف.","explorer tagged settings", "Activity.cs / ActivityMonitor, ActivityPanel");
+tool("tagged",1,"الملفات المصنّفة","Tagged files","تجمع ملفات من مجلدات مختلفة تحت نفس التصنيف.","أضف ملف أو مجلد أو اسحبه للتصنيف|اختار فئة وابحث عن العناصر|افتح المسار أو انقل العنصر بين الفئات","الفئة بتجمع مراجع للملفات في قائمة واحدة.","نقل الملف خارج التطبيق ممكن يخلّي المسار المحفوظ قديم.","explorer activity", "Tagged.cs / AddPaths, AskTag");
+tool("accounts",2,"حسابات المساعدين","Accounts","تختار الحساب اللي هيستخدمه المساعد.","اختار خدمة مثبّتة وابدأ تسجيل الدخول|كمّل خطوات الخدمة وحدّث الحالة|اختار حساب افتراضي للمحادثات الجديدة أو حساب للمحادثة","المساعد يشتغل بالحساب اللي اتربط بالمحادثة.","تعدد الحسابات المسماة متاح لخدمات محددة. تسجيل الدخول الفعلي محتاج حساب واتصال بالخدمة.","agents team terminals", "AccountsPage.cs · AgentAccounts.cs");
+tool("agents",2,"محادثات المساعدين","Agents","تنفّذ طلب وتحتفظ بسياقه وتقدر ترجع لإجاباته.","اختار مجلد ومساعد وحساب ونموذج وصلاحية|اكتب طلبك، أو استخدم أمر محفوظ، وتابع الرد|احفظ الرد كملف أو نظّم المحادثة في المفضلة أو الأرشيف","المسودات محفوظة منفصلة عن سجل المحادثة. تقدر تفرّع المحادثة أو تقارن مساهمات أكتر من مساعد.","التشغيل الفعلي محتاج أداة الخدمة على الجهاز وحساب صالح عند الطلب. اختبارات الفرق استخدمت بدائل محلية.","accounts team exports terminals", "Agents.cs · AgentCommands.cs · AgentCouncil.cs");
+tool("team",2,"مجلس المساعدين وفريق العمل","Model council / Leader team","تراجع فكرة من زوايا مختلفة أو توزّع طلب على فريق.","في المجلس حدّد الأدوار والمشاركين|في وضع الفريق خلّي القائد يقترح توزيع الشغل وراجع التعليمات|أرسل الخطة ثم راجع مخرجات المشاركين والرد النهائي","تقدر تشوف مساهمة كل عضو وتراجع النتيجة المجمّعة.","خطة القائد قابلة للتعديل قبل إرسالها. استيراد شاشة طرفية بيلتقط لقطة نصية وقت الطلب.","agents accounts exports", "LeaderTeam.cs · AgentCouncil.cs");
+tool("exports",2,"تصدير الردود","Files / Save reply as","تحوّل إجابة مفيدة لملف تسلّمه لزميل.","اختار رد أو بطاقة ملف مكتملة|حدّد النص أو الجدول أو العرض أو المستند أو الشفرة|اختار اسم ومكان الحفظ وافتح الملف الناتج","المُصدّر المحلي بيكتب سبع صيغ، منها الجداول والعروض والمستندات والنصوص.","العناوين بتحدد ترتيب الشرائح والجداول بتعتمد على تنسيق الرد. راجع محتوى الملف قبل التسليم.","agents documents explorer", "ChatFiles.cs · Agents.cs / FileRequestMenu · test-saved-work.ps1");
+tool("terminals",2,"مساحات الأوامر","Terminals","تفتح جلسات شغل جاهزة لكل مشروع.","اختار تخطيط ومجلد وبرنامج وأمر بداية لكل جزء|احفظ مساحة العمل أو افتحها|من السجل اختار تعديل مساحة قديمة قبل تشغيلها","بتفتح الجلسات بالتقسيم المختار، والمشروع يقدر يعيد استخدام نفس التجهيز.","سجل التطبيق بيرجع إعدادات الإطلاق. الكلام المكتوب بعد فتح الجلسة بيبقى داخل برنامج الأوامر.","accounts explorer agents", "Terminal.cs · History.cs · FolderSets.cs");
+tool("assistant",2,"المساعد الجانبي","Assistant","تطلب مساعدة وإنت واقف على نفس الصفحة.","افتح المساعد من الشريط|اختار أمر أو اكتب المطلوب|راجع الرد، أو حوّله لمهمة أو أضفه لملاحظة مفتوحة","المساعد بياخد سياق حسب الصفحة، زي مجلد المستكشف أو عنوان تبويب المتصفح.","في صفحة المستندات اسم الملف المفتوح مش ضمن السياق التلقائي. حدّده بنفسك عند السؤال عنه.","agents documents markdown bridge", "Assistant.cs / Orders · MainForm.cs / PageContext");
+tool("bridge",2,"ربط أدوات المساعد","AI agents (MCP)","تخلّي مساعد متوافق يشتغل مع بيانات التطبيق وأدواته.","من الإعدادات انسخ إعداد الربط المناسب|وصّل المساعد المحلي وافتح جلسة|اطلب بحث أو إدارة مهمة أو ملاحظة أو فتح صفحة","أوامر المساعد بتوصل للتطبيق المحلي ومنه للأداة المطلوبة.","النتيجة مرتبطة بالأمر المطلوب وبالإعداد الفعلي للمساعد. فحص الصفحات ما بيختبرش كل اتصال خارجي.","settings assistant agents", "Mcp.cs · ApiTools.cs");
+tool("snip",3,"التقاط وتسجيل الشاشة","Snip & record","تطلع صورة مشروحة أو فيديو لجزء من شغلك.","اختار شاشة أو نافذة أو منطقة أو لقطة طويلة|للصورة قصّ واشرح وارسم أو استخرج النص. للفيديو ابدأ التسجيل|احفظ الصورة أو أوقف التسجيل واحفظ الفيديو","الناتج صورة أو ملف فيديو، وتقدر تفتح مكانه من المعرض.","التعرّف على النص بيعتمد على لغات ويندوز. التسجيل المحمول ليه عيب مثبت في النسخة المفحوصة.","accessories explorer", "Snip.cs · Capture.cs · build.ps1");
+tool("accessories",3,"القياس والرسم","Graphic accessories","تاخد لون أو مقاس أو زاوية من الشاشة.","اختار منتقي الألوان أو لوحة الألوان أو المكبّر|استخدم المسطرة أو علامة الإحداثيات أو المنقلة للقياس|للشرح افتح اللوح وارسم فوق الشاشة","بتطلع بقيمة لون أو قياس أو رسم توضيحي حسب الأداة.","كل أداة نافذة مستقلة. فحص شاشة الالتقاط ما يثبتش دقة كل قياس على كل شاشة.","snip", "Accessories.cs / List");
+tool("system:procs",3,"العمليات","System monitor · Processes","تعرف مين بيستخدم موارد الجهاز.","افتح العمليات|راجع الاستهلاك والمجموعات ومكان البرنامج|حدّد عملية قبل أي أمر إنهاء","القراءة بتوضح التطبيقات الأكثر استهلاكًا.","إنهاء عملية بيأثر على شغل البرنامج. المراجعة فحصت العرض من غير إنهاء تطبيقات المستخدم.","dashboard power/3", "SystemPages.cs / ProcessesPanel · SysInfo.cs");
+tool("system:startup",3,"بدء التشغيل","System monitor · Startup apps","تراجع البرامج اللي بتبدأ مع ويندوز.","افتح بدء التشغيل|راجع الاسم والمصدر والحالة|اختار إدارة العنصر المطلوب","بتشوف إعداد بدء التشغيل وتقدر تدير العناصر المدعومة.","تطبيق التغيير بيعتمد على نوع العنصر وصلاحيات المستخدم.","system:procs settings", "SystemPages.cs / StartupPanel");
+tool("system:drives/0",3,"تنظيف الأقراص","Drives & cleanup · Cleanup","تعرف المساحة وتراجع اللي ممكن تنظّفه.","راجع الأقراص واختار فئة التنظيف|راجع الحجم والعناصر المحددة|نفّذ التنظيف بعد مراجعة اختيارك","المساحة الممكن استرجاعها بتعتمد على اللي اتشال فعلاً.","الملفات المستخدمة ممكن تفضل موجودة. الاختبار ما حذفش ملفات العميل.","system:drives/1 system:drives/2", "SystemPages.cs / DrivesPanel");
+tool("system:drives/1",3,"الملفات الكبيرة","Drives & cleanup · Big files","تلاقي ملفات واخدة مساحة كبيرة.","شغّل الفحص العميق للأقراص الثابتة الجاهزة|افتح تبويب الملفات الكبيرة وراجع الحجم والمسار|افتح مكان الملف وافحصه قبل أي إجراء","بتشوف لحد ٣٠٠ ملف من الأكبر حجمًا.","القراءة ممكن تتخطى أجزاء ما عندكش صلاحية ليها.","explorer system:drives/0", "SystemPages.cs / DrivesPanel");
+tool("system:drives/2",3,"أكبر المجلدات","Drives & cleanup · Biggest folders","تحدد المجلدات اللي بتستهلك أكبر مساحة.","شغّل الفحص العميق للأقراص الثابتة الجاهزة|بعد اكتماله اختار تبويب أكبر المجلدات|افتح المجلد الأهم وراجع محتوياته","تقدر توجّه فحص الملفات لمكان محدد.","المدة والنتيجة بيعتمدوا على القرص وإمكانية قراءة المجلدات.","system:drives/1 explorer", "SystemPages.cs / DrivesPanel");
+tool("system:uninstall",3,"إزالة البرامج","System monitor · Uninstall","تراجع برنامج وبقاياه قبل إزالته.","اختار البرنامج وراجع مكان التثبيت|شغّل برنامج الإزالة الخاص به|افحص البقايا وراجع كل عنصر قبل الحذف","بعد الإزالة تقدر تراجع الملفات ومفاتيح النظام المتبقية.","الإزالة الفعلية تخص جهاز العميل. الاختبار فتح الشاشة وفحص التخطيط فقط لهذا المسار.","system:startup system:drives/0", "Uninstall.cs · SystemPages.cs");
+tool("power/0",3,"التحكم في النوافذ","Power tools · Windows","تثبّت نافذة أو تغيّر شفافيتها.","افتح قائمة النوافذ|اختار النافذة بالاسم|اضبط التثبيت أو الشفافية","التغيير بيتطبق على النافذة المختارة.","النتيجة بتتأثر بصلاحيات النافذة وحالتها.","overlay system:procs", "Power.cs / PowerPage");
+tool("power/1",3,"إجراءات الجهاز","Power tools · Quick actions","تنفّذ إجراءات ويندوز المتكررة من مكان واحد.","افتح الإجراءات السريعة|اختار منع السكون أو الشبكة أو القفل أو إجراء صيانة|راجع أثر الإجراء على الجهاز","ويندوز ينفّذ الإجراء لو الصلاحيات تسمح.","القفل والسكون وإعادة تشغيل المستكشف إجراءات فعلية. الاختبار اكتفى بفحص الواجهة.","dashboard settings", "Power.cs · Toggles.cs");
+tool("power/2",3,"عناوين الجهاز","Power tools · Hosts file","تراجع ربط اسم بعنوان محلي عند الحاجة.","افتح محرر العناوين|راجع النص وعدّل السطر المطلوب|احفظ بصلاحية مناسبة","يُحدّث ملف ويندوز بعد أخذ نسخة احتياطية.","الحفظ محتاج صلاحيات مسؤول. الاختبار استخدم محتوى تجريبي.","power/1", "Power.cs / HostsView");
+tool("power/3",3,"مين فاتح الملف؟","Power tools · What is using a file","تعرف البرنامج اللي ماسك ملف وموقف تغييره.","اختار الملف|اطلب فحص الاستخدام|راجع البرامج المعروضة قبل محاولة النقل أو التعديل","تستدل على البرنامج اللي محتاج تقفل الملف من جواه.","النتيجة بتعتمد على المعلومات المتاحة لويندوز.","explorer documents system:procs", "Power.cs");
+tool("chrome",1,"إشارات المتصفح الخارجي","Chrome · Bookmarks","ترتب المواقع المحفوظة في ملفات المستخدم.","اختار ملف المستخدم وابحث عن إشارة|راجع التكرارات أو أضف وعدّل وانقل وصدّر|اقفل المتصفح الخارجي قبل حفظ تعديلاته","التغييرات بتتكتب في ملف الإشارات بعد عمل نسخة احتياطية.","الفحص الآلي عزل ملفات المستخدم. التعديل على ملف مستخدم حقيقي لسه محتاج تجربة منفصلة.","chrome:extensions browser", "Chrome.cs");
+tool("chrome:extensions",1,"إضافات المتصفح الخارجي","Chrome · Extensions","تستعرض الإضافات الموجودة حسب ملف المستخدم.","افتح أدوات المتصفح الخارجي|اختار تبويب الإضافات|راجع العناصر ومعلوماتها","بتشوف جرد الإضافات المتاحة للقراءة.","المتصفح المدمج له بيئة منفصلة. بيانات الملفات الحقيقية مستبعدة من فحص الشاشات.","chrome browser", "Chrome.cs");
+tool("shortcuts/0",4,"مفاتيح التطبيق العامة","Shortcuts · App shortcuts (global)","تستدعي وظيفة وإنت في برنامج تاني.","اختار إجراء زي فتح الحافظة أو إنشاء مهمة|اضغط تركيبة المفاتيح واحفظها|جرّبها من النافذة المقصودة","الاختصار بيفتح الأداة أو بينفّذ الإجراء المرتبط.","لو ويندوز أو تطبيق تاني حجز نفس التركيبة، اختار تركيبة مختلفة.","clips tasks settings", "Snippets.cs · Power.cs / ShortcutsPage");
+tool("shortcuts/1",4,"مفاتيح التشغيل الخاصة","Shortcuts · My launch shortcuts","تفتح تطبيق أو مجلد من الكيبورد.","أضف وجهة تشغيل|اربطها بتركيبة مفاتيح|احفظ وجرّب الوصول للوجهة","الوجهة بتبقى متاحة من اختصارك العام.","لازم المسار يفضل موجود والتركيبة تكون متاحة.","terminals explorer", "Power.cs / ShortcutsPage");
+tool("shortcuts/2",4,"مفاتيح داخل التطبيق","Shortcuts · Keys inside the app","تلاقي اختصار حسب اللي بتعمله دلوقتي.","افتح مرجع المفاتيح|اختار العملية واقرأ اختصارها|ارجع للصفحة المناسبة واستخدمه","تقدر تعمل نفس الإجراء من الكيبورد.","الاختصار بيرتبط بالصفحة اللي عليها التركيز.","search explorer", "Power.cs / ShortcutsPage");
+tool("shortcuts/3",4,"مفاتيح ويندوز","Shortcuts · Windows shortcuts","ترجع لقائمة مفاتيح النظام من نفس النافذة.","افتح تبويب ويندوز|دور على الوظيفة|استخدم الاختصار في المكان المناسب","القائمة مرجع سريع لمفاتيح النظام.","الإجراء الفعلي بيتنفذ عن طريق ويندوز.","shortcuts/0 power/0", "Power.cs / ShortcutsPage");
+tool("settings",4,"الإعدادات","Settings","تضبط شكل التطبيق وسلوكه ومكان بياناته.","اختار الألوان والخطوط وترتيب الشريط|اضبط التسجيل والسلوك والاختصارات|من بياناتك افتح النسخ أو الاستعادة أو نقل المجلد","تخصيصك محفوظ، وبعض التعديلات بتحتاج إعادة تشغيل.","لو نقلت البيانات، أعد التشغيل فورًا قبل إدخال تعديلات جديدة. التفاصيل في النتائج.","backup overlay shortcuts/0", "SettingsForm.cs / MoveData · Data.cs");
+tool("backup",4,"النسخ والاستعادة والنقل","Your data","تحفظ نسخة من بيانات التطبيق أو تنقل مكانها.","للنسخ اختار وجهة منفصلة وانتظر نجاح الحفظ|للاستعادة اختار النسخة وأكّد إعادة التشغيل|للنقل استخدم مجلد فاضي وأعد التشغيل قبل متابعة الشغل","الاستعادة بتحتفظ بالمجلد السابق، والنقل بيبدأ من نسخة وقت الطلب.","النسخة تشمل مجلد بيانات التطبيق. الملفات الخارجية اللي بتفتحها من المستكشف أو الدفتر ليها نسخها الخاصة.","settings markdown", "Backup.cs / Stage, ApplyPending · Data.cs / MoveDataTo · DataFiles.cs");
+tool("search",4,"البحث والإرسال بين الأدوات","Search this app / Send to","تلاقي عنصر مرة وتكمّل شغله في صفحة تانية.","افتح بحث التطبيق وحدّد نطاق لو النتائج كتير|اختار النتيجة أو افتح قائمتها|ابعث نص لمهمة أو ملاحظة، أو افتح مسار في الأداة المناسبة","نوع العنصر بيحدد الوجهات المتاحة في قائمة الإرسال.","الإرسال للمستندات من القائمة المشتركة له اختلاف عن المعاينة الصريحة في المستكشف.","explorer tasks documents", "AppSearch.cs · AppLinks.cs");
+tool("overlay",4,"سطح المكتب وشريط التشغيل","Desktop overlay / Quick launch / Tray","تفتح تطبيقاتك وتتابع الحالة من برّه النافذة الرئيسية.","فعّل طبقة سطح المكتب أو شريط التشغيل من الإعدادات|ثبّت تطبيقاتك ومجلداتك واستخدم عرض النوافذ|ارجع من أيقونة التطبيق جنب الساعة أو استخدم صندوق التشغيل السريع","تقدر تخفي النافذة وتفضل أدوات التطبيق متاحة من شريط النظام.","إغلاق النافذة الرئيسية بيخفيها. الخروج الكامل له أمر مستقل.","settings shortcuts/0 cards", "Overlay.cs · TopBar.cs · Power.cs · MainForm.cs / OnFormClosing");
+// Each stop has a feature, an action, an observed or intended outcome, and optional next-stop choices.
+const journeys=[
+ {name:"مراجعة مستند من المستكشف",steps:[
+  ["explorer","حدّد الملف","افتح مجلد المشروع وحدّد جدول أو مستند. من قائمة الزر اليمين هتلاقي اختيارين واضحين.","عايز تقرأ ولا تعدّل؟",[[1,"معاينة فقط"],[2,"تعديل"]]],
+  ["documents","اقرأ نسخة المعاينة","اختيار المعاينة الصريح بيمرّر وضع القراءة للملف. حفظ التعديل بيكون مقفول.","تقدر ترجع للمجلد من شريط المستند.",[[5,"ارجع للمجلد"]]],
+  ["documents","افتح للتحرير","التطبيق يحرّر المعاينة السابقة ويحاول يفتح الملف في برنامجه المكتبي.","لو البرنامج قدر يفتحه، اكتب التعديل. لو فيه قفل أو عطل، راجع رسالة الحالة.",[[3,"الملف اتفتح"],[4,"الملف مقفول"]]],
+  ["documents","احفظ أو راجع قرار القفل","احفظ من شريط المستند. عند قفل ملف معدّل تقدر تحفظ أو تتراجع أو تتجاهل التغيير عن قصد.","اختبار المستند التجريبي أثبت إن فشل الحفظ أو الإلغاء يمنع قبول القفل.",[[5,"أنهِي المراجعة"]]],
+  ["power/3","اتحقق من استخدام الملف","راجع حالة الملف والبرنامج اللي ماسكه. استخدم المعاينة لو ده كفاية.","بعد حلّ سبب القفل، ارجع وافتحه للتعديل.",[[1,"اكتفِ بالمعاينة"],[2,"جرّب التحرير تاني"]]],
+  ["explorer","ارجع لمجلد التسليم","افتح مكان الملف من شريط المستند. لو عدّلت، افتح النسخة المحفوظة للتأكد من النتيجة.","خلصت مراجعة المستند.",[]]]},
+ {name:"من نص منسوخ لمهمة بتتكرر",steps:[
+  ["clips","التقط المطلوب","انسخ وصف المتابعة وافتح سجل النسخ. اختار العنصر الصحيح.","النص متاح تاني حتى لو نسخت حاجة غيره."],
+  ["tasks","حوّله لمهمة","من قائمة الإرسال اختار مهمة جديدة. راجع العنوان واضبط القائمة والتاريخ والتذكير.","النص المرسل محتاج مراجعة التاريخ والتكرار في تفاصيل المهمة."],
+  ["tasks","حدّد نوع المتابعة","اختار تكرار لو الشغل بيرجع، أو خلّي المهمة لمرة واحدة.","إيه اللي يحصل بعد الإنجاز؟",[[3,"مرة واحدة"],[4,"موعد متكرر"]]],
+  ["dashboard","اقفل متابعة المرة دي","علّم المهمة كمكتملة. راجع قائمة المكتمل والمهام المستحقة.","المهمة خرجت من قائمة الشغل المفتوح.",[]],
+  ["tasks","راجع الموعد الجديد","علّم المهمة المتكررة كمكتملة. التطبيق يحدّث نفس المهمة ويعيد فتح خطواتها للموعد التالي.","موعد جديد وخطوات جاهزة للدورة القادمة.",[]]]},
+ {name:"من تقرير ويب لملاحظة مرتبطة",steps:[
+  ["browser","افتح التقرير","اعرض الصفحة في المتصفح. استخدم وضع القراءة لو تصميم الصفحة مشتت.","نص التقرير جاهز للقراءة أو الحفظ."],
+  ["browser","احفظ النص في دفتر","اختار حفظ الصفحة كملاحظة. لازم يكون فيه مجلد دفتر محدد.","عندك دفتر بالفعل؟",[[3,"الدفتر جاهز"],[2,"لسه مفيش دفتر"]]],
+  ["markdown","أضف مجلد الدفتر","اختار مجلد تقدر تكتب فيه من قائمة الدفاتر. ارجع للتقرير واطلب الحفظ تاني.","المتصفح يقدر يكتب القصاصة في المجلد المختار.",[[3,"احفظ القصاصة"]]],
+  ["markdown","راجع القصاصة واربطها","افتح القصاصة من مجلد القصاصات. راجع عنوان المصدر والنص، وضيف رابط لملاحظة مرتبطة.","النسخة بقت ملف مستقل تقدر تفتحه من الدفتر أو المستكشف.",[]]]},
+ {name:"من طلب لفريق لحد ملف نهائي",steps:[
+  ["accounts","اختار الحساب","راجع إن أداة الخدمة متاحة واختار الحساب الافتراضي أو حساب لكل عضو.","المحادثات الجديدة تقدر تستخدم الحساب المختار."],
+  ["agents","اكتب المطلوب وحدد مجلده","افتح محادثة للمشروع واختار إعداد الفريق. اشرح شكل النتيجة اللي محتاجها.","القائد يستقبل طلب محدد."],
+  ["team","راجع توزيع الشغل","اقرأ تكليف كل عضو. عدّل أو ابعت الخطة لما تبقى مناسبة.","الأعضاء يستلموا التكليفات بعد إرسال الخطة."],
+  ["team","راجع إجابات الأعضاء","تابع نتيجة كل عضو، واطلب مراجعة القائد أو تجميع الرد النهائي.","بقى عندك رد قابل للتدقيق قبل تسليمه."],
+  ["exports","سلّم ملف قابل للفتح","اختار حفظ الرد بالصيغة المناسبة. افتح الملف وراجع الجدول أو ترتيب الشرائح.","اختبار الحفظ أنشأ سبع صيغ. دقة كلام المساعد مسؤولية المراجع.",[]]]},
+ {name:"شرح مشكلة بصورة أو فيديو",steps:[
+  ["snip","اختار شكل الدليل","حدّد نافذة أو جزء من الشاشة. اختار إذا كنت محتاج لحظة ثابتة أو خطوات فيها حركة.","الصورة والفيديو ليهم مسارين.",[[1,"صورة مشروحة"],[2,"فيديو"]]],
+  ["snip","علّم على مكان المشكلة","خد اللقطة وارسم سهم أو تحديد. احفظ الصورة باسم مفهوم.","ملف الصورة جاهز للمراجعة.",[[3,"راجع الناتج"]]],
+  ["snip","سجّل الخطوات","اختار المنطقة وابدأ التسجيل، ثم أوقفه واحفظ الفيديو. التسجيل محتاج محرّك فيديو صالح.","على جهاز جديد لازم تختبر تكوين ملف فيديو فعلي.",[[3,"راجع الناتج"]]],
+  ["explorer","افتح الناتج","افتح المجلد من معرض اللقطات. راجع إن مكان المشكلة واضح في الصورة أو إن الفيديو قابل للتشغيل.","بقى عندك دليل تقدر تسلّمه.",[]]]},
+ {name:"نسخة احتياطية أو نقل لمجلد جديد",steps:[
+  ["settings","اختار الهدف","افتح الإعدادات ثم بياناتك. النسخ بيعمل نسخة للاسترجاع، والنقل بيغيّر المكان المستخدم بعد إعادة التشغيل.","محتاج نسخة أمان ولا نقل؟",[[1,"نسخة أمان"],[3,"نقل البيانات"]]],
+  ["backup","احفظ نسخة منفصلة","اختار مجلد منفصل. التطبيق يحاول يكتب التغييرات المعلقة قبل نسخ مجلد البيانات.","احتفظ بالنسخة وافحصها وقت الحاجة للاستعادة.",[[2,"استرجاع نسخة"]]],
+  ["backup","استرجع النسخة","اختار النسخة، وافق على الاستعادة وإعادة التشغيل. التطبيق يفحص ملفات البيانات الأساسية ويحتفظ بالمجلد السابق.","افتح بياناتك بعد إعادة التشغيل وقارنها بالنسخة المطلوبة.",[]],
+  ["backup","انقل ثم أعد التشغيل فورًا","اختار مجلد فاضي منفصل. بعد النسخ، أعد التشغيل قبل أي كتابة إضافية.","التجربة أثبتت إن التعديلات بين النسخ وإعادة التشغيل بتفضل في المكان القديم.",[[4,"راجع بعد التشغيل"]]],
+  ["settings","تأكد من مكان البيانات","راجع مسار البيانات وافتح عنصر معروف. لو كنت عدّلت قبل إعادة التشغيل، احتفظ بالمجلد القديم للمقارنة.","كمّل شغلك بعد التحقق من المكان والمحتوى.",[]]]},
+ {name:"من تنبيه مساحة لملف كبير",steps:[
+  ["dashboard","راجع مساحة القرص","شوف حالة المساحة من الرئيسية. افتح مراقبة النظام ثم الأقراص والتنظيف.","عرفت القرص اللي محتاج فحص."],
+  ["system:drives/2","ضيّق نطاق البحث","شغّل الفحص العميق. التطبيق بيفحص الأقراص الثابتة الجاهزة. بعدها افتح تبويب أكبر المجلدات وراجع المكان الأكثر استهلاكًا.","بقى عندك مجلد محدد للفحص."],
+  ["system:drives/1","راجع الملفات الكبيرة","افتح تبويب الملفات الكبيرة من نفس نتائج الفحص. اربط مسار الملف بالمجلد اللي بتراجعه واقرأ الحجم قبل أي تغيير.","تقدر تميّز بين ملف مشروع وملف ممكن تستغنى عنه."],
+  ["explorer","افتح الملف في مكانه","راجع الملف من المستكشف واتخذ قرار الاحتفاظ أو النقل أو الحذف بنفسك.","الرحلة بتحدد مصدر الاستهلاك. القرار النهائي في إيدك.",[]]]}
+];
+const findings=[
+ {id:"close",kind:"fault",rank:"أولوية أولى · حماية الشغل",title:"آخر ملاحظة ممكن تتقفل بعد فشل الحفظ",area:["markdown"],impact:"لو الملف غير قابل للكتابة، التبويب بيتشال وآخر تعديل مش بيوصل للملف.",proof:"على النسخة الحالية، منعنا الكتابة على ملف تجريبي. الحفظ رجع بالفشل، وعدد التبويبات بعد القفل بقى صفر. الملف على القرص فضِل بالنص القديم.",accept:"يُمنع القفل عند فشل الحفظ، ويفضل النص قدام المستخدم مع اختيار إعادة المحاولة أو حفظ نسخة. يتكرر الاختبار عند قفل التبويب والخروج.",source:"MarkdownPage.cs / AllClosed, Save · EditorTabs.cs / Close"},
+ {id:"move",kind:"fault",rank:"أولوية أولى · سلامة النقل",title:"تعديلات بعد نقل البيانات بتفضل في المكان القديم",area:["settings","backup"],impact:"لو اخترت تأجيل إعادة التشغيل، ممكن ترجع تفتح التطبيق وتلاقي آخر شغلك غايب. النسخة القديمة لسه فيها التعديلات.",proof:"في مجلدين تجريبيين، نقلنا البيانات وكتبنا ملاحظة بعد النقل. مكان بدء التشغيل أشار للجديد، والملاحظة ظهرت في القديم بس.",accept:"تأجيل النقل لحد الخروج أو نقل آخر التعديلات قبل تبديل المكان. اختبار القبول يضيف ويعدّل ويحذف بعد النقل ثم يقارن البيانات بعد إعادة التشغيل.",source:"SettingsForm.cs / MoveData · Data.cs / MoveDataTo, DataFolder"},
+ {id:"preview",kind:"trace",rank:"أولوية أولى · وضوح وضع الملف",title:"أمر مكتوب عليه «قراءة فقط» ممكن يفتح محرّر",area:["documents","search","explorer"],impact:"اختيار المستندات من قائمة الإرسال المشتركة ممكن يفتح ملف مكتبي قابل للتعديل لو وضع التحرير مفعّل. فتح الملف وحده ما يكتبش تغييرات.",proof:"تتبّعنا الأمر من قائمة الإرسال لفتح المستند. القائمة المشتركة بتسيب الاختيار للإعداد الافتراضي. اختيار المعاينة المباشر في المستكشف بيطلب القراءة صراحة.",accept:"يمرّر أمر المعاينة وضع القراءة صراحة. ينجح الاختبار مع تشغيل وإيقاف وضع التحرير ومع ملف مفتوح من قبل.",source:"AppLinks.cs / SendTo · App.cs / OpenDocument · DocumentsPage.cs / EditFor"},
+ {id:"recorder",kind:"fault",rank:"قبل توزيع نسخة محمولة",title:"النسخة المحمولة فيها مشغّل بالوساطة بدل محرّك الفيديو الكامل",area:["snip"],impact:"التسجيل ممكن يشتغل على جهاز التطوير لأن المحرّك مثبت عليه، ويتعطل على جهاز عميل جديد.",proof:"فكّينا ضغط المورد الموجود داخل الملف التنفيذي وقارنّا بصمته. طابق ملف التشغيل الوسيط على الجهاز حرفيًا. اختبار إيقاف التسجيل بيستخدم عملية بديلة.",accept:"تضمين محرّك مستقل واختبار تسجيل ثم إيقاف وإعادة تشغيل الفيديو على جهاز نظيف من غير محرّك في مسار النظام.",source:"build.ps1 / ffmpeg resource · Snip.cs / FindFfmpeg · test-recorder.ps1"},
+ {id:"cliptab",kind:"trace",rank:"دقة المصدر · المتصفح",title:"قصاصة المقال ممكن تحمل عنوان تبويب تاني",area:["browser","markdown"],impact:"لو بدّلت التبويب أثناء استخراج نص صفحة، ممكن ملف القصاصة يجمع نص الصفحة الأولى وعنوان أو رابط الثانية.",proof:"القراءة بتبدأ من التبويب النشط، وبعد انتظار النتيجة التنفيذ بيرجع يقرأ الاسم والرابط من التبويب النشط وقتها. المسار اتراجع في الكود ولسه محتاج إعادة تجربة حية.",accept:"تثبيت هوية الصفحة قبل القراءة والتحقق منها عند الحفظ. تجربة بتقريرين مختلفين وتبديل سريع، ثم مطابقة النص والعنوان والرابط.",source:"Browser.cs / SaveAsNote"},
+ {id:"context",kind:"trace",rank:"تحسين تجربة العميل",title:"مساعد المستندات محتاج يعرف الملف المقصود",area:["documents","assistant"],impact:"لو سألت «لخّص الملف ده»، أمر فتح المساعد وحده ما بيحددش أي تبويب مستندات تقصد.",proof:"الزر بيفتح المساعد. سياق الصفحة فيه مسار ملاحظة أو مجلد أو عنوان متصفح عند توفرهم، لكن مفيهوش مسار المستند النشط.",accept:"يظهر اسم الملف المقصود في المساعد قبل الإرسال، ويتغير مع تبديل التبويب. الاختبار يستخدم ملفين من مجلدين مختلفين.",source:"DocumentsPage.cs / Ask the Assistant · MainForm.cs / PageContext · Assistant.cs"},
+ {id:"office",kind:"open",rank:"تجربة لازمة على جهاز العميل",title:"التعديل الفعلي للمستندات المحمية",area:["documents","mail"],impact:"المعاينة والكتابة والحفظ بتعتمد على برامج المكتب والحماية المثبتة عند العميل.",proof:"اختبار قرارات الحفظ والإلغاء نجح. اختبار ترتيب نوافذ المحرّر اتوقف برسالة رفض صلاحية سطح المكتب المعزول، واتكرر على الملف التنفيذي المحلي.",accept:"افتح نسخة اختبار محمية من جدول ومستند وعرض. عدّل واحفظ وبدّل التبويب واقفله وافتحه تاني. افحص كمان معاينة الملف الثابت المحمي والبريد.",source:"test-office-edit.ps1 · test-document-close.ps1 · OfficeView.cs"},
+ {id:"live",kind:"open",rank:"تجربة لازمة على جهاز العميل",title:"ربط الحساب والمتصفح بنهاية حقيقية",area:["accounts","agents","browser","chrome","bridge"],impact:"تجربة الخدمة الفعلية بتعتمد على حساب العميل ومحرك المتصفح والاتصال.",proof:"فحص الشاشات عزل حسابات المستخدم، وعرض هيكل المتصفح ببيانات تجريبية. فحص المحادثات والفرق استخدم بدائل محلية.",accept:"بحساب تجريبي، سجّل الدخول وأرسل طلب واحفظ الرد وأعد فتحه. افتح تقرير واختبر قصاصته، وراجع الإشارات في ملف متصفح تجريبي.",source:"test-ui-sweep.ps1 · test-agent-conversations.ps1 · test-leader-team.ps1"},
+ {id:"startup",kind:"open",rank:"وضوح النتائج عند نقص الصلاحيات",title:"قائمة بدء التشغيل ممكن تعرض جزء من البرامج",area:["system:startup"],impact:"قائمة البرامج المتاحة للقراءة ممكن تبان كاملة للمستخدم رغم إن ويندوز مانع قراءة مصادر تانية.",proof:"فحص الواجهات سجّل ٣٢ رسالة رفض قراءة مرتبطة بمصدرين لبدء التشغيل. الرسائل اتكررت مع أشكال الواجهة وتشغيل اختبارات التنقل.",accept:"اعرض تنبيه واضح إن الجرد جزئي لما يتمنع مصدر، وقارن الجرد بحساب عادي على جهاز عميل. اختبر تغييرات النظام والإزالة في بيئة مخصصة.",source:"SysInfo.cs · SystemPages.cs · UI sweep / Errors"}
+];
+const layers=[
+ ["الوصول","منين يبدأ الطلب؟","ممكن تفتح نافذة من أيقونة جنب الساعة، اختصار عام، بحث التطبيق، زر إرسال أو سحب ملف. كل مدخل بيحدد إيه اللي هيتسلّم للخطوة الجاية.","overlay shortcuts/0 search"],
+ ["التوجيه","إيه اللي هيتفتح؟","النص ممكن يبقى مهمة أو ملاحظة. المجلد يروح للمستكشف أو الطرفية. الملف نوعه واختيارك للقراءة أو التعديل بيحددوا الأداة المناسبة.","search explorer tasks documents"],
+ ["التنفيذ","مين بيعمل الشغل؟","الملاحظات والمهام شغل محلي. تعديل المستند بيستخدم برنامج المكتب، وعرض صفحة بيستخدم محرك المتصفح، والتسجيل محتاج محرّك الفيديو. المساعد بيستخدم الخدمة والحساب المختارين.","documents browser snip agents"],
+ ["الحفظ","النتيجة بتروح فين؟","المهام والملاحظات اللاصقة في مجلد بيانات التطبيق، والمحادثات ليها سجل ومسودات. مستندات المكتب ودفتر النصوص بيتحفظوا في مساراتهم. الرد المُصدّر بيتكتب في المكان اللي اخترته.","notes markdown exports backup"],
+ ["الرجوع","إزاي أتأكد من النتيجة؟","افتح الملف من مكانه أو راجع المهمة أو المحادثة. للعودة لبيانات سابقة استخدم نسخة احتياطية تخص التطبيق. راجع مكان الملف لو كان خارج مجلد البيانات.","explorer tasks agents backup"]
+];
+const shotKeys="accounts activity agents browser cards chrome-extensions chrome clips dashboard documents explorer markdown notes power-0 power-1 power-2 power-3 prompts settings shortcuts-0 shortcuts-1 shortcuts-2 shortcuts-3 snip system-drives-0 system-drives-1 system-drives-2 system-procs system-startup system-uninstall tagged tasks terminals".split(" ");
+const sprite="customer-map-tools.png";
+const byId=new Map(toolsList.map(item=>[item.id,item]));
+const diagramStyle=document.createElement("style");
+diagramStyle.textContent=".flowmap{position:relative;display:grid;gap:33px;padding:9px 13px}.flowmap svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.flowrow{display:flex;justify-content:center;gap:15px}.flowstop{z-index:1;max-width:48%;font-weight:600;font-size:15px;line-height:1.35;background:#f1f6f2;border:1px solid #b7cec5;border-radius:10px;padding:9px 13px}.flowstop.here{background:var(--deep);border-color:var(--deep);color:white;box-shadow:0 0 0 4px #b9e3cf}.flowstop.done{background:#d9eee0}.edge{fill:none;stroke:#9bb5ad;stroke-width:1.6}.edge.on{stroke:#197857;stroke-width:3;stroke-dasharray:7 3;animation:travel 800ms linear 2}@keyframes travel{to{stroke-dashoffset:-20}}";
+document.head.append(diagramStyle);
+const el=id=>document.getElementById(id);
+const arabic=n=>n.toLocaleString("ar-EG");
+const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const srcCode=s=>'<code dir="ltr">'+escapeHtml(s)+'</code>';
+const labels={all:"كل النتائج",fault:"ثبت بالتجربة",trace:"ظاهر من مسار التنفيذ",open:"محتاج اختبار حي"};
+let selected="documents", journey=0, stop=0, visited=[], timer=0, filter="all", layerIndex=0;
+let motion=!matchMedia("(prefers-reduced-motion: reduce)").matches;
+function motionUI(){
+ document.body.classList.toggle("still",!motion);
+ el("motion").textContent=motion?"إيقاف الحركة":"تفعيل الحركة";
+ el("motion").setAttribute("aria-pressed",String(motion));
+}
+function animate(node){node.classList.remove("fade");void node.offsetWidth;node.classList.add("fade");}
+function links(ids){return ids.map(id=>'<button class="link" data-tool="'+id+'">'+byId.get(id).name+'</button>').join("");}
+function normalize(s){return s.toLowerCase().replace(/[أإآ]/g,"ا").replace(/[َ-ٟ]/g,"");}
+function matches(item,query){return normalize([item.name,item.label,item.goal,item.id,...item.steps].join(" ")).includes(normalize(query.trim()));}
+function renderTree(){
+ const hits=toolsList.filter(t=>matches(t,el("search").value));
+ el("empty").hidden=hits.length>0;
+ el("tree").innerHTML=groups.map(([name,color],index)=>{
+  const items=hits.filter(t=>t.group===index);if(!items.length)return "";
+  return '<section class="lane" style="--c:'+color+'"><h3>'+name+'</h3><div class="nodes">'+items.map(t=>'<button class="node" data-tool="'+t.id+'" aria-pressed="'+(t.id===selected)+'">'+t.name+'</button>').join("")+'</div></section>';
+ }).join("");
+ el("detail").hidden=!hits.length;
+ return hits;
+}
+function renderTool(id){
+ const t=byId.get(id);if(!t)return;
+ selected=id;renderTree();
+ const imgIndex=shotKeys.indexOf(id.replace(/[:/]/g,"-"));
+ const capture=imgIndex<0?"":'<figure style="margin:12px 0"><figcaption class="mini quiet">مكانها في نسخة ويندوز</figcaption><div style="direction:ltr;position:relative;overflow:hidden;aspect-ratio:757/104;outline:1px solid var(--line);border-radius:6px"><img alt="شريط '+escapeHtml(t.name)+' من شاشة تجريبية" src="'+sprite+'" style="position:absolute;width:100%;height:auto;left:0;top:0;transform:translateY(-'+(imgIndex*100/shotKeys.length)+'%)"></div></figure>';
+ const related=findings.filter(f=>f.area.includes(id));
+ el("detail").innerHTML='<div class="insTop"><span class="eng" lang="en">'+escapeHtml(t.label)+'</span><h3>'+t.name+'</h3><p>'+t.goal+'</p></div><div class="insBody">'+capture+'<h4>الخطوات</h4><ol>'+t.steps.map(s=>'<li>'+s+'</li>').join("")+'</ol><h4>النتيجة</h4><p>'+t.result+'</p><h4>خد بالك</h4><p>'+t.condition+'</p><h4>أدوات مرتبطة</h4><div class="links">'+links(t.related)+'</div>'+related.map(f=>'<button class="link findingLink" data-finding="'+f.id+'">'+f.title+' ←</button>').join("")+'<details><summary>مرجع التنفيذ</summary>'+srcCode(t.source)+'</details></div>';
+ el("detail").insertAdjacentHTML("beforeend",'<div style="padding:0 21px 15px"><button class="back mini" id="returnMap">ارجع لخريطة الأدوات ↑</button></div>');
+ animate(el("detail"));
+}
+function selectTool(id,fromTree){
+ if(el("map").hidden)showView("map",false);if(!fromTree)el("search").value="";renderTool(id);
+ if(matchMedia("(max-width:850px)").matches){el("detail").focus({preventScroll:true});el("detail").scrollIntoView({block:"start"});}
+}
+function stopPlay(){clearTimeout(timer);timer=0;el("play").textContent="تشغيل تلقائي";}
+function targets(){
+ const row=journeys[journey].steps[stop];return row[4]===undefined?[[stop+1,"التالي"]]:row[4];
+}
+function moveStop(to){visited.push(stop);stop=to;renderJourney();}
+function outgoing(steps,index){return steps[index][4]===undefined?[[index+1,""]]:steps[index][4];}
+function routePaths(steps){
+ const paths=[[0]],queue=[0];
+ for(let i=0;i<queue.length;i++){
+  const from=queue[i];
+  for(const [to] of outgoing(steps,from)){
+   if(!paths[to]){paths[to]=paths[from].concat(to);queue.push(to);}
+  }
+ }
+ return paths;
+}
+function drawEdges(){
+ const canvas=el("flowmap");if(!canvas||el("journeys").hidden)return;
+ const bounds=canvas.getBoundingClientRect(), steps=journeys[journey].steps;
+ const svg=canvas.querySelector("svg"), paths=[];
+ for(let from=0;from<steps.length;from++){
+  const a=canvas.querySelector('[data-jump="'+from+'"]').getBoundingClientRect();
+  for(const [to] of outgoing(steps,from)){
+   const b=canvas.querySelector('[data-jump="'+to+'"]').getBoundingClientRect();
+   const forward=b.top>a.top+5, ax=a.left+a.width/2-bounds.left, bx=b.left+b.width/2-bounds.left;
+   let curve;
+   if(forward){
+    const y1=a.bottom-bounds.top,y2=b.top-bounds.top,mid=(y1+y2)/2;
+    curve="M "+ax+" "+y1+" C "+ax+" "+mid+" "+bx+" "+mid+" "+bx+" "+(y2-2);
+   }else{
+    const y1=a.top+a.height/2-bounds.top,y2=b.top+b.height/2-bounds.top;
+    const right=bounds.width-2, x1=a.right-bounds.left, x2=b.right-bounds.left;
+    curve="M "+x1+" "+y1+" C "+right+" "+(y1+9)+" "+right+" "+(y2-12)+" "+(x2+3)+" "+y2;
+   }
+   const on=(to===stop&&visited.at(-1)===from);
+   paths.push('<path class="edge'+(on?' on':'')+'" marker-end="url(#arrow)" d="'+curve+'"/>');
+  }
+ }
+ svg.innerHTML='<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6" fill="#668d7f"/></marker></defs>'+paths.join("");
+}
+function startJourney(n){stopPlay();journey=n;stop=0;visited=[];el("journeySelect").value=String(n);renderJourney();}
+function renderJourney(){
+ const steps=journeys[journey].steps,row=steps[stop], choices=targets();
+ const levels=Array(steps.length).fill(0), rows=[];
+ steps.forEach((s,i)=>outgoing(steps,i).forEach(([to])=>{if(to>i)levels[to]=Math.max(levels[to],levels[i]+1);}));
+ levels.forEach((level,i)=>{if(!rows[level])rows[level]=[];rows[level].push(i);});
+ el("stations").className="";
+ el("stations").innerHTML='<div class="flowmap" id="flowmap" aria-label="خريطة قرارات الرحلة"><svg aria-hidden="true"></svg>'+rows.map(row=>'<div class="flowrow">'+row.map(i=>'<button class="flowstop '+(i===stop?"here":visited.includes(i)?"done":"")+'" data-jump="'+i+'" '+(i===stop?'aria-current="step"':'')+'>'+steps[i][1]+'</button>').join("")+'</div>').join("")+'</div>';
+ requestAnimationFrame(drawEdges);
+ el("prev").disabled=!visited.length;el("next").hidden=choices.length!==1;
+ el("play").disabled=choices.length!==1;
+ el("stepDetail").innerHTML='<div class="insTop"><span class="eng" lang="en">'+escapeHtml(byId.get(row[0]).label)+'</span><h3>'+row[1]+'</h3></div><div class="insBody"><p>'+row[2]+'</p><h4>'+(choices.length>1?"نقطة قرار":"النتيجة")+'</h4><p>'+row[3]+'</p>'+(choices.length>1?'<div class="links" style="margin:12px 0">'+choices.map(([dest,name])=>'<button class="soft" data-go="'+dest+'">'+name+'</button>').join("")+'</div>':'')+'<h4>مكان الخطوة في التطبيق</h4>'+links([row[0]])+(!choices.length?'<p style="margin-top:12px"><button class="soft" id="restart">الرحلة من الأول</button></p>':'')+'</div>';
+ animate(el("stepDetail"));
+}
+function autoplay(){
+ if(timer){stopPlay();return;}
+ function advance(){
+  const choices=targets();if(choices.length!==1){stopPlay();return;}
+  moveStop(choices[0][0]);if(targets().length!==1){stopPlay();return;}
+  timer=setTimeout(advance,3500);
+ }
+ el("play").textContent="إيقاف العرض";timer=setTimeout(advance,3500);
+}
+function renderAudit(){
+ el("metrics").innerHTML=[["١٥ / ١٦","مجموعات اختبار نجحت"],["٣٣","شاشة ومسار فرعي"],["٤٩٥","لقطة فحص"]].map(([n,l])=>'<div><strong dir="ltr">'+n+'</strong>'+l+'</div>').join("");
+ el("issueFilter").innerHTML=Object.entries(labels).map(([k,v])=>'<button class="chip" data-filter="'+k+'" aria-pressed="'+(filter===k)+'">'+v+'</button>').join("");
+ el("auditNote").textContent="٣ نتائج ثبتت على الملف التنفيذي، و٣ من تتبّع الكود، و٣ مجالات اختبار ميداني.";
+ el("issues").innerHTML=findings.filter(f=>filter==="all"||filter===f.kind).map(f=>'<article class="issue" tabindex="-1" id="issue-'+f.id+'"><span class="flag '+(f.kind==="open"?"open":"")+'">'+f.rank+'</span><h3>'+f.title+'</h3><p>'+f.impact+'</p><h4>'+labels[f.kind]+'</h4><p class="proof">'+f.proof+'</p><h4>إمتى نعتبرها اتقفلت؟</h4><p>'+f.accept+'</p><div class="links" style="margin-top:8px">'+links(f.area)+'</div><details><summary>مرجع التنفيذ</summary>'+srcCode(f.source)+'</details></article>').join("");
+ el("evidence").innerHTML='<p>المراجعة بتاريخ ٢٠ نوفمبر ٢٠٢٦. الاختبارات الآلية اشتغلت على بناء اختباري من المصدر. تجارب قفل الملاحظة ونقل البيانات وفحص مكوّن التسجيل اتعملت على النسخة التنفيذية المحلية نفسها.</p><p>راجعنا فتح الصفحات بخمسة أشكال وثلاثة أحجام، و٣٠٠ تبديل شاشة و٢٨٠ تغيير حجم و١٤ عملية بحث. اتسجّلت ٣٢ رسالة تخص صلاحيات قراءة برامج بدء التشغيل. وظهر ١١ تنبيه لقلة الألوان في الشكل الكلاسيكي. اللقطات بتبيّن واجهات فيها محتوى قليل. ده وحده مش كفاية للحكم إن الشاشة فاضية.</p><p>نجحت اختبارات قرارات الحفظ والاستعادة والتكرار ومسودات المحادثات واسترجاعها، وتوليد سبع صيغ ملفات وإعادة تجهيز جلسات الأوامر. فحص مستقل قرأ جدول تجريبي وتأكّد إن الرقم العشري والرقم التعريفي اللي بيبدأ بصفر فضلوا زي ما هم.</p><p>اختبار ترتيب نافذة المحرّر احتاج صلاحية سطح مكتب منعها ويندوز هنا. برامج المكتب المحمية، الحسابات الحية، التشغيل على جهاز نظيف وإجراءات النظام اللي بتغيّر الجهاز لسه محتاجة تحقق ميداني.</p><p>'+srcCode("Source faf5559 · tools/test-all.ps1 · tools/test-ui-sweep.ps1")+'</p><p>'+srcCode("AllInOne.exe SHA-256 B011E1718AFB0F4E8EA7585919572FADF9E34E9DB59772BB34C43BCA4D717E1B")+'</p>';
+}
+function renderLayers(){
+ el("layerBands").innerHTML=layers.map((l,i)=>'<button class="station '+(layerIndex===i?"active":"")+'" data-layer="'+i+'" aria-pressed="'+(i===layerIndex)+'">'+arabic(i+1)+' · '+l[0]+'</button>').join("");
+ const l=layers[layerIndex];
+ el("layerInfo").innerHTML='<div class="insTop"><h3>'+l[1]+'</h3></div><div class="insBody"><p>'+l[2]+'</p><h4>شوفها في الأدوات دي</h4><div class="links">'+links(l[3].split(" "))+'</div></div>';
+ animate(el("layerInfo"));
+}
+function showView(view,scroll){
+ if(!["map","layers","journeys","audit"].includes(view))return;
+ stopPlay();
+ for(const v of ["map","layers","journeys","audit"])el(v).hidden=v!==view;
+ document.querySelectorAll(".nav [data-view]").forEach(b=>b.setAttribute("aria-current",String(b.dataset.view===view)));
+ animate(el(view));if(view==="journeys")requestAnimationFrame(drawEdges);if(scroll)el("content").scrollIntoView({block:"start"});
+}
+const layerSection=document.createElement("section");layerSection.id="layers";layerSection.hidden=true;
+layerSection.innerHTML='<div class="sectionHead"><div><h2>طبقات التشغيل</h2><p>تتبّع الطلب من لحظة الضغط لحد المكان اللي تلاقي فيه شغلك بعد إعادة الفتح.</p></div></div><div class="layout"><div class="surface"><div class="travel" id="layerBands"></div></div><aside id="layerInfo" class="inspector" aria-live="polite"></aside></div>';
+el("content").insertBefore(layerSection,el("journeys"));
+const layerTab=document.createElement("button");layerTab.dataset.view="layers";layerTab.textContent="طبقات التشغيل";document.querySelector(".nav").insertBefore(layerTab,document.querySelector('.nav [data-view="journeys"]'));
+el("journeySelect").innerHTML=journeys.map((j,i)=>'<option value="'+i+'">'+j.name+'</option>').join("");
+el("journeySelect").onchange=e=>startJourney(Number(e.target.value));
+el("tourStart").onclick=()=>{startJourney(0);showView("journeys",true);};
+el("search").oninput=()=>{const hits=renderTree();if(hits.length&&!hits.some(t=>t.id===selected))renderTool(hits[0].id);};
+el("next").onclick=()=>{const choices=targets();stopPlay();if(choices.length===1)moveStop(choices[0][0]);};
+el("prev").onclick=()=>{stopPlay();if(visited.length){stop=visited.pop();renderJourney();}};
+el("play").onclick=autoplay;
+el("motion").onclick=()=>{motion=!motion;motionUI();if(!motion)stopPlay();};
+document.addEventListener("visibilitychange",()=>{if(document.hidden)stopPlay();});
+document.addEventListener("click",e=>{
+ const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+ if(d.view)showView(d.view,true);
+ if(d.tool)selectTool(d.tool,Boolean(b.closest("#tree")));
+ if(b.id==="returnMap"){el("search").focus({preventScroll:true});el("map").scrollIntoView({block:"start"});}
+ if(d.layer!==undefined){layerIndex=Number(d.layer);renderLayers();}
+ if(d.go!==undefined){stopPlay();moveStop(Number(d.go));}
+ if(d.jump!==undefined){stopPlay();const i=Number(d.jump);visited=routePaths(journeys[journey].steps)[i].slice(0,-1);stop=i;renderJourney();}
+ if(b.id==="restart")startJourney(journey);
+ if(d.filter){filter=d.filter;renderAudit();}
+ if(d.finding){filter="all";renderAudit();showView("audit",false);const card=el("issue-"+d.finding);card.focus({preventScroll:true});card.scrollIntoView({block:"center"});}
+});
+window.addEventListener("resize",drawEdges);
+motionUI();renderTool(selected);renderLayers();startJourney(0);renderAudit();showView("map",false);
+</script></html>

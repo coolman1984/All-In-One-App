@@ -12,7 +12,7 @@ namespace StickyPro
     class LookPicker : Form
     {
         class Preset { public string Design, Name; public int Theme; public bool Dark; public Rectangle R; }
-        static readonly string[][] Designs = { new[] { "soft", "Soft" }, new[] { "serq", "SerQ" }, new[] { "nexus", "Nexus" }, new[] { "classic", "Classic" } };
+        static readonly string[][] Designs = { new[] { "flow", "Flow" }, new[] { "soft", "Soft" }, new[] { "serq", "SerQ" }, new[] { "nexus", "Nexus" }, new[] { "classic", "Classic" } };
         readonly List<Preset> presets = new List<Preset>();
         readonly List<KeyValuePair<int, Rectangle>> swatches = new List<KeyValuePair<int, Rectangle>>();
         object hot;
@@ -39,7 +39,7 @@ namespace StickyPro
                     presets.Add(new Preset
                     {
                         Design = key, Name = Designs[d][1] + (dark == 1 ? " dark" : " light"), Dark = dark == 1,
-                        Theme = key == "soft" ? Ui.SoftTheme : key == "serq" ? Ui.SerqTheme : key == "nexus" ? 6 : 0,
+                        Theme = key == "flow" ? Ui.FlowTheme : key == "soft" ? Ui.SoftTheme : key == "serq" ? Ui.SerqTheme : key == "nexus" ? 6 : 0,
                         R = new Rectangle(pad + d * (tw + gap), top + dark * (th + Ui.S(30)), tw, th)
                     });
                 }
@@ -71,16 +71,16 @@ namespace StickyPro
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ClassStyle |= 0x20000; /* CS_DROPSHADOW */ return cp; } }
 
         // The colours of one design, read by switching the flags for a moment (painting is on the UI thread).
-        struct Pal { public Color Bg, Card, Side, SideText, Text, Muted, Line, Accent; }
+        struct Pal { public Color Bg, Card, Side, SideSel, SideText, Text, Muted, Line, Accent; }
         static Pal Read(string design, int theme, bool dark)
         {
-            bool d0 = Ui.Dark, n0 = Ui.Nexus, v0 = Ui.Navy, s0 = Ui.Soft; int t0 = Ui.ThemeIndex; var a0 = Ui.CustomAccent;
+            bool d0 = Ui.Dark, n0 = Ui.Nexus, v0 = Ui.Navy, s0 = Ui.Soft, f0 = Ui.Flow; int t0 = Ui.ThemeIndex; var a0 = Ui.CustomAccent;
             try
             {
-                Ui.Dark = dark; Ui.Nexus = design != "classic"; Ui.Navy = design == "serq" || design == "soft"; Ui.Soft = design == "soft"; Ui.ThemeIndex = theme; Ui.CustomAccent = null;
-                return new Pal { Bg = Ui.Bg, Card = Ui.Card, Side = Ui.Sidebar, SideText = Ui.SidebarMuted, Text = Ui.Text, Muted = Ui.Muted, Line = Ui.Line, Accent = Ui.AccentFill };
+                Ui.Dark = dark; Ui.Flow = design == "flow"; Ui.Nexus = design != "classic"; Ui.Navy = design == "serq" || design == "soft"; Ui.Soft = design == "soft"; Ui.ThemeIndex = theme; Ui.CustomAccent = null;
+                return new Pal { Bg = Ui.Bg, Card = Ui.Card, Side = Ui.Sidebar, SideSel = Ui.SidebarSel, SideText = Ui.SidebarMuted, Text = Ui.Text, Muted = Ui.Muted, Line = Ui.Line, Accent = Ui.AccentFill };
             }
-            finally { Ui.Dark = d0; Ui.Nexus = n0; Ui.Navy = v0; Ui.Soft = s0; Ui.ThemeIndex = t0; Ui.CustomAccent = a0; }
+            finally { Ui.Dark = d0; Ui.Nexus = n0; Ui.Navy = v0; Ui.Soft = s0; Ui.Flow = f0; Ui.ThemeIndex = t0; Ui.CustomAccent = a0; }
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -97,19 +97,41 @@ namespace StickyPro
                 using (var path = Ui.Round(r, Ui.S(10)))
                 {
                     using (var b = new SolidBrush(c.Bg)) g.FillPath(b, path);
-                    var old = g.Clip; g.SetClip(path);
-                    // sidebar, card, accent pill, text lines
-                    var side = new Rectangle(r.X + Ui.S(6), r.Y + Ui.S(6), Ui.S(28), r.Height - Ui.S(12));
-                    using (var sp = Ui.Round(side, Ui.S(6))) using (var b = new SolidBrush(c.Side)) g.FillPath(b, sp);
-                    for (int i = 0; i < 4; i++) using (var b = new SolidBrush(c.SideText)) g.FillEllipse(b, side.X + Ui.S(10), side.Y + Ui.S(10) + i * Ui.S(14), Ui.S(8), Ui.S(8));
-                    var card = new Rectangle(side.Right + Ui.S(8), r.Y + Ui.S(10), r.Right - side.Right - Ui.S(16), Ui.S(46));
-                    using (var cp = Ui.Round(card, Ui.S(6))) { using (var b = new SolidBrush(c.Card)) g.FillPath(b, cp); using (var pen = new Pen(c.Line)) g.DrawPath(pen, cp); }
-                    using (var b = new SolidBrush(c.Text)) g.FillRectangle(b, card.X + Ui.S(8), card.Y + Ui.S(9), card.Width / 2, Ui.S(5));
-                    using (var b = new SolidBrush(c.Muted)) g.FillRectangle(b, card.X + Ui.S(8), card.Y + Ui.S(20), card.Width * 2 / 3, Ui.S(4));
-                    using (var ap = Ui.Round(new Rectangle(card.X + Ui.S(8), card.Bottom - Ui.S(15), Ui.S(34), Ui.S(10)), Ui.S(5))) using (var b = new SolidBrush(c.Accent)) g.FillPath(b, ap);
-                    using (var b = new SolidBrush(c.Card)) g.FillRectangle(b, card.X, card.Bottom + Ui.S(6), card.Width / 2 - Ui.S(3), r.Bottom - card.Bottom - Ui.S(12));
-                    using (var b = new SolidBrush(c.Card)) g.FillRectangle(b, card.X + card.Width / 2 + Ui.S(3), card.Bottom + Ui.S(6), card.Width / 2 - Ui.S(3), r.Bottom - card.Bottom - Ui.S(12));
-                    g.Clip = old;
+                    using (var old = g.Clip)
+                    {
+                        g.SetClip(path);
+                        // sidebar, card, accent pill, text lines
+                        var side = new Rectangle(r.X + Ui.S(6), r.Y + Ui.S(6), Ui.S(28), r.Height - Ui.S(12));
+                        using (var sp = Ui.Round(side, Ui.S(6)))
+                        {
+                            using (var b = new SolidBrush(c.Side)) g.FillPath(b, sp);
+                            if (p.Design == "flow") using (var pen = new Pen(c.Line)) g.DrawPath(pen, sp);
+                        }
+                        if (p.Design == "flow")
+                        {
+                            using (var bp = Ui.Round(new Rectangle(side.X + Ui.S(4), side.Y + Ui.S(7), side.Width - Ui.S(8), Ui.S(12)), Ui.S(4)))
+                            using (var b = new SolidBrush(c.SideSel)) g.FillPath(b, bp);
+                            using (var b = new SolidBrush(c.Accent)) g.FillEllipse(b, side.X + Ui.S(10), side.Y + Ui.S(9), Ui.S(8), Ui.S(8));
+                            for (int i = 1; i < 4; i++) using (var b = new SolidBrush(c.SideText)) g.FillEllipse(b, side.X + Ui.S(10), side.Y + Ui.S(10) + i * Ui.S(14), Ui.S(8), Ui.S(8));
+                        }
+                        else
+                        {
+                            for (int i = 0; i < 4; i++) using (var b = new SolidBrush(c.SideText)) g.FillEllipse(b, side.X + Ui.S(10), side.Y + Ui.S(10) + i * Ui.S(14), Ui.S(8), Ui.S(8));
+                        }
+                        var card = new Rectangle(side.Right + Ui.S(8), r.Y + Ui.S(10), r.Right - side.Right - Ui.S(16), Ui.S(46));
+                        using (var cp = Ui.Round(card, Ui.S(6))) { using (var b = new SolidBrush(c.Card)) g.FillPath(b, cp); using (var pen = new Pen(c.Line)) g.DrawPath(pen, cp); }
+                        using (var b = new SolidBrush(c.Text)) g.FillRectangle(b, card.X + Ui.S(8), card.Y + Ui.S(9), card.Width / 2, Ui.S(5));
+                        using (var b = new SolidBrush(c.Muted)) g.FillRectangle(b, card.X + Ui.S(8), card.Y + Ui.S(20), card.Width * 2 / 3, Ui.S(4));
+                        using (var ap = Ui.Round(new Rectangle(card.X + Ui.S(8), card.Bottom - Ui.S(15), Ui.S(34), Ui.S(10)), Ui.S(5))) using (var b = new SolidBrush(c.Accent)) g.FillPath(b, ap);
+                        if (p.Design == "flow")
+                        {
+                            using (var b = new SolidBrush(Color.FromArgb(34, 197, 139))) g.FillEllipse(b, card.Right - Ui.S(28), card.Bottom - Ui.S(15), Ui.S(9), Ui.S(9));
+                            using (var b = new SolidBrush(Color.FromArgb(245, 158, 45))) g.FillEllipse(b, card.Right - Ui.S(16), card.Bottom - Ui.S(15), Ui.S(9), Ui.S(9));
+                        }
+                        using (var b = new SolidBrush(c.Card)) g.FillRectangle(b, card.X, card.Bottom + Ui.S(6), card.Width / 2 - Ui.S(3), r.Bottom - card.Bottom - Ui.S(12));
+                        using (var b = new SolidBrush(c.Card)) g.FillRectangle(b, card.X + card.Width / 2 + Ui.S(3), card.Bottom + Ui.S(6), card.Width / 2 - Ui.S(3), r.Bottom - card.Bottom - Ui.S(12));
+                        g.Clip = old;
+                    }
                     using (var pen = new Pen(now ? Ui.Accent : ReferenceEquals(hot, p) ? Ui.Mix(Ui.Line, Ui.Accent, 0.6) : Ui.Line, now ? Ui.S(2) : 1)) g.DrawPath(pen, path);
                 }
                 TextRenderer.DrawText(g, p.Name + (now ? "  (current)" : ""), now ? Ui.Bold : Ui.Base, new Point(r.X, r.Bottom + Ui.S(6)), now ? Ui.Accent : Ui.Text);

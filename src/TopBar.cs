@@ -246,11 +246,11 @@ namespace StickyPro
             if (!searchRect.IsEmpty)
             {
                 bool hot = hover as string == "search";
-                Ui.Shadow(g, searchRect, Ui.S(10));
-                using (var path = Ui.Round(searchRect, Ui.S(10)))
+                if (!Ui.Flow) Ui.Shadow(g, searchRect, Ui.S(10));
+                using (var path = Ui.Round(searchRect, Ui.S(Ui.Flow ? 12 : 10)))
                 {
                     using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Navy ? Ui.Card : Ui.Bg)) g.FillPath(b, path);
-                    using (var p = new Pen(hot ? Ui.Accent : Ui.Line)) g.DrawPath(p, path);
+                    using (var p = new Pen(hot ? Ui.Accent : Ui.Flow ? Ui.Mix(Ui.Line, Ui.Bg, 0.35) : Ui.Line)) g.DrawPath(p, path);
                 }
                 var ir = new Rectangle(searchRect.X + Ui.S(4), searchRect.Y, Ui.S(32), searchRect.Height);
                 TextRenderer.DrawText(g, "", Ui.Icon(11f), ir, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
@@ -261,7 +261,7 @@ namespace StickyPro
                     var kr = new Rectangle(searchRect.Right - kw - Ui.S(8), searchRect.Y + Ui.S(9), kw, searchRect.Height - Ui.S(18));
                     using (var path = Ui.Round(kr, Ui.S(5))) { using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path); using (var p = new Pen(Ui.Line)) g.DrawPath(p, path); }
                     TextRenderer.DrawText(g, key, Ui.Small, kr, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                    TextRenderer.DrawText(g, "Search this app", Ui.Base, new Rectangle(ir.Right, searchRect.Y, kr.Left - ir.Right - Ui.S(4), searchRect.Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, Ui.Flow ? "Search this app..." : "Search this app", Ui.Base, new Rectangle(ir.Right, searchRect.Y, Math.Max(1, kr.Left - ir.Right - Ui.S(4)), searchRect.Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
                 }
             }
             foreach (var c in chips) if (!c.Bounds.IsEmpty && c.Bounds.IntersectsWith(e.ClipRectangle)) DrawChipNexus(g, c);
@@ -292,20 +292,36 @@ namespace StickyPro
             TextRenderer.DrawText(g, now.ToString("ddd d MMM"), Ui.Small, new Rectangle(clockRect.X, top.Bottom, clockRect.Width, Ui.S(18)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
         }
 
+        static Color FlowChipAccent(string key)
+        {
+            switch (key)
+            {
+                case "cpu": return Color.FromArgb(47, 102, 246);
+                case "ram": return Color.FromArgb(139, 92, 246);
+                case "c": return Color.FromArgb(34, 197, 139);
+                case "d": return Color.FromArgb(14, 165, 233);
+                case "apps": return Color.FromArgb(245, 158, 45);
+                case "tasks": return Color.FromArgb(47, 102, 246);
+                default: return Color.FromArgb(239, 68, 68);
+            }
+        }
+
         void DrawChipNexus(Graphics g, Chip c)
         {
             var r = c.Bounds;
             bool hot = ReferenceEquals(hover, c);
-            var tone = c.Alert ? c.Tint : Ui.Muted;
-            using (var path = Ui.Round(r, Ui.S(10)))
+            var chipTint = c.Alert ? c.Tint : Ui.Flow ? FlowChipAccent(c.Key) : Ui.Muted;
+            using (var path = Ui.Round(r, Ui.S(Ui.Flow ? 11 : 10)))
             {
-                using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                using (var p = new Pen(c.Alert ? Color.FromArgb(150, c.Tint) : hot ? Ui.Accent : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
+                using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Flow ? Ui.Bg : Ui.Card)) g.FillPath(b, path);
+                using (var p = new Pen(c.Alert ? Color.FromArgb(150, c.Tint) : hot ? Ui.Accent : Ui.Flow ? Ui.Line : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
             }
             int gd = Ui.S(26);
             var gr = new Rectangle(r.X + Ui.S(6), r.Y + (r.Height - gd) / 2, gd, gd);
-            TextRenderer.DrawText(g, c.Glyph, Ui.Icon(10.5f), gr, tone, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            int tx = gr.Right + Ui.S(8), tw = r.Right - tx - Ui.S(10);
+            if (Ui.Flow)
+                using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 42 : 24, chipTint))) g.FillEllipse(b, gr);
+            TextRenderer.DrawText(g, c.Glyph, Ui.Icon(10.5f), gr, chipTint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            int tx = gr.Right + Ui.S(8), tw = Math.Max(1, r.Right - tx - Ui.S(10));
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
             if (compact)
                 TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y, tw, r.Height), Ui.Text, flags | TextFormatFlags.VerticalCenter);
@@ -316,9 +332,9 @@ namespace StickyPro
             }
             if (c.Bar >= 0 && (c.Spark == null || c.Spark.Length < 2))
             {
-                int bx = r.X + Ui.S(10), bwid = r.Width - Ui.S(20), by = r.Bottom - Ui.S(4);
+                int bx = r.X + Ui.S(10), bwid = Math.Max(1, r.Width - Ui.S(20)), by = r.Bottom - Ui.S(4);
                 using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bx, by, bwid, Ui.S(2));
-                using (var b = new SolidBrush(c.Alert ? c.Tint : Ui.Accent)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
+                using (var b = new SolidBrush(c.Alert ? c.Tint : Ui.Flow ? chipTint : Ui.Accent)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
             }
         }
 

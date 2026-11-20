@@ -5,6 +5,8 @@ snippets, clipboard history, a multi-pane file explorer, Chrome bookmarks and ex
 screen capture and recording, power tools and a shortcut manager. Start it with `All in One.lnk`.
 Built with the C# compiler that ships with Windows.
 
+Open the [interactive customer map](docs/customer-map.html) in a browser for the Arabic walkthrough, original Windows control labels, seven guided workflows and the November 20 audit. Keep its toolbar image beside it when copying the repository edition.
+
 ## Agent accounts and leader teams
 
 - In **Agents**, click a Codex or Claude Code chip and open **Account**. Choose an existing HERDR profile or select **Sign in to a named account** and complete the provider's login. The app passes the profile directory to that CLI process. Each profile keeps its own resume IDs. The team setup also lets two members use the same CLI with different accounts.
@@ -53,8 +55,7 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
 ## Share it with other people
 - Run `powershell -ExecutionPolicy Bypass -File tools\make-dist.ps1`. It makes `dist\All-in-One-portable.zip` (one exe plus
   READ ME FIRST.txt) without touching the running app or your data.
-- It runs on any Windows 10 / 11 (64-bit) PC with nothing to install and no admin rights: it needs only .NET Framework 4.8,
-  which is part of Windows, and uses no other DLLs.
+- The desktop shell targets 64-bit Windows with .NET Framework 4.8. Web pages use the WebView2 runtime. Office editing and some protected-file previews need the corresponding installed desktop programs. AI accounts need their provider tools. Verify the recorder on a clean PC before distributing it.
 - First start of a copied exe offers to install it for that Windows user (`%LocalAppData%\Programs\All in One`, Start menu,
   Desktop, start with Windows, Settings > Apps entry that uninstalls it). Saying No keeps it portable.
 - Data: next to the exe when that folder is writable; otherwise (Program Files, run from inside a zip, installed copy)
@@ -171,7 +172,7 @@ Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic
 ## Interface and reliability
 - Main-window pages are created on first use and keep their state when you switch away. Unused tools do not allocate controls or start their page services. Closing windows no longer forces full garbage collection or empties the process working set.
 - Backups include nested data such as agent chats, layouts, and saved file backups. Restore validates the main JSON files before swapping folders, retains the previous folder beside the data folder, and recovers interrupted folder swaps on startup. Linked folders/files and overlapping destinations are rejected; temporary save files and internal restore staging folders are excluded.
-- Moving the data folder requires an empty destination and successful saves first. The location changes only after copying succeeds. Explicit `--data` paths survive restarts and follow a successful move.
+- Moving the data folder requires an empty destination and successful saves first. Restart immediately after the copy. The active session continues to write to the old folder, and the next start reads the new copy. Edits made in between stay in the old folder.
 - Agent-chat saves coalesce in order on a background worker, retain a previous-file backup, and finish before normal exit or backup. Deleting a chat cancels its queued saves.
 - Recurring tasks jump directly past overdue occurrences, handle weekends and date limits, and keep the original month-day anchor when skipping missed months.
 - Rounded buttons and inputs, keyboard focus feedback, and consistent light/dark controls. Windows 11 supplies rounded window corners where supported.

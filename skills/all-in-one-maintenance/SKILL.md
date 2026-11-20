@@ -15,6 +15,7 @@ Read [recent history](../../HISTORY.md) and the relevant [lessons](../../LESSONS
 - In WinForms, exercise saved layouts and scrolled states. Keep file, directory and provider I/O off the UI thread, and reject stale results once the active selection or query has changed.
 - Keep Office edit windows independent of the WinForms input queue. Use `tools/test-office-edit.ps1` for a separate UI thread, including the busy editor case. Test real Office clicks separately when a disposable file is available.
 - For whole-app visual audits, use `tools/test-ui-sweep.ps1`. It walks 33 screen routes with synthetic content and captures labeled contact sheets. Review those images, including the narrow dark layouts. Test document close and save with `tools/test-document-close.ps1`.
+- For customer maps, reconcile the page constructors, sweep routes and shared tools. Trace handoffs through the receiver and its defaults. Probe the local executable with disposable files for failure paths. Distinguish observed failures, source-only findings and blocked integration checks. Use only reviewed synthetic UI crops in customer artifacts.
 - For releases, start from an extracted source archive. Use Windows PowerShell and the current test binary, check embedded resources, and verify the shipped executable separately from the workspace source.
 
 Update the history before replying. When you discover a proven rule or a procedure worth reusing, update the relevant lesson, guide or skill at the same time. Include any checks still open and distinguish synthetic tests from live behavior.

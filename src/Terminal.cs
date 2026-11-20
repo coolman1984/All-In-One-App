@@ -109,8 +109,8 @@ namespace StickyPro
             string shellPart = Quote(ShellExe(p.Shell)) + " " + ShellArgs(p.Shell, p.Command);
             string title = string.IsNullOrWhiteSpace(p.Name) ? Title(dir) : p.Name.Trim();
             // --suppressApplicationTitle keeps the project folder name: Claude Code, Codex and others would otherwise
-            // replace the tab and window title with their own task text. Each project also gets its own tab color.
-            return "-d " + DirArg(dir) + " --title " + Quote(title.Replace("\"", "").TrimEnd('\\')) + " --suppressApplicationTitle --tabColor " + TabColor(p, dir) + " " + shellPart.Replace(";", "\\;");
+            // replace the tab and window title with their own task text. Escape ';' across all args and separate shell with '--'.
+            return "-d " + DirArg(dir).Replace(";", "\\;") + " --title " + Quote(title.Replace("\"", "").Replace(";", "\\;").TrimEnd('\\')) + " --suppressApplicationTitle --tabColor " + TabColor(p, dir) + " -- " + shellPart.Replace(";", "\\;");
         }
 
         // The pane's color, else the folder's color label, else a steady color picked from the folder path.
@@ -245,7 +245,8 @@ namespace StickyPro
             if (rows > 1)
                 for (int c = 0; c < cols; c++)
                 {
-                    parts.Add("fp -t " + c);
+                    // Splitting column 0..c-1 horizontally adds (rows - 1) panes ahead of column c in DFS order.
+                    parts.Add("fp -t " + (c * rows));
                     for (int r = 1; r < rows; r++) parts.Add("sp -H -s " + F((rows - r) / (double)(rows - r + 1)) + " " + PaneArgs(panes[r * cols + c]));
                 }
             if (cols * rows > 1) parts.Add("fp -t 0");
@@ -491,6 +492,7 @@ namespace StickyPro
         List<string> OpenFolders() { Commit(); return Enumerable.Range(0, Term.Count(Ws.Layout)).Select(i => Term.PaneAt(Ws, i).Folder).ToList(); }
         void OpenSet(FolderSet s)
         {
+            if (s == null || s.Folders == null || s.Folders.Count == 0) { App.I.Status("Folder set has no folders."); return; }
             Commit();
             int n = Math.Max(1, Math.Min(8, s.Folders.Count));
             Ws.Layout = n <= 6 ? n.ToString() : "4x2";

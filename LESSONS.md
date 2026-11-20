@@ -4,6 +4,9 @@ Short, proven lessons. Read before working on the app; add a new one whenever so
 Format: what happened -> cause (proven) -> rule.
 
 ## Saved work
+- **SnipEditor `Copy file` / `Copy path` shared the unredacted raw capture after Blur/edits.** Auto-save creates `filePath` immediately, so checking `!File.Exists(filePath)` skipped `Save(false)`. -> Track a `dirty` flag in `SnipEditor` and flush edits before copying paths/files or closing.
+- Test the last Markdown tab separately from an Office tab. A denied Markdown write returned false, but the last-tab callback still cleared the current path. A meaningful check holds the file against writing, edits it, closes it and compares both the active editor and the file.
+- For a data-folder move, include a change after the copy and before a deferred restart. On the November 20 binary that change reached the old folder while the next-start location pointed to the new one.
 - **Closing an Office tab could discard edits after a failed save.** Check Cancel and the save result before removing the tab or disposing the editor. Apply the same check to reload, preview mode, theme rebuild and normal exit. In tests, make a stand-in document reject Save and verify it remains dirty.
 - **Office can land behind the host after focus changes.** Verify the native window order again and position the editor directly above its host. Throttle retries. Put both test windows on a private desktop and establish the incorrect order from the editor's own UI thread before testing recovery.
 - **Unsent drafts disappeared after restart.** Draft text lived only in the pane. Save it separately from the transcript so typing doesn't rewrite a long chat. Exercise the first draft, clearing it, switching chats, and reopening saved data.
@@ -175,6 +178,7 @@ Format: what happened -> cause (proven) -> rule.
 - `Environment.TickCount` turns negative after 24.9 days uptime -> use a Stopwatch for timeouts.
 
 ## Build / tests
+- Verify the decompressed recorder resource against the intended executable. A successful build packed the package manager's forwarding executable. A successful recorder shutdown test exercises process lifecycle, while a portable acceptance test must produce and reopen a recording on a clean machine.
 - **Passing tests describe the artifact that ran.** Record the tested build or source ZIP, verify an extracted source tree, and smoke-test the exact release executable. Keep later workspace changes and provider tests with stand-ins distinct from shipped and live evidence.
 - **The capture test passed against an old executable in the workspace.** Use the current test-build filename and
   run release checks from a clean extraction to expose stale build artifacts.
@@ -193,3 +197,5 @@ Format: what happened -> cause (proven) -> rule.
   which snippets were not run.
 - Another agent may edit the same files at the same time: check git status / duplicates before building.
 - ffmpeg (GPL, ~212 MB) is packed gzip-compressed into the exe (~83 MB); `build-cache\ffmpeg.exe.gz` is reused.
+- **`build.ps1` packed a 0.13 MB Scoop shim instead of `ffmpeg.exe`, and `tools/make-dist.ps1` omitted `ffmpeg.exe.gz` entirely.** `Get-Command ffmpeg` resolves to Scoop's `.exe` stub without reading its sibling `.shim` target, and `make-dist.ps1` did not pass `/resource:...,tools.ffmpeg.exe.gz`. -> Dereference `.shim` files when locating `ffmpeg.exe` and keep `build.ps1` and `make-dist.ps1` resource lists in sync.
+- **`test-agent-conversations.ps1` hung on process exit after printing `AGENT CONVERSATIONS OK` (2026-11-20, `faf5559`), blocking `tools/test-all.ps1`.** All 15 other suites exited `0` (including `test-leader-team.ps1` and `test-saved-work.ps1` run individually). -> Run `test-agent-conversations.ps1` with a timeout guard until the lingering shutdown handle/thread is isolated and fixed.

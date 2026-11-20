@@ -77,13 +77,10 @@ namespace StickyPro
             {
                 try
                 {
-                    // The agent hides its process from process lists (only WMI shows it): a "Security Warning" dialog
-                    // whose process is missing from the snapshot is the agent's. Normal programs are always listed.
-                    bool listed = false;
+                    // Only match confirmed ICTray* agent processes; never hide unknown/unlisted PIDs (which could be legitimate Windows dialogs).
                     var e = new PROCESSENTRY32 { dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32)) };
                     for (bool ok = Process32First(snap, ref e); ok; ok = Process32Next(snap, ref e))
-                        if (e.th32ProcessID == pid) { listed = true; yes = e.szExeFile.StartsWith("ICTray", StringComparison.OrdinalIgnoreCase); break; }
-                    if (!listed) yes = true;
+                        if (e.th32ProcessID == pid) { yes = e.szExeFile.StartsWith("ICTray", StringComparison.OrdinalIgnoreCase); break; }
                 }
                 finally { CloseHandle(snap); }
             }

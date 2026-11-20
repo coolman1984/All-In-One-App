@@ -461,7 +461,7 @@ namespace StickyPro
             tile("", "Restart Explorer", "Fix a stuck taskbar", () =>
             {
                 if (MessageBox.Show(FindForm(), "Restart Windows Explorer (taskbar and folders)? Open folder windows close.", App.Name, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                Hidden.Async(() => { Hidden.Run("taskkill.exe", "/f /im explorer.exe", 10000); Thread.Sleep(800); Process.Start("explorer.exe"); return ""; }, null);
+                Hidden.Async(() => { Hidden.Run("taskkill.exe", "/f /im explorer.exe", 10000); Thread.Sleep(800); Process.Start("explorer.exe"); return ""; }, delegate { });
             });
             tile("", "Clear temp files", "Your Temp folder, to the bin", () =>
             {

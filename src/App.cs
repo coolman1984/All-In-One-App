@@ -47,7 +47,7 @@ namespace StickyPro
             Store.Load();
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
+            Ui.Flow = Store.Settings.Design == "flow"; Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
             Ui.ApplyLook();
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
@@ -89,7 +89,7 @@ namespace StickyPro
             if (failed.Count > 0)
                 Balloon("Some shortcuts are used by another app", string.Join(", ", failed) + " could not be registered. Change them in Settings.");
 
-            Microsoft.Win32.SystemEvents.SessionEnding += delegate { FlushAll(); };
+            Microsoft.Win32.SystemEvents.SessionEnding += delegate { try { Overlay.Shutdown(); } catch { } try { Snippets.Stop(); } catch { } FlushAll(); try { AgentStore.FlushWrites(); } catch { } };
             Application.ApplicationExit += delegate { FlushAll(); Snippets.Stop(); };
             Ui.Later(1500, CheckReminders);
             Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerMode;
@@ -524,13 +524,13 @@ namespace StickyPro
         }
 
         public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }
-        public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, i)); Store.MarkSettings(); ApplyTheme(); }
-        public void SetDesign(string d) { Store.Settings.Design = d == "classic" || d == "nexus" || d == "soft" ? d : "serq"; Store.MarkSettings(); ApplyTheme(); }
+        public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, i)); Store.Settings.AccentColor = ""; Store.MarkSettings(); Ui.ApplyLook(); ApplyTheme(); }
+        public void SetDesign(string d) { Store.Settings.Design = d == "classic" || d == "nexus" || d == "soft" || d == "serq" || d == "flow" ? d : "flow"; Store.MarkSettings(); ApplyTheme(); }
         // One click from the look picker: design, colour and light/dark together, one rebuild.
         public void SetLook(string design, int theme, bool dark)
         {
             var s = Store.Settings;
-            s.Design = design == "classic" || design == "nexus" || design == "soft" ? design : "serq";
+            s.Design = design == "classic" || design == "nexus" || design == "soft" || design == "serq" || design == "flow" ? design : "flow";
             if (theme >= 0) { s.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, theme)); s.AccentColor = ""; }
             s.Dark = dark;
             Store.MarkSettings(); Ui.ApplyLook(); ApplyTheme();
@@ -545,7 +545,7 @@ namespace StickyPro
             }
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
+            Ui.Flow = Store.Settings.Design == "flow"; Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
             Ui.ThemeMenu(tray.ContextMenuStrip);
             if (Overlay.On) Overlay.ApplySettings();   // dock and menu bar repaint in the new theme
             string page = null;

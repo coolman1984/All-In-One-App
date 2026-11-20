@@ -166,8 +166,8 @@ namespace StickyPro
         public List<string> Swatches = new List<string>();
         public bool WelcomeHidden;
         public Dictionary<string, int> PaneSizes = new Dictionary<string, int>();
-        public string Design = "";           // "" (not chosen yet -> serq) | serq | nexus | classic
-        public int DesignRev;                // 2 = the SerQ default was applied once
+        public string Design = "";           // "" (not chosen yet -> flow) | flow | serq | nexus | classic | soft
+        public int DesignRev;                // 3 = the Flow default was applied once
         public List<TermWorkspace> TermWorkspaces = new List<TermWorkspace>();
         public int TermLast;
         public List<string> TermRecent = new List<string>();
@@ -194,7 +194,7 @@ namespace StickyPro
         public bool OverlayOn;
         public bool OverlayDock = true, OverlayMenuBar = true, OverlayHotCorner, OverlayMagnify = true, OverlayAutoHide = true;
         public int OverlayDockSize = 48;     // icon size in px at 100 % scale
-        public bool HideSecurityPopups = true;   // hide the security agent's "Security Warning" pop-ups in the background
+        public bool HideSecurityPopups = false;  // optional: hide corporate security agent pop-ups (off by default for safety)
         public bool OverlayHideTaskbar = true;   // full-screen mode: hide the Windows taskbar while the overlay is on
         public bool OverlayTaskbarHidden;        // the overlay hid it (restored on the next start after a crash)
         public int OverlayTaskbarState;          // the taskbar's own auto-hide state before that
@@ -429,9 +429,9 @@ namespace StickyPro
             if (s.OverlayDockSize < 20 || s.OverlayDockSize > 128) s.OverlayDockSize = 48;
             if (s.OverlayDockEdge != "left" && s.OverlayDockEdge != "right") s.OverlayDockEdge = "bottom";
             if (string.IsNullOrEmpty(s.OverlayCorner)) s.OverlayCorner = "topleft";
-            // New design: switch once to the SerQ look (navy sidebar, blue accent); Nexus and Classic stay available in Settings.
-            if (string.IsNullOrEmpty(Settings.Design) || (Settings.DesignRev < 2 && Settings.Design == "nexus")) { Settings.Design = "serq"; Settings.Theme = Ui.SerqTheme; }
-            Settings.DesignRev = 2;
+            // New design: switch once to the Flow look (clean white sidebar, soft blue pill, colourful dashboard); SerQ, Soft, Nexus and Classic stay available in Settings and Look picker.
+            if (string.IsNullOrEmpty(Settings.Design) || (Settings.DesignRev < 3 && (Settings.Design == "serq" || Settings.Design == "nexus"))) { Settings.Design = "flow"; Settings.Theme = Ui.FlowTheme; }
+            Settings.DesignRev = 3;
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
             if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
 

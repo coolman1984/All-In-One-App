@@ -12,6 +12,7 @@ namespace StickyPro
         readonly NumericUpDown fontSize, maxClips, uiSize;
         readonly CheckBox snippets, startup, autoSave, autoCopy, activity, dockVisible, keepAwake;
         readonly TextBox snipFolder, appTitle, userName;
+        readonly string initialSnipDisplay;
         readonly ComboBox headFont, monoFont, corner;
         readonly NumericUpDown headScale, monoSize;
         readonly CheckBox shadows;
@@ -59,8 +60,8 @@ namespace StickyPro
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
             Row(t, "Light or dark mode", theme);
             design = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-            design.Items.AddRange(new object[] { "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)", "Soft (charcoal sidebar, coral accent)" });
-            design.SelectedIndex = Store.Settings.Design == "soft" ? 3 : Store.Settings.Design == "classic" ? 2 : Store.Settings.Design == "nexus" ? 1 : 0;
+            design.Items.AddRange(new object[] { "Flow (white sidebar, colourful dashboard)", "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)", "Soft (charcoal sidebar, coral accent)" });
+            design.SelectedIndex = Store.Settings.Design == "soft" ? 4 : Store.Settings.Design == "classic" ? 3 : Store.Settings.Design == "nexus" ? 2 : Store.Settings.Design == "serq" ? 1 : 0;
             Row(t, "Design", design);
             colorTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(22) };
             colorTheme.Items.AddRange(Ui.ThemeNames);
@@ -127,7 +128,7 @@ namespace StickyPro
             corner.Items.AddRange(new object[] { "Design default", "Square", "Small", "Medium", "Large", "Extra round" });
             corner.SelectedIndex = Math.Max(0, Array.IndexOf(cornerValues, Store.Settings.CornerRadius));
             Row(t, "Corners", corner);
-            shadows = new CheckBox { Text = "Soft shadows under cards (SerQ design)", AutoSize = true, Checked = Store.Settings.Shadows };
+            shadows = new CheckBox { Text = "Soft shadows under cards (Flow / SerQ designs)", AutoSize = true, Checked = Store.Settings.Shadows };
             Row(t, "Shadows", shadows);
             dockVisible = new CheckBox { Text = "Show the quick launch bar on the right", AutoSize = true, Checked = Store.Settings.DockVisible };
             Row(t, "Quick launch", dockVisible);
@@ -188,7 +189,8 @@ namespace StickyPro
             Row(t, "Startup", startup);
 
             Section(t, "Snip, record and file activity");
-            snipFolder = new FluentTextBox { Text = Shot.SnipFolder };
+            initialSnipDisplay = Shot.SnipFolder;
+            snipFolder = new FluentTextBox { Text = initialSnipDisplay };
             Row(t, "Save snips to folder", snipFolder);
             autoSave = new CheckBox { Text = "Save every snip automatically", AutoSize = true, Checked = Store.Settings.SnipAutoSave };
             Row(t, "Auto-save", autoSave);
@@ -341,7 +343,7 @@ namespace StickyPro
             var s = Store.Settings;
             s.Dark = theme.SelectedIndex == 1;
             s.Theme = colorTheme.SelectedIndex;
-            s.Design = design.SelectedIndex == 3 ? "soft" : design.SelectedIndex == 2 ? "classic" : design.SelectedIndex == 1 ? "nexus" : "serq";
+            s.Design = design.SelectedIndex == 4 ? "soft" : design.SelectedIndex == 3 ? "classic" : design.SelectedIndex == 2 ? "nexus" : design.SelectedIndex == 1 ? "serq" : "flow";
             s.UiFont = uiFont.SelectedIndex > 0 ? (string)uiFont.SelectedItem : "";
             s.UiFontSize = (float)uiSize.Value;
             s.HeadingFont = headFont.SelectedIndex > 0 ? (string)headFont.SelectedItem : "";
@@ -367,7 +369,9 @@ namespace StickyPro
             s.Snippets = snippets.Checked;
             s.Hotkeys = Hotkeys.Actions.ToDictionary(a => a[0], a => boxes[a[0]].Text.Trim());
             if (startup.Checked != App.IsStartup()) App.SetStartup(startup.Checked);
-            s.SnipFolder = snipFolder.Text.Trim();
+            string nextSnip = snipFolder.Text.Trim();
+            if (!string.IsNullOrEmpty(Store.Settings.SnipFolder) || !string.Equals(nextSnip, initialSnipDisplay, StringComparison.OrdinalIgnoreCase))
+                s.SnipFolder = nextSnip;
             s.SnipAutoSave = autoSave.Checked;
             s.SnipAutoCopy = autoCopy.Checked;
             s.SnipCopyMode = copyMode.SelectedIndex == 1 ? "path" : copyMode.SelectedIndex == 2 ? "both" : "image";

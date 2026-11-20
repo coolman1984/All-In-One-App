@@ -383,6 +383,7 @@ namespace StickyPro
         public DashboardPanel()
         {
             Dock = DockStyle.Fill; AutoScroll = true; BackColor = Ui.Bg;
+            Ui.DarkScroll(this);
             tasks = new TaskHome();
             SuspendLayout();
             if (Ui.Nexus)

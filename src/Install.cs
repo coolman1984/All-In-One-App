@@ -173,20 +173,25 @@ namespace StickyPro
         // Apps entry, optionally the data, then delete the program folder after this process ends.
         public static void Uninstall()
         {
-            var r = MessageBox.Show("Remove " + App.Name + " from this PC?\n\nYes = remove the app and keep your notes and data.\nNo = remove the app and delete your data too.\nCancel = keep everything.",
-                App.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-            if (r == DialogResult.Cancel) return;
+            var confirm = MessageBox.Show("Remove " + App.Name + " from this PC?\n\nYour notes, tasks and data will be kept unless you choose to delete them in the next step.",
+                App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (confirm != DialogResult.Yes) return;
+            var wipeData = MessageBox.Show("Keep your saved notes, tasks, prompts and data?\n\nYes = keep your data in:\n" + Path.Combine(UserDataRoot, "data") + "\n\nNo = permanently delete all your " + App.Name + " data too.",
+                App.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
+            if (wipeData == DialogResult.Cancel) return;
+            bool deleteData = wipeData == DialogResult.No;
             try { Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--exit") { UseShellExecute = false, CreateNoWindow = true }).WaitForExit(5000); } catch { }
             foreach (var p in Process.GetProcessesByName("AllInOne")) { if (p.Id == Process.GetCurrentProcess().Id) continue; try { p.WaitForExit(10000); } catch { } }
+            try { Taskbar.Restore(); } catch { }
             foreach (var lnk in new[] { StartMenuLink, DesktopLink }) try { if (File.Exists(lnk)) File.Delete(lnk); } catch { }
             try { using (var k = Registry.CurrentUser.OpenSubKey(App.RunKey, true)) if (k != null) { string v = k.GetValue(App.RunName) as string; if (v != null && v.IndexOf(InstallDir, StringComparison.OrdinalIgnoreCase) >= 0) k.DeleteValue(App.RunName, false); } } catch { }
             try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
+            MessageBox.Show(App.Name + " was removed." + (!deleteData ? "\n\nYour data is kept in:\n" + Path.Combine(UserDataRoot, "data") + "\nInstall the app again to use it." : ""), App.Name);
             var targets = new System.Collections.Generic.List<string> { InstallDir };
-            if (r == DialogResult.No) { targets.Add(UserDataRoot); }
-            // The exe cannot delete itself: a hidden cmd waits for this process to end, then removes the folders.
+            if (deleteData) { targets.Add(UserDataRoot); }
+            // Spawn cleanup only after the completion dialog closes so this exe exits before rmdir runs.
             string cmd = "/c ping 127.0.0.1 -n 3 >nul & " + string.Join(" & ", targets.Select(t => "rmdir /s /q \"" + t + "\""));
             try { Process.Start(new ProcessStartInfo("cmd.exe", cmd) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = Path.GetTempPath() }); } catch { }
-            MessageBox.Show(App.Name + " was removed." + (r == DialogResult.Yes ? "\n\nYour data is kept in:\n" + Path.Combine(UserDataRoot, "data") + "\nInstall the app again to use it." : ""), App.Name);
         }
     }
 }

@@ -55,4 +55,6 @@ rendering separately when they are in scope.
 
 ## Carry the findings forward
 
+The [customer map](customer-map.html) covers the screen routes, shared tools, dependencies and acceptance checks in Egyptian Arabic. The [November 20 audit](customer-audit.md) gives the evidence behind its findings. Keep the route IDs aligned with the sweep and the page constructors. The repository HTML loads `customer-map-tools.png` beside it. For a single-file handout, embed that PNG as a data URL in the HTML's `sprite` constant and verify the handout with networking disabled.
+
 The [project instructions](../AGENTS.md) make knowledge updates part of every task. [HISTORY.md](../HISTORY.md) is the record of what changed and how far verification went. [LESSONS.md](../LESSONS.md) captures proven causes and rules. [Project skills](../skills/README.md) hold procedures that should be reused. Update the relevant source when evidence changes.

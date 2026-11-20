@@ -1141,8 +1141,8 @@ namespace StickyPro
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Lock", null, delegate { N.LockWorkStation(); });
             m.Items.Add("Sleep", null, delegate { Application.SetSuspendState(PowerState.Suspend, false, false); });
-            m.Items.Add("Restart...", null, delegate { if (MessageBox.Show("Restart the PC now? Save your work first.", Ui.AppTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) try { Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0") { CreateNoWindow = true, UseShellExecute = false }); } catch { } });
-            m.Items.Add("Shut down...", null, delegate { if (MessageBox.Show("Shut down the PC now? Save your work first.", Ui.AppTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) try { Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 0") { CreateNoWindow = true, UseShellExecute = false }); } catch { } });
+            m.Items.Add("Restart...", null, delegate { if (MessageBox.Show("Restart the PC now? Save your work first.", Ui.AppTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) { try { Overlay.Shutdown(); } catch { } try { Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0") { CreateNoWindow = true, UseShellExecute = false }); } catch { } } });
+            m.Items.Add("Shut down...", null, delegate { if (MessageBox.Show("Shut down the PC now? Save your work first.", Ui.AppTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) { try { Overlay.Shutdown(); } catch { } try { Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 0") { CreateNoWindow = true, UseShellExecute = false }); } catch { } } });
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Overlay settings...", null, delegate { App.I.ShowSettings(null); });
             m.Items.Add("Turn the overlay off", null, delegate { Overlay.Set(false); });
