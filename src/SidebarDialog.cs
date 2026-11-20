@@ -78,7 +78,7 @@ namespace StickyPro
             ClientSize = Ui.S(520, 560); MinimumSize = Ui.S(420, 420);
             Ui.DarkTitle(this);
 
-            var hint = new Label { Dock = DockStyle.Top, Height = Ui.S(54), Padding = new Padding(Ui.S(16), Ui.S(12), Ui.S(16), 0), ForeColor = Ui.Muted, Text = "Rename, reorder, hide or pin pages. Tip: right-click a page in the sidebar for the same options." };
+            var hint = new Label { Dock = DockStyle.Top, Height = Ui.S(54), Padding = new Padding(Ui.S(16), Ui.S(12), Ui.S(16), 0), ForeColor = Ui.Muted, Text = "Rename, reorder, hide or pin pages." };
             list = new ListBox { Dock = DockStyle.Fill, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(34), BorderStyle = BorderStyle.None, IntegralHeight = false, BackColor = Ui.Field, ForeColor = Ui.Text };
             list.DrawItem += DrawRow;
             list.SelectedIndexChanged += delegate { SkipHeader(); UpdateButtons(); };

@@ -227,7 +227,7 @@ namespace StickyPro
             AutoScaleMode = AutoScaleMode.None; FormBorderStyle = FormBorderStyle.FixedToolWindow; Text = "Quick add task"; TopMost = true; ShowInTaskbar = false;
             Font = Ui.Base; BackColor = Ui.Bg; ForeColor = Ui.Text; KeyPreview = true; Icon = App.AppIcon;
             var scr = Screen.FromPoint(Cursor.Position).WorkingArea;
-            box = Ui.Search("Add a task - e.g. Call Ali tomorrow 9am !high #work");
+            box = Ui.Search("Add a task - e.g. Call Ali tomorrow 9am !high #work"); ((FluentTextBox)box).SearchIcon = false;
             box.Dock = DockStyle.Top;
             var hint = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, Text = "Enter = add   ·   Esc = close   ·   words: today, tomorrow, fri, 9am, in 20 min, every week, !high, #list" };
             Padding = new Padding(Ui.S(10));
@@ -289,7 +289,7 @@ namespace StickyPro
             };
             cards.ContextMenuStrip = BuildMenu();
             mid.Controls.Add(cards);
-            quick = Ui.Search("Add a task - e.g. Call Ali tomorrow 9am !high #work   (Enter)");
+            quick = Ui.Search("Add a task - e.g. Call Ali tomorrow 9am !high #work   (Enter)"); ((FluentTextBox)quick).SearchIcon = false;
             quick.Dock = DockStyle.Top;
             quick.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; QuickAdd(); } };
             search = Ui.Search("Filter tasks");
@@ -306,6 +306,7 @@ namespace StickyPro
             detail = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("tasks.detail", DockStyle.Right, Ui.S(340), Ui.S(1600)), Padding = new Padding(Ui.S(10), 0, 0, 0), AutoScroll = true };
             var f = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, AutoSizeMode = AutoSizeMode.GrowAndShrink };
             fieldsPanel = f;
+            f.Visible = false;   // created on screen only when a task is opened (faster first open)
             f.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             tTitle = new FluentTextBox { Dock = DockStyle.Fill, Font = Ui.Bold };
             tNotes = new FluentTextBox { Dock = DockStyle.Fill, Multiline = true, Height = Ui.S(70), MinimumSize = Ui.S(0, 70), ScrollBars = ScrollBars.Vertical };
@@ -319,7 +320,7 @@ namespace StickyPro
             cbPriority = MainForm.Combo(150, "Low", "Normal", "High");
             cbList = new ComboBox { Width = Ui.S(200), DropDownStyle = ComboBoxStyle.DropDown };
             steps = new CheckedListBox { Dock = DockStyle.Fill, Height = Ui.S(110), CheckOnClick = true, BorderStyle = BorderStyle.None, IntegralHeight = false };
-            stepAdd = Ui.Search("Add a step (Enter)"); stepAdd.Dock = DockStyle.Fill;
+            stepAdd = Ui.Search("Add a step (Enter)"); ((FluentTextBox)stepAdd).SearchIcon = false; stepAdd.Dock = DockStyle.Fill;
             Func<string, Label> lab = txt => new Label { Text = txt, AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(0, Ui.S(8), 0, Ui.S(2)) };
             Func<Control[], FlowLayoutPanel> row = cs => { var p = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Dock = DockStyle.Fill, Margin = new Padding(0) }; p.Controls.AddRange(cs); return p; };
             var quickRem = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Dock = DockStyle.Fill, Margin = new Padding(0) };
@@ -551,6 +552,7 @@ namespace StickyPro
             m.Items.Add(mv);
             m.Items.Add("Duplicate", null, delegate { foreach (var t in Selected()) Store.AddTask(new TaskItem { Title = t.Title, Notes = t.Notes, List = t.List, Priority = t.Priority, Due = t.Due, DueHasTime = t.DueHasTime, Repeat = t.Repeat, Steps = t.Steps.Select(s => new SubTask { Text = s.Text }).ToList() }); });
             m.Items.Add("Copy text", null, delegate { App.I.CopyText(string.Join("\n", Selected().Select(t => t.Title + (t.Due > 0 ? "  (" + TaskParse.DueText(t) + ")" : "")))); });
+            m.Items.Add(AppLinks.LazySendTo(null, () => { var t = Selected().FirstOrDefault(); return t == null ? null : t.Title + (string.IsNullOrEmpty(t.Notes) ? "" : "\n\n" + t.Notes); }, FindForm()));
             m.Items.Add("Make a sticky note", null, delegate { foreach (var t in Selected()) App.I.NewNote(null, t.Title + (t.Notes.Length > 0 ? "\n" + t.Notes : "")); });
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Delete\tDel", null, delegate { DeleteSelected(); });
@@ -578,6 +580,7 @@ namespace StickyPro
             FitNotes();
         }
 
+        Label emptyDetail; readonly List<Control> hiddenByEmpty = new List<Control>();
         void LoadDetail(TaskItem t)
         {
             loading = true;
@@ -585,7 +588,16 @@ namespace StickyPro
             {
                 bool has = t != null;
                 foreach (Control c in detail.Controls) c.Enabled = has;
-                if (!has) { tTitle.Text = ""; tNotes.Text = ""; steps.Items.Clear(); return; }
+                // No task chosen: only a short hint, not a form of greyed-out fields.
+                if (emptyDetail == null)
+                {
+                    emptyDetail = new Label { Dock = DockStyle.Top, Height = Ui.S(120), TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Muted, BackColor = Ui.Bg, Font = Ui.Base,
+                        Text = "Select a task to see and edit it.\r\nCtrl+Alt+J adds a task from anywhere." };
+                    detail.Controls.Add(emptyDetail);
+                }
+                if (!has) { foreach (Control c in detail.Controls) if (c != emptyDetail && c.Visible) { hiddenByEmpty.Add(c); c.Visible = false; } }
+                else { foreach (var c in hiddenByEmpty) c.Visible = true; hiddenByEmpty.Clear(); if (!fieldsPanel.Visible && !multi.Visible) { fieldsPanel.Visible = true; FitNotes(); } }
+                emptyDetail.Visible = !has; emptyDetail.Enabled = true;                if (!has) { tTitle.Text = ""; tNotes.Text = ""; steps.Items.Clear(); return; }
                 tTitle.Text = t.Title; tNotes.Text = t.Notes.Replace("\r\n", "\n").Replace("\n", "\r\n");
                 cDue.Checked = t.Due > 0; cAllDay.Checked = !t.DueHasTime;
                 var due = t.Due > 0 ? new DateTime(t.Due) : DateTime.Today.AddHours(9);

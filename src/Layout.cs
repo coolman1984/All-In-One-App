@@ -160,6 +160,22 @@ namespace StickyPro
                 sp.Visible = side && panel.Visible;
             };
             panel.DockChanged += sync; panel.VisibleChanged += sync; sync(panel, EventArgs.Empty);
+            // A saved size from a wider window must never push the rest of the page out of view.
+            EventHandler clamp = delegate
+            {
+                bool vertical = Vertical(panel.Dock);
+                // Leave the other side panels their width and the middle at least ~300 px.
+                int others = 0;
+                foreach (Control c in parent.Controls)
+                    if (c != panel && c.Visible && !(c is Splitter) && (vertical ? (c.Dock == DockStyle.Top || c.Dock == DockStyle.Bottom) : (c.Dock == DockStyle.Left || c.Dock == DockStyle.Right)))
+                        others += vertical ? c.Height : c.Width;
+                int room = (vertical ? parent.ClientSize.Height : parent.ClientSize.Width) - others - Ui.S(vertical ? 160 : 300);
+                if (room <= 0) return;
+                int max = Math.Max(sp.MinSize, room);   // never thinner than its minimum: the page hides it instead
+                if (vertical) { if (panel.Height > max) panel.Height = max; }
+                else if (panel.Dock == DockStyle.Left || panel.Dock == DockStyle.Right) { if (panel.Width > max) panel.Width = max; }
+            };
+            parent.Resize += clamp; panel.VisibleChanged += clamp; clamp(parent, EventArgs.Empty);
             sp.SplitterMoved += delegate
             {
                 if (Store.Settings.PaneSizes == null) Store.Settings.PaneSizes = new Dictionary<string, int>();

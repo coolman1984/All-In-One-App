@@ -85,6 +85,7 @@ foreach ($size in @(0, 1, 3)) {
 $hotkeys = $assembly.GetType('StickyPro.Hotkeys')
 $parse = $hotkeys.GetMethod('Parse', $flags)
 foreach ($action in $hotkeys.GetField('Actions', $flags).GetValue($null)) {
+    if ([string]::IsNullOrWhiteSpace($action[2])) { continue } # Empty means disabled.
     $arguments = [object[]]@($action[2], [uint32]0, [Windows.Forms.Keys]::None)
     Assert ($parse.Invoke($null, $arguments)) ('Default shortcut rejected: ' + $action[2])
 }

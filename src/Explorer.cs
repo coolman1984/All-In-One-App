@@ -84,17 +84,19 @@ namespace StickyPro
     {
         public event Action<FolderPane> Activated;
         public event Action<FolderPane> CopyToOther, MoveToOther;
+        public event Action FolderChanged;
         public string Current = "";
+        public bool HasLocation { get; private set; }
         readonly TextBox address, filter;
         readonly FastList lv;
         readonly Label foot;
         readonly List<string> back = new List<string>(), fwd = new List<string>();
         List<Entry> all = new List<Entry>(), rows = new List<Entry>();
-        int sortCol; bool sortDesc;
+        int sortCol = Store.Settings.ExplorerSortCol; bool sortDesc = Store.Settings.ExplorerSortDesc;   // default: newest modified first
         bool active;
-        int loadId;
+        int loadId, navigationId, watchId;
         FileSystemWatcher watcher;
-        string selectAfterLoad;
+        bool loading, reloadQueued;
         bool shown, pausedWatch;
         readonly Queue<Entry> iconQueue = new Queue<Entry>();
         bool iconWorker;
@@ -108,7 +110,7 @@ namespace StickyPro
             lv.Columns.Add("Name", Ui.S(240)); lv.Columns.Add("Size", Ui.S(104), HorizontalAlignment.Right); lv.Columns.Add("Modified", Ui.S(120)); lv.Columns.Add("Type", Ui.S(110));
             lv.FillIndex = 0; lv.DropOrder = new[] { 3, 2, 1 }; lv.MinFill = Ui.S(170);
             lv.RetrieveVirtualItem += Retrieve;
-            lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 1 || e.Column == 2; } Apply(); };
+            lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 1 || e.Column == 2; } Store.Settings.ExplorerSortCol = sortCol; Store.Settings.ExplorerSortDesc = sortDesc; Store.MarkSettings(); Apply(); };
             lv.DoubleClick += delegate { OpenSelected(); };
             lv.KeyDown += OnKeys;
             lv.GotFocus += delegate { Activate(); };
@@ -131,7 +133,8 @@ namespace StickyPro
             address.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Navigate(Environment.ExpandEnvironmentVariables(address.Text.Trim().Trim('"'))); } else if (e.KeyCode == Keys.Escape) { address.Text = Current; lv.Focus(); } };
             address.GotFocus += delegate { Activate(); };
             filter = Ui.Search("Filter"); filter.Dock = DockStyle.Right; filter.Width = Ui.S(90);
-            filter.TextChanged += delegate { Apply(); };
+            var applyFilter = Ui.Debounce(filter, 120, Apply);
+            filter.TextChanged += delegate { if (!loading) applyFilter(); };
             var nav = new FlowLayoutPanel { Dock = DockStyle.Left, AutoSize = true, WrapContents = false, Margin = new Padding(0) };
             nav.Controls.Add(NavBtn("\uE72B", "Back (Alt+Left)", delegate { GoBack(); }));
             nav.Controls.Add(NavBtn("\uE72A", "Forward (Alt+Right)", delegate { GoForward(); }));
@@ -142,7 +145,13 @@ namespace StickyPro
             foot = new Label { Dock = DockStyle.Bottom, Height = Ui.S(20), Font = Ui.Small, ForeColor = Ui.Muted, TextAlign = ContentAlignment.MiddleLeft };
             Controls.Add(foot);
             refreshSoon.Tick += delegate { refreshSoon.Stop(); Load(false); };
+            DriveCache.Changed += RefreshDriveList;
             Ui.Theme(this);
+        }
+
+        void RefreshDriveList()
+        {
+            if (shown && HasLocation && Current.Length == 0) Load(false);
         }
 
         Button NavBtn(string glyph, string tip, EventHandler click)
@@ -172,34 +181,84 @@ namespace StickyPro
 
         public void Navigate(string path, bool record = true)
         {
-            if (path.Length > 0 && !Directory.Exists(path))
-            {
-                if (File.Exists(path)) { Hidden.Open(path); return; }
-                MessageBox.Show(FindForm(), "Folder not found:\n" + path, App.Name); address.Text = Current; return;
-            }
-            if (record && Current != path) { back.Add(Current); fwd.Clear(); }
-            if (!string.Equals(Current, path, StringComparison.OrdinalIgnoreCase)) lv.SelectedIndices.Clear();
-            Current = path; address.Text = path.Length == 0 ? "This PC" : path; filter.Text = "";
-            if (record && path.Length > 3) MetaStore.Touch("folders", path.TrimEnd('\\'));
-            Watch();
-            Load(true);
+            RequestLocation(path, record, null, null);
         }
-        void GoBack() { if (back.Count == 0) return; fwd.Add(Current); var p = back[back.Count - 1]; back.RemoveAt(back.Count - 1); Navigate(p, false); }
-        void GoForward() { if (fwd.Count == 0) return; back.Add(Current); var p = fwd[fwd.Count - 1]; fwd.RemoveAt(fwd.Count - 1); Navigate(p, false); }
+
+        void RequestLocation(string path, bool record, string select, Action onSuccess)
+        {
+            path = path ?? "";
+            int request = ++navigationId;
+            if (path.Length == 0)
+            {
+                CommitLocation(path, record, select, onSuccess);
+                return;
+            }
+            address.Text = path;
+            foot.Text = "Opening folder…";
+            Control dispatch = Dispatcher();
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                if (request != Volatile.Read(ref navigationId)) return;
+                bool folder = Directory.Exists(path);
+                bool file = !folder && record && request == Volatile.Read(ref navigationId) && File.Exists(path);
+                Post(dispatch, () =>
+                {
+                    if (IsDisposed || request != navigationId) return;
+                    if (folder) { CommitLocation(path, record, select, onSuccess); return; }
+                    address.Text = Current.Length == 0 ? "This PC" : Current;
+                    if (file) { foot.Text = "Opening file…"; Hidden.Open(path); }
+                    else foot.Text = "Folder unavailable: " + path;
+                });
+            });
+        }
+
+        Control Dispatcher()
+        {
+            if (App.I != null) return App.I.Sync;
+            // Hidden fixture controls use their own message queue.
+            var unused = Handle;
+            return this;
+        }
+
+        static bool Post(Control dispatch, Action action)
+        {
+            try { dispatch.BeginInvoke(action); return true; }
+            catch (InvalidOperationException) { return false; }
+        }
+
+        void CommitLocation(string path, bool record, string select, Action onSuccess)
+        {
+            if (onSuccess != null) onSuccess();
+            if (record && Current != path) { back.Add(Current); fwd.Clear(); }
+            if (!HasLocation || !string.Equals(Current, path, StringComparison.OrdinalIgnoreCase))
+            {
+                all = new List<Entry>();
+                ReplaceRows(all, false);
+            }
+            Current = path; address.Text = path.Length == 0 ? "This PC" : path; filter.Text = "";
+            HasLocation = true;
+            if (record && path.Length > 3) MetaStore.Touch("folders", path.TrimEnd('\\'));
+            if (FolderChanged != null) FolderChanged();
+            Watch();
+            Load(true, select);
+        }
+        void GoBack() { if (back.Count > 0) RequestLocation(back[back.Count - 1], false, null, () => { fwd.Add(Current); back.RemoveAt(back.Count - 1); }); }
+        void GoForward() { if (fwd.Count > 0) RequestLocation(fwd[fwd.Count - 1], false, null, () => { back.Add(Current); fwd.RemoveAt(fwd.Count - 1); }); }
         void GoUp()
         {
             if (Current.Length == 0) return;
             var parent = Directory.GetParent(Current.TrimEnd('\\') + (Current.EndsWith(":") ? "\\" : ""));
             string old = Current;
             // Load is asynchronous: remember the folder we came from and select it when the listing arrives.
-            selectAfterLoad = old;
-            Navigate(parent == null || old.TrimEnd('\\').Length <= 2 ? "" : parent.FullName);
-            selectAfterLoad = null;
+            RequestLocation(parent == null || old.TrimEnd('\\').Length <= 2 ? "" : parent.FullName, true, old, null);
         }
 
         void StopWatch()
         {
-            if (watcher != null) { try { watcher.EnableRaisingEvents = false; watcher.Dispose(); } catch { } watcher = null; }
+            watchId++;
+            var old = watcher;
+            watcher = null;
+            if (old != null) ThreadPool.QueueUserWorkItem(delegate { old.Dispose(); });
         }
 
         // Called by the Explorer page: panes that are hidden (page not visible, or removed by a smaller layout) release their watcher.
@@ -214,7 +273,7 @@ namespace StickyPro
             }
             else
             {
-                pausedWatch = watcher != null;
+                pausedWatch = Current.Length > 0;
                 StopWatch();
                 refreshSoon.Stop();
             }
@@ -224,37 +283,64 @@ namespace StickyPro
         {
             StopWatch();
             if (!shown || Current.Length == 0) return;
-            try
+            int id = watchId;
+            string path = Current;
+            Control dispatch = Dispatcher();
+            ThreadPool.QueueUserWorkItem(delegate
             {
-                // Names only: size / last-write events fire continuously during downloads and caused reload storms.
-                watcher = new FileSystemWatcher(Current) { IncludeSubdirectories = false, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName };
-                FileSystemEventHandler h = (s, e) => { try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => { if (!IsDisposed) { refreshSoon.Stop(); refreshSoon.Start(); } })); } catch { } };
-                watcher.Created += h; watcher.Deleted += h; watcher.Renamed += (s, e) => h(s, null);
-                watcher.EnableRaisingEvents = true;
-            }
-            catch { }
+                if (id != Volatile.Read(ref watchId)) return;
+                FileSystemWatcher next = null;
+                try
+                {
+                    next = new FileSystemWatcher(path) { IncludeSubdirectories = false, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName };
+                    int posted = 0;
+                    Action changed = () =>
+                    {
+                        if (id != Volatile.Read(ref watchId) || Interlocked.Exchange(ref posted, 1) != 0) return;
+                        if (!Post(dispatch, () =>
+                        {
+                            Interlocked.Exchange(ref posted, 0);
+                            if (IsDisposed || id != watchId) return;
+                            refreshSoon.Stop(); refreshSoon.Start();
+                        })) Interlocked.Exchange(ref posted, 0);
+                    };
+                    next.Created += (s, e) => changed(); next.Deleted += (s, e) => changed(); next.Renamed += (s, e) => changed();
+                    next.Error += (s, e) => changed();
+                    next.EnableRaisingEvents = true;
+                    if (Post(dispatch, () =>
+                    {
+                        if (!IsDisposed && id == watchId) watcher = next;
+                        else ThreadPool.QueueUserWorkItem(delegate { next.Dispose(); });
+                    })) return;
+                }
+                catch (Exception ex) { App.Log("Explorer watcher: " + ex.Message); }
+                if (next != null) next.Dispose();
+            });
         }
 
-        void Load(bool resetScroll)
+        void Load(bool resetScroll, string selectName = null)
         {
+            if (loading && !resetScroll) { reloadQueued = true; return; }
+            loading = true;
+            reloadQueued = false;
             int id = ++loadId;
             string path = Current;
-            string selectName = selectAfterLoad; selectAfterLoad = null;
+            Control dispatch = Dispatcher();
             var keep = new HashSet<string>(resetScroll ? new List<string>() : SelectedPaths(), StringComparer.OrdinalIgnoreCase);
             foot.Text = "Loading...";
             ThreadPool.QueueUserWorkItem(delegate
             {
+                if (id != Volatile.Read(ref loadId)) return;
                 var list = new List<Entry>(); string error = null;
                 try
                 {
                     if (path.Length == 0)
                     {
-                        foreach (var d in DriveInfo.GetDrives())
+                        foreach (var d in DriveCache.Get())
                         {
-                            string label = d.Name;
-                            try { if (d.IsReady) label = (string.IsNullOrEmpty(d.VolumeLabel) ? (d.DriveType == DriveType.Fixed ? "Local Disk" : d.DriveType == DriveType.Network ? "Network" : d.DriveType == DriveType.Removable ? "USB drive" : d.DriveType.ToString()) : d.VolumeLabel) + " (" + d.Name.TrimEnd('\\') + ")"; } catch { }
-                            long free = 0, total = 0; try { if (d.IsReady) { free = d.AvailableFreeSpace; total = d.TotalSize; } } catch { }
-                            list.Add(new Entry { Path = d.Name, Name = label, Dir = true, Type = total > 0 ? "Drive, " + Fmt.Bytes(total) : "Drive", Size = free, Extra = total > 0 ? (100 - free * 100 / total) + "% used" : "" });
+                            list.Add(new Entry { Path = d.Name, Name = DriveCache.Title(d), Dir = true,
+                                Type = d.Total > 0 ? "Drive, " + Fmt.Bytes(d.Total) : "Drive", Size = d.Free,
+                                Extra = d.Total > 0 ? (100 - d.Free * 100 / d.Total) + "% used" : "" });
                         }
                         foreach (var sf in new[] { Environment.SpecialFolder.Desktop, Environment.SpecialFolder.MyDocuments, Environment.SpecialFolder.UserProfile })
                         { string p = Environment.GetFolderPath(sf); if (Directory.Exists(p)) list.Add(new Entry { Path = p, Name = Path.GetFileName(p), Dir = true, Type = "Folder" }); }
@@ -265,46 +351,95 @@ namespace StickyPro
                     {
                         foreach (var fi in new DirectoryInfo(path).EnumerateFileSystemInfos())
                         {
-                            if ((fi.Attributes & FileAttributes.Hidden) != 0 && (fi.Attributes & FileAttributes.System) != 0) continue;
-                            bool dir = (fi.Attributes & FileAttributes.Directory) != 0;
-                            var e = new Entry { Path = fi.FullName, Name = fi.Name, Dir = dir, Modified = fi.LastWriteTime };
-                            if (!dir) { e.Size = ((FileInfo)fi).Length; string ext = fi.Extension; e.Type = ext.Length > 1 ? ext.Substring(1).ToUpperInvariant() + " file" : "File"; } else e.Type = "Folder";
-                            list.Add(e);
+                            if (id != Volatile.Read(ref loadId)) return;
+                            try
+                            {
+                                var attributes = fi.Attributes;
+                                if ((attributes & (FileAttributes.Hidden | FileAttributes.System)) == (FileAttributes.Hidden | FileAttributes.System)) continue;
+                                bool dir = (attributes & FileAttributes.Directory) != 0;
+                                var e = new Entry { Path = fi.FullName, Name = fi.Name, Dir = dir, Modified = fi.LastWriteTime };
+                                if (!dir) { e.Size = ((FileInfo)fi).Length; string ext = fi.Extension; e.Type = ext.Length > 1 ? ext.Substring(1).ToUpperInvariant() + " file" : "File"; } else e.Type = "Folder";
+                                list.Add(e);
+                            }
+                            catch (IOException) { }
+                            catch (UnauthorizedAccessException) { }
                         }
                     }
                 }
                 catch (Exception ex) { error = ex.Message; }
                 try
                 {
-                    App.I.Sync.BeginInvoke(new Action(() =>
+                    Post(dispatch, () =>
                     {
                         if (id != loadId || IsDisposed) return;
-                        all = list; Apply();
+                        loading = false;
+                        all = list; ApplyListing(!resetScroll);
                         int si = -1;
                         if (selectName != null) si = rows.FindIndex(r => string.Equals(r.Path.TrimEnd('\\'), selectName.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
                         if (si >= 0) SelectIndex(si);
                         else if (keep.Count > 0) { lv.SelectedIndices.Clear(); for (int i = 0; i < rows.Count; i++) if (keep.Contains(rows[i].Path)) lv.SelectedIndices.Add(i); }
                         else if (resetScroll && rows.Count > 0) SelectIndex(0);
                         if (error != null) foot.Text = error;
-                    }));
+                        if (reloadQueued && shown) refreshSoon.Start();
+                    });
                 }
                 catch { }
             });
         }
 
-        void Apply()
+        void Apply() { ApplyListing(false); }
+
+        void ApplyListing(bool preserveScroll)
         {
             string q = filter.Text.Trim();
-            IEnumerable<Entry> items = all;
-            if (q.Length > 0) items = items.Where(e => e.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
-            Func<Entry, IComparable> key;
-            switch (sortCol) { case 1: key = e => e.Size; break; case 2: key = e => e.Modified; break; case 3: key = e => e.Type; break; default: key = e => e.Name.ToLowerInvariant(); break; }
-            var dirs = items.Where(e => e.Dir); var files = items.Where(e => !e.Dir);
-            if (Current.Length == 0) rows = items.ToList();
-            else rows = (sortDesc ? dirs.OrderByDescending(key) : dirs.OrderBy(key)).Concat(sortDesc ? files.OrderByDescending(key) : files.OrderBy(key)).ToList();
-            lv.BeginUpdate(); lv.SelectedIndices.Clear(); lv.VirtualListSize = rows.Count; lv.EndUpdate(); lv.Invalidate();
-            int nd = rows.Count(r => r.Dir), nf = rows.Count - nd;
-            foot.Text = nd + " folders, " + nf + " files" + (nf > 0 ? ", " + Fmt.Bytes(rows.Where(r => !r.Dir).Sum(r => r.Size)) : "");
+            var next = q.Length == 0 ? new List<Entry>(all) : all.FindAll(e => e.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (Current.Length > 0) next.Sort(CompareEntries);
+            ReplaceRows(next, preserveScroll);
+            int nd = 0;
+            long bytes = 0;
+            foreach (var row in rows) { if (row.Dir) nd++; else bytes += row.Size; }
+            int nf = rows.Count - nd;
+            foot.Text = nd + " folders, " + nf + " files" + (nf > 0 ? ", " + Fmt.Bytes(bytes) : "");
+        }
+
+        void ReplaceRows(List<Entry> next, bool preserveScroll)
+        {
+            bool resized = next.Count != rows.Count;
+            var top = lv.IsHandleCreated && rows.Count > 0 ? lv.TopItem : null;
+            int oldTop = top == null ? 0 : top.Index;
+            lv.BeginUpdate();
+            try
+            {
+                // WinForms restores the old virtual top index during a count change.
+                // If that index no longer fits, Windows can scroll above row zero.
+                if (oldTop > 0 && (resized || !preserveScroll)) lv.TopItem = lv.Items[0];
+                lv.SelectedIndices.Clear();
+                rows = next;
+                if (resized) lv.VirtualListSize = next.Count;
+                if (resized && preserveScroll && oldTop > 0 && next.Count > 0)
+                {
+                    int pageSize = (int)ShellOps.SendMessage(lv.Handle, 0x1028 /* LVM_GETCOUNTPERPAGE */, IntPtr.Zero, IntPtr.Zero);
+                    int target = Math.Min(oldTop, next.Count - Math.Max(1, pageSize));
+                    if (target > 0) lv.TopItem = lv.Items[target];
+                }
+            }
+            finally { lv.EndUpdate(); }
+            lv.Invalidate();
+        }
+
+        int CompareEntries(Entry a, Entry b)
+        {
+            if (sortCol != 2 && a.Dir != b.Dir) return a.Dir ? -1 : 1;
+            int order;
+            switch (sortCol)
+            {
+                case 1: order = a.Size.CompareTo(b.Size); break;
+                case 2: order = a.Modified.CompareTo(b.Modified); break;
+                case 3: order = StringComparer.OrdinalIgnoreCase.Compare(a.Type, b.Type); break;
+                default: order = StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name); break;
+            }
+            if (order == 0) return StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
+            return sortDesc ? -order : order;
         }
 
         void Retrieve(object sender, RetrieveVirtualItemEventArgs e)
@@ -369,11 +504,11 @@ namespace StickyPro
         void OnKeys(object s, KeyEventArgs e)
         {
             bool h = true;
-            if (e.KeyCode == Keys.Enter) OpenSelected();
+            if (e.Alt && e.KeyCode == Keys.Enter) { var f = FirstSel(); if (f != null) ShellOps.Properties(f.Path); }
+            else if (e.KeyCode == Keys.Enter) OpenSelected();
             else if (e.KeyCode == Keys.Back || (e.Alt && e.KeyCode == Keys.Up)) GoUp();
             else if (e.Alt && e.KeyCode == Keys.Left) GoBack();
             else if (e.Alt && e.KeyCode == Keys.Right) GoForward();
-            else if (e.Alt && e.KeyCode == Keys.Enter) { var f = FirstSel(); if (f != null) ShellOps.Properties(f.Path); }
             else if (e.KeyCode == Keys.Delete) Delete(e.Shift);
             else if (e.KeyCode == Keys.F2) Rename();
             else if (e.KeyCode == Keys.F5) { var c = CopyToOther; if (c != null) c(this); }
@@ -458,6 +593,17 @@ namespace StickyPro
             var m = Ui.Menu();
             m.Items.Add("Open\tEnter", null, delegate { OpenSelected(); });
             m.Items.Add("Open with...", null, delegate { var f = FirstSel(); if (f != null && !f.Dir) Hidden.Open("rundll32.exe", "shell32.dll,OpenAs_RunDLL " + f.Path); });
+            var viewable = FirstSel();
+            if (viewable != null && (DocumentsPage.Handles(viewable.Path) || viewable.Path.EndsWith(".mysingle", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".msg", StringComparison.OrdinalIgnoreCase)))
+            {
+                bool mail = viewable.Path.EndsWith(".mysingle", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || viewable.Path.EndsWith(".msg", StringComparison.OrdinalIgnoreCase);
+                if (mail) m.Items.Add("Read in the app", null, delegate { App.I.OpenDocument(viewable.Path); });
+                else
+                {
+                    m.Items.Add("Open in the app: preview (read only)", null, delegate { App.I.OpenDocument(viewable.Path, false); });
+                    if (OfficeEdit.KindOf(viewable.Path) != null) m.Items.Add("Open in the app: edit", null, delegate { App.I.OpenDocument(viewable.Path, true); });
+                }
+            }
             m.Items.Add("Open in Windows Explorer", null, delegate { var f = FirstSel(); Hidden.Open("explorer.exe", f == null ? "\"" + Current + "\"" : "/select,\"" + f.Path + "\""); });
             Term.AddMenu(m.Items, () => Current);
             m.Items.Add(new ToolStripSeparator());
@@ -468,12 +614,17 @@ namespace StickyPro
             m.Items.Add("Move to next pane\tF6", null, delegate { var c = MoveToOther; if (c != null) c(this); });
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Copy path", null, delegate { App.I.CopyText(string.Join("\n", SelectedPaths().DefaultIfEmpty(Current))); });
+            m.Items.Add(AppLinks.LazySendTo(() => SelectedPaths().DefaultIfEmpty(Current).FirstOrDefault(), null, FindForm()));
             m.Items.Add("Copy name", null, delegate { App.I.CopyText(string.Join("\n", SelectedPaths().Select(p => Path.GetFileName(p.TrimEnd('\\'))))); });
             m.Items.Add("Rename\tF2", null, delegate { Rename(); });
             m.Items.Add("New folder\tF7", null, delegate { NewFolder(); });
             m.Items.Add("Delete (Recycle Bin)\tDel", null, delegate { Delete(false); });
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add("Add to favorites", null, delegate { foreach (var p in SelectedPaths().Where(Directory.Exists).DefaultIfEmpty(Current)) if (p.Length > 0) MetaStore.SetFav("folders", p.TrimEnd('\\'), true); });
+            m.Items.Add("Add to favorites", null, delegate
+            {
+                var folders = lv.SelectedIndices.Cast<int>().Where(i => i < rows.Count && rows[i].Dir).Select(i => rows[i].Path);
+                foreach (var p in folders.DefaultIfEmpty(Current)) if (p.Length > 0) MetaStore.SetFav("folders", p.TrimEnd('\\'), true);
+            });
             m.Items.Add("Add to quick launch", null, delegate { foreach (var p in SelectedPaths().DefaultIfEmpty(Current)) if (p.Length > 0) QuickDock.AddItem(Path.GetFileName(p.TrimEnd('\\')), p, ""); });
             m.Items.Add("What is using this file?", null, delegate { var f = FirstSel(); if (f != null) PowerTools.WhoUses(f.Path, FindForm()); });
             m.Items.Add("Folder size", null, delegate
@@ -489,7 +640,7 @@ namespace StickyPro
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { StopWatch(); refreshSoon.Dispose(); }
+            if (disposing) { navigationId++; loadId++; StopWatch(); refreshSoon.Dispose(); DriveCache.Changed -= RefreshDriveList; }
             base.Dispose(disposing);
         }
     }
@@ -520,6 +671,9 @@ namespace StickyPro
             layout.SelectedIndexChanged += delegate { Store.Settings.ExplorerLayout = Layouts[layout.SelectedIndex]; Store.MarkSettings(); Arrange(); };
             bar.Controls.Add(layout);
             bar.Controls.Add(Ui.Btn("Places", delegate { PlacesOff = !PlacesOff; PerformLayout(); }));
+            Button setsBtn = null;
+            setsBtn = Ui.Btn("Folder sets", delegate { FolderSets.ShowMenu(setsBtn, new Point(0, setsBtn.Height), OpenFolders, OpenSet, 4, "Explorer"); });
+            bar.Controls.Add(setsBtn);
             bar.Controls.Add(Ui.Btn("Copy to next  F5", delegate { if (active != null) CopyNext(active, false); }, true));
             bar.Controls.Add(Ui.Btn("Move to next  F6", delegate { if (active != null) CopyNext(active, true); }));
             bar.Controls.Add(Ui.Btn("Same folder in all", delegate { if (active != null) foreach (var p in panes) if (p != active) p.Navigate(active.Current); }));
@@ -582,9 +736,9 @@ namespace StickyPro
             {
                 var p = new FolderPane();
                 p.Activated += SetActive; p.CopyToOther += x => CopyNext(x, false); p.MoveToOther += x => CopyNext(x, true);
+                p.FolderChanged += SavePaths;
                 int i = panes.Count;
                 string start = i < Store.Settings.ExplorerPaths.Count ? Store.Settings.ExplorerPaths[i] : "";
-                if (start == null || (start.Length > 0 && !Directory.Exists(start))) start = i == 0 ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) : i == 1 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads") : Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                 panes.Add(p);
                 p.Navigate(start, false);
             }
@@ -610,9 +764,10 @@ namespace StickyPro
 
         void SavePaths()
         {
-            var cur = panes.Select(p => p.Current).ToList();
-            var old = Store.Settings.ExplorerPaths;
-            if (old != null && old.Count == cur.Count && old.SequenceEqual(cur)) return; // nothing changed: do not dirty the settings
+            var old = Store.Settings.ExplorerPaths ?? new List<string>();
+            var cur = panes.Select((p, i) => p.HasLocation ? p.Current : i < old.Count ? old[i] : "").ToList();
+            if (cur.Count < old.Count) cur.AddRange(old.Skip(cur.Count));
+            if (old.SequenceEqual(cur)) return; // nothing changed: do not dirty the settings
             Store.Settings.ExplorerPaths = cur;
             Store.MarkSettings();
         }
@@ -629,7 +784,28 @@ namespace StickyPro
         }
 
         public void OpenPath(string path) { if (!started) { started = true; Arrange(); } if (active != null) active.Navigate(path); }
-        protected override void Dispose(bool disposing) { if (disposing && panes.Count > 0) SavePaths(); base.Dispose(disposing); }
+        public string CurrentFolder { get { return active != null ? active.Current : ""; } }
+
+        // Folder sets: the folders shown in the panes, and opening a set (one pane per folder, up to 4).
+        List<string> OpenFolders() { if (!started) { started = true; Arrange(); } return panes.Take(grid.Controls.Count).Select(p => p.Current).Where(p => p.Length > 0).ToList(); }
+        void OpenSet(FolderSet s)
+        {
+            if (!started) { started = true; Arrange(); }
+            int n = Math.Max(1, Math.Min(4, s.Folders.Count));
+            if (layout.SelectedIndex != n - 1) layout.SelectedIndex = n - 1; else Arrange();
+            for (int i = 0; i < n && i < panes.Count; i++) panes[i].Navigate(s.Folders[i]);
+            SetActive(panes[0]);
+            App.I.Status("Opened folder set: " + s.Name);
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && panes.Count > 0)
+            {
+                SavePaths();
+                foreach (var pane in panes) if (pane.Parent == null) pane.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 
     // Left side of the Explorer page: favourite folders, drives with usage bars and recently visited folders.
@@ -641,15 +817,16 @@ namespace StickyPro
         readonly List<Row> rows = new List<Row>();
         Row hot; int scroll, contentH;
         bool dirty = true;
-        readonly ContextMenuStrip menu = Ui.Menu();
+        readonly ContextMenuStrip menu = Ui.Menu(true);
         public PlacesBar()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             Store.MetaChanged += OnMeta;
+            DriveCache.Changed += OnMeta;
             Ui.ThemeMenu(menu);
         }
         void OnMeta() { if (IsDisposed) return; if (InvokeRequired) { BeginInvoke((Action)OnMeta); return; } dirty = true; if (Visible) Invalidate(); }
-        protected override void Dispose(bool disposing) { if (disposing) { Store.MetaChanged -= OnMeta; menu.Dispose(); } base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { Store.MetaChanged -= OnMeta; DriveCache.Changed -= OnMeta; menu.Dispose(); } base.Dispose(disposing); }
         public void Reload() { dirty = true; Invalidate(); }
 
         void Build()
@@ -668,10 +845,11 @@ namespace StickyPro
             head("Drives");
             try
             {
-                foreach (var d in DriveInfo.GetDrives())
+                // From the drive cache: painting never waits for a slow network or card-reader drive.
+                foreach (var d in DriveCache.Get())
                 {
-                    var r = new Row { Id = d.Name, Name = d.Name.TrimEnd('\\'), Glyph = d.DriveType == DriveType.Network ? "" : d.DriveType == DriveType.Removable ? "" : "" };
-                    try { if (d.IsReady) { r.Name = (string.IsNullOrEmpty(d.VolumeLabel) ? "Local Disk" : d.VolumeLabel) + " (" + d.Name.TrimEnd('\\') + ")"; if (d.TotalSize > 0) { r.Used = 1.0 - (double)d.AvailableFreeSpace / d.TotalSize; r.Free = Fmt.Bytes(d.AvailableFreeSpace) + " free"; } } } catch { }
+                    var r = new Row { Id = d.Name, Name = DriveCache.Title(d), Glyph = d.Type == DriveType.Network ? "" : d.Type == DriveType.Removable ? "" : "" };
+                    if (d.Ready && d.Total > 0) { r.Used = 1.0 - (double)d.Free / d.Total; r.Free = Fmt.Bytes(d.Free) + " free"; }
                     rows.Add(r);
                 }
             }

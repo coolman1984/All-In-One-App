@@ -506,7 +506,7 @@ namespace StickyPro
             bar.Controls.Add(Ui.Btn("Shortcuts page", delegate { ChromeInfo.Open("Default", "chrome://extensions/shortcuts"); }));
             bar.Controls.Add(Ui.Btn("Refresh", delegate { Reload(); }));
             Controls.Add(bar);
-            info = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, TextAlign = ContentAlignment.MiddleLeft, Text = "Chrome protects its extension settings, so switching on/off and removing happen on Chrome's own page (double-click opens it for that extension)." };
+            info = new Label { Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted, TextAlign = ContentAlignment.MiddleLeft, Text = "Chrome allows this only on its own page. Double-click an extension to open it." };
             Controls.Add(info);
             Ui.Theme(this);
         }

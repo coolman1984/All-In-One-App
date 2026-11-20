@@ -130,7 +130,7 @@ namespace StickyPro
             var c = o as Clip;
             if (c != null)
             {
-                if (c.Kind == "image") { ci.Title = "Image " + c.ImgW + " x " + c.ImgH; ci.Thumb = Thumbs.Get(c, Ui.S(80), list.ItemHeight - Ui.S(18)); }
+                if (c.Kind == "image") { ci.Title = "Image " + c.ImgW + " x " + c.ImgH; ci.Thumb = Thumbs.Get(c, Ui.S(80), list.ItemHeight - Ui.S(18), list); }
                 else if (c.Kind == "files") ci.Title = Ui.FirstFileName(c.Text);
                 else ci.Title = Ui.OneLine(Store.TitleFrom(c.Text), 100);
                 ci.Sub = c.Kind == "image" ? "" : Ui.OneLine(c.Text, 140);
@@ -460,7 +460,6 @@ namespace StickyPro
             Location = pos;
             Store.MarkCards();
             Store.RaiseCards();
-            Ui.Later(1500, App.I.Trim);
         }
 
         public void Expand()
@@ -625,7 +624,7 @@ namespace StickyPro
             var help = new WrapLabel
             {
                 Dock = DockStyle.Top, Height = Ui.S(62), ForeColor = Ui.Muted, Font = Ui.Small,
-                Text = "Floating cards stay on top of any app. Put one feature in a card, or several features as tabs in one master card.\n" +
+                Text = "Cards float above every app. One feature per card, or several as tabs.\n" +
                        "Drag the top bar to move, drag edges to resize, double-click the top bar (or the  –  button) to shrink a card to a small pin.\n" +
                        Hotkeys.Get("cards") + " shows / hides all cards. In Clipboard and Prompts cards, Enter or double-click pastes into the app you used last."
             };

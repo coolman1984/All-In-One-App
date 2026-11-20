@@ -188,7 +188,7 @@ namespace StickyPro
             s.Tasks.Add(T("", "New prompt", "Save a reusable prompt or snippet", () => App.I.NewPrompt()));
             s.Tasks.Add(T("", "New blank image", "Start a picture from an empty canvas", () => SnipEditor.NewBlank()));
             s.Tasks.Add(T("", "Open image file", "Edit, mark up, OCR or print a picture", () => SnipEditor.OpenFile(null)));
-            s.Tasks.Add(T("", "Search everything", "Notes, prompts, clips and tagged files  (Ctrl+K)", () => GlobalSearch.Open(FindForm())));
+            s.Tasks.Add(T("", "Search this app", "Pages, tasks, notes and more  (Ctrl+K)", () => GlobalSearch.Open(FindForm())));
 
             s = Add("Screen Capture", 0);
             s.Tasks.Add(T("", "Full Screen", "Capture the whole screen", () => App.I.StartSnip("full", 0, false)));
@@ -384,14 +384,23 @@ namespace StickyPro
         {
             Dock = DockStyle.Fill; AutoScroll = true; BackColor = Ui.Bg;
             tasks = new TaskHome();
-            liveHead = new Label { Text = "Live dashboard", Font = new Font(Ui.FontName, 12f, FontStyle.Bold), ForeColor = Ui.Header, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
-            liveHead.Disposed += delegate { liveHead.Font.Dispose(); };
-            grid = new TileGrid(Ui.S(220), Ui.S(136), 6) { Dock = DockStyle.None, AutoSize = false };
-            Add("cpu", "CPU", "system:procs"); Add("ram", "RAM", "system:procs"); Add("C", "Disk C", "system:drives"); Add("D", "Disk D", "system:drives");
-            Add("apps", "Top 3 memory apps", "system:procs"); Add("clips", "Clipboard items today", "clips"); Add("prompts", "Prompts", "prompts");
-            Add("notes", "Reminders due today", "notes"); Add("activity", "Files opened today", "activity"); Add("tagged", "Tagged Urgent", "tagged"); Add("record", "Screen recorder", "snip");
-            if (Ui.Nexus) { board = new NexusBoard(); Controls.Add(tasks); Controls.Add(board); }
-            else { Controls.Add(tasks); Controls.Add(liveHead); Controls.Add(grid); }
+            SuspendLayout();
+            if (Ui.Nexus)
+            {
+                board = new NexusBoard();
+                Controls.AddRange(new Control[] { tasks, board });
+            }
+            else
+            {
+                liveHead = new Label { Text = "Live dashboard", Font = new Font(Ui.FontName, 12f, FontStyle.Bold), ForeColor = Ui.Header, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
+                liveHead.Disposed += delegate { liveHead.Font.Dispose(); };
+                grid = new TileGrid(Ui.S(220), Ui.S(136), 6) { Dock = DockStyle.None, AutoSize = false };
+                Add("cpu", "CPU", "system:procs"); Add("ram", "RAM", "system:procs"); Add("C", "Disk C", "system:drives"); Add("D", "Disk D", "system:drives");
+                Add("apps", "Top 3 memory apps", "system:procs"); Add("clips", "Clipboard items today", "clips"); Add("prompts", "Prompts", "prompts");
+                Add("notes", "Reminders due today", "notes"); Add("activity", "Files opened today", "activity"); Add("tagged", "Tagged Urgent", "tagged"); Add("record", "Screen recorder", "snip");
+                Controls.AddRange(new Control[] { tasks, liveHead, grid });
+            }
+            ResumeLayout(false);
             update = () => { if (Live) RefreshMetrics(false); };
             // Store events come in bursts (typing, copying): recompute the data once, 400 ms after the last event.
             storeUpdate = () => { if (Live) { storeTimer.Stop(); storeTimer.Start(); } };
@@ -406,7 +415,7 @@ namespace StickyPro
             laying = true;
             try
             {
-                int pad = Ui.S(Ui.Nexus ? 6 : 20), w = Math.Max(Ui.S(240), ClientSize.Width - pad * 2);
+                int pad = Math.Min(Ui.S(Ui.Nexus ? 6 : 20), Math.Max(0, ClientSize.Width / 8)), w = Math.Max(1, ClientSize.Width - pad * 2);
                 int y = AutoScrollPosition.Y + Ui.S(12);
                 if (board != null)
                 {
@@ -451,8 +460,9 @@ namespace StickyPro
             tiles["cpu"].Value = ProcessSampler.CpuTotal.ToString("0") + "%"; tiles["cpu"].Trend = ProcessSampler.CpuHistory.ToArray();
             tiles["ram"].Value = ProcessSampler.MemLoad + "%"; tiles["ram"].Trend = ProcessSampler.RamHistory.ToArray();
             foreach (string drive in new[] { "C", "D" }) { var d = DriveSnapshot.Read(drive); tiles[drive].Value = d.Value; tiles[drive].Detail = d.Detail; tiles[drive].Fraction = d.Used; }
-            var top = ProcessSampler.Last.GroupBy(p => p.Display).Select(g => new { Name = g.Key, Memory = g.Sum(p => p.Mem) }).OrderByDescending(g => g.Memory).Take(3).ToList();
-            tiles["apps"].Value = top.Count + " apps"; tiles["apps"].Detail = string.Join("\n", top.Select(p => p.Name + "  " + Fmt.Bytes(p.Memory)));
+            var top = ProcessSampler.MemoryApps.Take(3);
+            tiles["apps"].Value = Math.Min(3, ProcessSampler.MemoryApps.Count) + " apps";
+            tiles["apps"].Detail = string.Join("\n", top.Select(p => p.Name + "  " + Fmt.Bytes(p.Mem)));
             tiles["clips"].Value = facts.ClipsToday.ToString("N0"); tiles["prompts"].Value = facts.PromptCount.ToString("N0"); tiles["prompts"].Detail = "Most used: " + facts.MostUsed;
             tiles["notes"].Value = facts.RemindersToday.ToString("N0"); tiles["activity"].Value = facts.FilesToday.ToString("N0"); tiles["activity"].Detail = "Distinct files, through file activity";
             tiles["tagged"].Value = facts.Urgent.ToString("N0"); tiles["record"].Value = facts.Recording;
@@ -464,91 +474,6 @@ namespace StickyPro
             base.Dispose(disposing);
         }
     }
-
-    // Ctrl+K: one box that searches notes, prompts, clips and tagged files.
-    class GlobalSearch : Form
-    {
-        class Hit { public string Kind, Title, Sub; public Action Run; public override string ToString() { return Title; } }
-        static GlobalSearch current;
-        readonly TextBox box;
-        readonly CardList list;
-        readonly Timer debounce = new Timer { Interval = 150 };
-
-        public static void Open(IWin32Window owner)
-        {
-            if (current != null && !current.IsDisposed) { current.Activate(); current.box.Focus(); return; }
-            current = new GlobalSearch();
-            current.FormClosed += delegate { current = null; };
-            current.Show(owner);
-            current.Activate();
-        }
-
-        GlobalSearch()
-        {
-            AutoScaleMode = AutoScaleMode.None; Text = "Search everything"; Icon = App.AppIcon; Font = Ui.Base; BackColor = Ui.Bg; ForeColor = Ui.Text;
-            StartPosition = FormStartPosition.CenterScreen; ClientSize = Ui.S(620, 520); MinimumSize = Ui.S(360, 300); KeyPreview = true; ShowInTaskbar = false; TopMost = true;
-            Ui.DarkTitle(this);
-            box = Ui.Search("Type to search notes, prompts, clips and tagged files...");
-            box.Dock = DockStyle.Top;
-            list = new CardList { Dock = DockStyle.Fill };
-            list.Info = o => { var h = (Hit)o; return new CardInfo { Title = string.IsNullOrEmpty(h.Title) ? "(empty)" : h.Title, Sub = h.Sub, Meta = h.Kind }; };
-            var hint = new Label { Dock = DockStyle.Bottom, Height = Ui.S(24), ForeColor = Ui.Muted, Font = Ui.Small, Text = "Enter = open / copy   ·   Esc = close", TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(Ui.S(8), 0, 0, 0) };
-            var top = new Panel { Dock = DockStyle.Top, Height = box.PreferredHeight + Ui.S(16), Padding = new Padding(Ui.S(8)) };
-            top.Controls.Add(box);
-            Controls.Add(list); Controls.Add(hint); Controls.Add(top);
-            box.TextChanged += delegate { debounce.Stop(); debounce.Start(); };
-            debounce.Tick += delegate { debounce.Stop(); Fill(); };
-            box.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Down && list.Items.Count > 0) { list.SelectedIndex = Math.Min(list.Items.Count - 1, list.SelectedIndex + 1); e.Handled = true; }
-                else if (e.KeyCode == Keys.Up && list.Items.Count > 0) { list.SelectedIndex = Math.Max(0, list.SelectedIndex - 1); e.Handled = true; }
-                else if (e.KeyCode == Keys.Enter) { RunSelected(); e.SuppressKeyPress = true; }
-            };
-            list.DoubleClick += delegate { RunSelected(); };
-            list.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { RunSelected(); e.SuppressKeyPress = true; } };
-            Ui.Theme(this);
-            Shown += delegate { box.Focus(); Fill(); };
-        }
-
-        void RunSelected()
-        {
-            var hit = (list.SelectedItem ?? (list.Items.Count > 0 ? list.Items[0] : null)) as Hit;
-            if (hit == null) return;
-            try { hit.Run(); } catch (Exception ex) { App.Log("Search open: " + ex.Message); }
-            Close();
-        }
-
-        static bool Has(string text, string q) { return text != null && text.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0; }
-
-        void Fill()
-        {
-            string q = box.Text.Trim();
-            var hits = new List<Hit>();
-            if (q.Length > 0)
-            {
-                foreach (var n in Store.Notes.Where(n => Has(n.Text, q) || Has(n.Tags, q)).Take(30))
-                { var note = n; hits.Add(new Hit { Kind = "Note", Title = Ui.OneLine(n.Text, 90), Sub = "Sticky note" + (string.IsNullOrEmpty(n.Tags) ? "" : "  ·  " + n.Tags), Run = () => App.I.OpenNote(note) }); }
-                foreach (var p in Store.Prompts.Where(p => Has(p.Title, q) || Has(p.Body, q) || Has(p.Tags, q) || Has(p.Category, q)).Take(30))
-                { var prompt = p; hits.Add(new Hit { Kind = "Prompt", Title = p.Title, Sub = "Prompt  ·  " + Ui.OneLine(p.Body, 80) + "   (Enter copies)", Run = () => { if (App.I.CopyText(prompt.Body)) { prompt.Uses++; prompt.LastUsed = Store.Now(); Store.MarkPrompts(); App.I.Balloon("Prompt copied", prompt.Title); } } }); }
-                foreach (var c in Store.Clips.Where(c => Has(c.Text, q) || Has(c.Label, q)).Take(40))
-                { var clip = c; hits.Add(new Hit { Kind = "Clip", Title = Ui.OneLine(c.Text, 90), Sub = "Clipboard  ·  " + Ui.Ago(c.Time) + "   (Enter copies)", Run = () => { if (App.I.CopyClip(clip)) App.I.Balloon("Copied", Ui.OneLine(clip.Text, 60)); } }); }
-                foreach (var tk in Store.Tasks.Where(t => Has(t.Title, q) || Has(t.Notes, q) || Has(t.List, q)).Take(30))
-                { var task = tk; hits.Add(new Hit { Kind = "Task", Title = (tk.Done ? "\u2714 " : "") + tk.Title, Sub = "Task  ·  " + tk.List + (tk.Due > 0 ? "  ·  " + TaskParse.DueText(tk) : ""), Run = () => { App.I.ShowMain("tasks"); var mf = Application.OpenForms.OfType<MainForm>().FirstOrDefault(); if (mf != null) mf.SelectTask(task); } }); }
-                foreach (var t in Store.Tagged.Where(t => Has(t.Path, q) || Has(t.Note, q) || Has(t.Category, q)).Take(30))
-                { var file = t; hits.Add(new Hit { Kind = "File", Title = System.IO.Path.GetFileName(t.Path.TrimEnd('\\')), Sub = t.Category + "  ·  " + t.Path, Run = () => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(file.Path) { UseShellExecute = true }) }); }
-            }
-            list.BeginUpdate();
-            list.Items.Clear();
-            list.Items.AddRange(hits.Cast<object>().ToArray());
-            list.EndUpdate();
-            if (list.Items.Count > 0) list.SelectedIndex = 0;
-            Text = q.Length == 0 ? "Search everything" : hits.Count + " result(s) - Search everything";
-        }
-
-        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Escape) { Close(); e.Handled = true; } base.OnKeyDown(e); }
-        protected override void Dispose(bool disposing) { if (disposing) debounce.Dispose(); base.Dispose(disposing); }
-    }
-
 
     // Task-Manager-style performance strip: one owner-drawn control, fixed height (no AutoSize measuring),
     // 4 cards in one row on wide windows, 2 x 2 on narrow ones. CPU and memory show a 2-minute area chart.

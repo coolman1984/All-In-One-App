@@ -15,7 +15,7 @@ namespace StickyPro
     static class ApiTools
     {
         static readonly JavaScriptSerializer Js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 100 };
-        public static readonly string[] Pages = { "dashboard", "tasks", "notes", "prompts", "clips", "agents", "terminals", "explorer", "snip", "chrome", "power", "system", "cards", "activity", "tagged", "shortcuts" };
+        public static readonly string[] Pages = { "dashboard", "tasks", "notes", "prompts", "clips", "agents", "terminals", "explorer", "markdown", "browser", "documents", "accounts", "snip", "chrome", "power", "system", "cards", "activity", "tagged", "shortcuts" };
 
         // ---------- Schema ----------
         static List<Dictionary<string, object>> schema;
@@ -64,6 +64,13 @@ namespace StickyPro
 
             l.Add(T("favorites_list", "Favorites and recent items", "Favorite and recent items of a scope: folders (project folders used by Terminals, Explorer, Agents) or agents.", true,
                 new[] { "scope|string|folders or agents", "limit|integer|Max recent (default 20)" }, "scope"));
+            l.Add(T("folder_sets", "Folder sets", "Saved groups of folders the user opens together (in Explorer, Terminals and Agents).", true, new string[0]));
+            l.Add(T("folder_set_save", "Save a folder set", "Create or replace a folder set (a named group of folders opened together).", false,
+                new[] { "name|string|Set name", "folders|string|Folder paths, one per line or separated by ;", "favorite|boolean|Favorite" }, "name", "folders"));
+            l.Add(T("folder_sets_list", "Folder sets", "Named groups of folders the user opens together (shared by Explorer, Terminals and Agents).", true,
+                new string[0]));
+            l.Add(T("agent_limits", "Agent usage limits", "5-hour and weekly usage limits of the agent CLIs (Claude Code, Codex; others report none), with reset times.", true,
+                new string[0]));
             l.Add(T("item_organize", "Organize an item", "Favorite, color, tag, note or rename any item of a scope (for folders the id is the full path).", false,
                 new[] { "scope|string|folders or agents", "id|string|Item id or folder path", "favorite|boolean|Favorite", "color|string|" + string.Join(", ", MetaStore.Colors) + " or \"\"", "tags|string|Comma separated", "note|string|Note", "name|string|Display name (\"\" = default)" }, "scope", "id"));
 
@@ -72,6 +79,15 @@ namespace StickyPro
             l.Add(T("agent_chat_get", "Read an agent chat", "The last messages of a chat.", true, new[] { "id|string|Chat id", "last|integer|How many messages (default 20)" }, "id"));
             l.Add(T("agent_ask", "Ask coding agents", "Send a message to one or more coding agents in a folder and wait for their answers. Agents answer in turn and see each other's replies. Continue a chat with chat_id. mode: ask (read only, default), edit (may edit files), auto (no approvals).", false,
                 new[] { "prompt|string|Message", "agents|array|Agent ids, e.g. [\"claude\", \"codex\"]", "folder|string|Working folder (new chats)", "chat_id|string|Continue this chat", "mode|string|ask, edit or auto", "timeout_seconds|integer|Max wait per agent (default 900)" }, "prompt"));
+            // ---- control of the app's pages (the Assistant uses these to work for you) ----
+            l.Add(T("page_context", "What the user sees", "The open page and its context: the Markdown note, the Explorer folder, the Browser tab (title, address).", true, new string[0]));
+            l.Add(T("markdown_open", "Open a Markdown note", "Show a .md file on the Markdown notes page.", false, new[] { "path|string|Full path of the .md file" }, "path"));
+            l.Add(T("explorer_open", "Open a folder in Explorer page", "Show a folder in the app's Explorer page.", false, new[] { "path|string|Folder path" }, "path"));
+            l.Add(T("terminal_open", "Open a terminal", "Open a PowerShell terminal in a folder, optionally running a command.", false, new[] { "folder|string|Folder", "command|string|Command to run" }, "folder"));
+            l.Add(T("document_open", "View a document in the app", "Open an Excel, PowerPoint, Word, Visio or PDF file (read only, company-protected files too) on the Documents page; emails (.eml, .msg, .mysingle) open on the Browser page.", false, new[] { "path|string|full file path" }, "path"));
+            l.Add(T("browser_open", "Open in the app browser", "Open a web address or a local file (PDF, HTML, email) in a new tab of the app's Browser page.", false, new[] { "target|string|URL or file path" }, "target"));
+            l.Add(T("browser_read", "Read the browser tab", "Title, address and visible text of the active tab of the app's Browser page.", true, new[] { "max_chars|integer|Limit (default 20000)" }));
+            l.Add(T("browser_run_js", "Run JavaScript in the browser tab", "Run a script in the active tab (click, fill, extract). Returns the result as JSON.", false, new[] { "script|string|JavaScript expression" }, "script"));
             schema = l;
             return l;
         }
@@ -102,9 +118,32 @@ namespace StickyPro
             switch (tool)
             {
                 case "agent_ask": return AgentAsk(a);
+                case "browser_read": case "browser_run_js": return BrowserScript(tool, a);
                 case "agent_chats": case "agent_chat_get": case "search_all": EnsureChats(); break;
             }
             return UI(() => RunUi(tool, a));
+        }
+
+        // Browser scripts finish asynchronously on the UI thread: start them there, wait here (the pipe thread).
+        static string BrowserScript(string tool, Dictionary<string, object> a)
+        {
+            var done = new ManualResetEvent(false);
+            string result = null, error = null;
+            App.I.Sync.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    string js = tool == "browser_read"
+                        ? "JSON.stringify({title:document.title,url:location.href,text:(document.body?document.body.innerText:'').slice(0," + (Has(a, "max_chars") ? Convert.ToInt32(a["max_chars"]) : 20000) + ")})"
+                        : S(a, "script");
+                    result = await App.I.BrowserScript(js);
+                }
+                catch (Exception ex) { error = ex.Message; }
+                done.Set();
+            }));
+            if (!done.WaitOne(30000)) throw new Exception("The browser did not answer in 30 s.");
+            if (error != null) throw new Exception(error);
+            return result ?? "null";
         }
 
         static string UI(Func<string> f)
@@ -132,6 +171,12 @@ namespace StickyPro
                     if (!Pages.Contains(page)) throw new Exception("Unknown page. Use one of: " + string.Join(", ", Pages));
                     App.I.ShowMain(page); return J(new { opened = page });
                 }
+                case "page_context": return J(App.I.PageContext());
+                case "markdown_open": { string p = S(a, "path"); if (!File.Exists(p)) throw new Exception("No such file: " + p); App.I.OpenMarkdown(p); return J(new { opened = p }); }
+                case "explorer_open": { string p = S(a, "path"); if (!Directory.Exists(p)) throw new Exception("No such folder: " + p); App.I.OpenInExplorerPage(p); return J(new { opened = p }); }
+                case "terminal_open": { string p = S(a, "folder"); if (!Directory.Exists(p)) throw new Exception("No such folder: " + p); Term.Open(p, Has(a, "command") ? S(a, "command") : ""); return J(new { opened = p }); }
+                case "document_open": { string p = S(a, "path"); if (!System.IO.File.Exists(p)) throw new Exception("File not found: " + p); App.I.OpenDocument(p); return J(new { opened = p }); }
+                case "browser_open": { string t = S(a, "target"); if (string.IsNullOrWhiteSpace(t)) throw new Exception("Give a URL or a file path."); App.I.OpenInBrowser(t); return J(new { opened = t }); }
                 case "notify": App.I.Balloon(Has(a, "title") ? S(a, "title") : Ui.AppTitle, S(a, "text")); return J(new { shown = true });
 
                 case "notes_search":
@@ -278,6 +323,20 @@ namespace StickyPro
                 }
                 case "clipboard_copy": return J(new { copied = App.I.CopyText(S(a, "text")) });
 
+                case "folder_sets":
+                    return J(FolderSets.Ordered().Select(x => new { name = x.Name, favorite = x.Fav, folders = x.Folders, note = x.Note, uses = x.Uses, used = Iso(x.Used) }));
+                case "folder_set_save":
+                {
+                    string name = S(a, "name").Trim();
+                    var folders = FolderSets.Clean(S(a, "folders").Replace("\r", "").Split(new[] { '\n', ';' }, StringSplitOptions.RemoveEmptyEntries));
+                    if (name.Length == 0 || folders.Count == 0) throw new Exception("name and folders are required.");
+                    var set = FolderSets.All.FirstOrDefault(x => x.Name == name);
+                    if (set == null) { set = new FolderSet { Name = name, Created = Store.Now() }; FolderSets.All.Add(set); }
+                    set.Folders = folders;
+                    var fav = B(a, "favorite"); if (fav != null) set.Fav = fav.Value;
+                    FolderSets.Save();
+                    return J(new { saved = name, folders = folders.Count });
+                }
                 case "favorites_list":
                 {
                     string scope = S(a, "scope");
@@ -287,6 +346,10 @@ namespace StickyPro
                         recent = MetaStore.Recent(scope, I(a, "limit", 20)).Select(MetaJson)
                     });
                 }
+                case "folder_sets_list":
+                    return J(FolderSets.Ordered().Select(x => new { name = x.Name, favorite = x.Fav, folders = x.Folders, note = x.Note, uses = x.Uses }));
+                case "agent_limits":
+                    return J(AgentLimits.ReadAll().Select(x => new { agent = x.Agent, account = x.Account, five_hour_pct = x.FiveHour, five_hour_resets = x.FiveResets.HasValue ? x.FiveResets.Value.ToString("s") : null, weekly_pct = x.Weekly, weekly_resets = x.WeekResets.HasValue ? x.WeekResets.Value.ToString("s") : null, note = x.Note }));
                 case "item_organize":
                 {
                     string scope = S(a, "scope"), id = S(a, "id");
@@ -394,7 +457,7 @@ namespace StickyPro
                         lock (texts) { if (kind == "text") texts.Add(text); else if (kind == "error") errors.Add(text); else if (kind == "tool") tools++; }
                         App.I.Sync.BeginInvoke(new Action(() =>
                         {
-                            if (kind == "session") { chat.Sessions[agentId] = text; return; }
+                            if (kind == "session") { chat.Sessions[run.ActiveSessionKey] = text; return; }
                             if (kind == "info") return;
                             chat.Messages.Add(new AgentMsg { Role = kind == "text" ? "agent" : kind, Agent = agentId, Text = text, Time = Store.Now() });
                             chat.Updated = Store.Now();
@@ -413,7 +476,7 @@ namespace StickyPro
                     }));
                     if (!started) { UI(() => { chat.Messages.Add(new AgentMsg { Role = "error", Agent = agentId, Text = err ?? "Could not start.", Time = Store.Now() }); return ""; }); replies.Add(new { agent = agentId, error = err }); continue; }
                     if (!exited.WaitOne(timeout * 1000)) { run.Stop(); errors.Add("Stopped after " + timeout + " s."); exited.WaitOne(5000); }
-                    UI(() => { chat.Seen[agentId] = chat.Messages.Count; AgentStore.Save(chat); AgentStore.RaiseChat(chat); return ""; });
+                    UI(() => { chat.Seen[run.ActiveSessionKey] = chat.Messages.Count; AgentStore.Save(chat); AgentStore.RaiseChat(chat); return ""; });
                     lock (texts) replies.Add(new { agent = agentId, name = AgentStore.NameOf(agentId), text = string.Join("\n\n", texts), errors = errors.ToArray(), tool_calls = tools });
                 }
             }

@@ -10,13 +10,18 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 $ico  = Join-Path $root 'src\app.ico'
 if (-not (Test-Path $ico)) { throw 'src\app.ico is missing: run build.ps1 once first.' }
 $src  = Get-ChildItem (Join-Path $root 'src') -Filter *.cs | ForEach-Object { $_.FullName }
-$refs = '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll', '/r:System.Web.Extensions.dll'
+$refs = '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll', '/r:System.Web.Extensions.dll', '/r:System.IO.Compression.dll'
+$refs += '/resource:' + (Join-Path $root 'src\ChatSlides.pptx') + ',ChatSlides.pptx'
+$wv = Join-Path $root 'lib\webview2'
+$refs += ('/r:' + (Join-Path $wv 'Microsoft.Web.WebView2.Core.dll')), ('/r:' + (Join-Path $wv 'Microsoft.Web.WebView2.WinForms.dll'))
+foreach ($n in 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll') { $refs += '/resource:' + (Join-Path $wv $n) + ',webview2.' + $n }
+$refs += '/resource:' + (Join-Path (Split-Path $wv) 'markdown\marked.umd.js') + ',md.marked.js'
 
-if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
-New-Item -ItemType Directory $dist | Out-Null
+New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $stage = Join-Path $dist 'All in One'
-New-Item -ItemType Directory $stage | Out-Null
+New-Item -ItemType Directory -Path $stage -Force | Out-Null
 $exe = Join-Path $stage 'AllInOne.exe'
+$readme = Join-Path $stage 'READ ME FIRST.txt'
 
 # Only framework assemblies that ship with Windows are referenced, so the exe has no other dependencies.
 & $csc /nologo /target:winexe /optimize+ /platform:x64 /out:$exe /win32icon:$ico $refs $src
@@ -52,11 +57,22 @@ Optional
   when they are installed. Everything else works without them.
 - AllInOne.exe --data <folder>   use a folder of your choice for one run
 - AllInOne.exe --uninstall       remove the installed copy (same as Settings > Apps)
-'@ | Set-Content (Join-Path $stage 'READ ME FIRST.txt') -Encoding utf8
+'@ | Set-Content -LiteralPath $readme -Encoding utf8
 
 $zip = Join-Path $dist 'All-in-One-portable.zip'
-Compress-Archive -Path $stage -DestinationPath $zip
-Copy-Item $exe (Join-Path $dist 'AllInOne.exe')
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$temporaryZip = Join-Path $dist ('portable-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+try {
+    $archive = [IO.Compression.ZipFile]::Open($temporaryZip, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in @($exe, $readme)) {
+            [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, ('All in One/' + [IO.Path]::GetFileName($file)))
+        }
+    } finally { $archive.Dispose() }
+    Move-Item -LiteralPath $temporaryZip -Destination $zip -Force
+} finally { if (Test-Path -LiteralPath $temporaryZip) { Remove-Item -LiteralPath $temporaryZip -Force } }
+Copy-Item -LiteralPath $exe -Destination (Join-Path $dist 'AllInOne.exe') -Force
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
 "SHA256  $hash  AllInOne.exe" | Set-Content (Join-Path $dist 'SHA256.txt') -Encoding ascii
 Write-Host "Built $zip"

@@ -13,6 +13,7 @@ namespace StickyPro
         readonly TextBox search;
         readonly CardList list;
         readonly Label tabClips, tabPrompts, hint;
+        readonly Timer searchTimer = new Timer { Interval = 125 };
         string mode = "clips";
         IntPtr target;
         bool busy;
@@ -56,7 +57,8 @@ namespace StickyPro
             search = Ui.Search("Type to search...");
             search.Dock = DockStyle.Top;
             Ui.UseFont(search, new Font("Segoe UI", 11f));
-            search.TextChanged += delegate { Fill(); };
+            search.TextChanged += delegate { searchTimer.Stop(); searchTimer.Start(); };
+            searchTimer.Tick += delegate { Fill(); };
             var sw = new Panel(); sw.Dock = DockStyle.Top; sw.Height = Ui.S(38); sw.Padding = new Padding(0, Ui.S(4), 0, Ui.S(6));
             sw.Controls.Add(search);
             inner.Controls.Add(sw);
@@ -121,24 +123,42 @@ namespace StickyPro
 
         void Fill()
         {
+            searchTimer.Stop();
             string q = search.Text.Trim();
             var words = q.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             IEnumerable<object> items;
             if (mode == "clips")
             {
                 items = Store.Clips
-                    .Where(c => words.All(w => c.Text.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0 || (c.Source ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0 || (c.Folder ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
+                    .Where(c => words.All(w => Contains(c.Text, w) || Contains(c.Source, w) || Contains(c.Folder, w)))
                     .Take(300).Cast<object>();
             }
             else
             {
                 items = Store.Prompts
-                    .Where(p => words.All(w => (p.Title + "\n" + p.Body + "\n" + p.Tags + "\n" + p.Category + "\n" + p.Trigger).IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))
+                    .Where(p => words.All(w => Contains(p.Title, w) || Contains(p.Tags, w) || Contains(p.Category, w) || Contains(p.Trigger, w) || Contains(p.Body, w)))
                     .OrderByDescending(p => p.Fav).ThenByDescending(p => p.Uses).ThenByDescending(p => p.LastUsed)
                     .Take(300).Cast<object>();
             }
             list.SetItems(items);
             if (list.Items.Count > 0) list.SelectedIndex = 0;
+        }
+
+        static bool Contains(string value, string word)
+        {
+            return value != null && value.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            if (!Visible) searchTimer.Stop();
+            base.OnVisibleChanged(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { searchTimer.Stop(); searchTimer.Dispose(); }
+            base.Dispose(disposing);
         }
 
         CardInfo Info(object o)
@@ -149,7 +169,7 @@ namespace StickyPro
             var c = o as Clip;
             if (c != null)
             {
-                if (c.Kind == "image") { ci.Title = num + "Image " + c.ImgW + " x " + c.ImgH; ci.Thumb = Thumbs.Get(c, Ui.S(90), list.ItemHeight - Ui.S(18)); }
+                if (c.Kind == "image") { ci.Title = num + "Image " + c.ImgW + " x " + c.ImgH; ci.Thumb = Thumbs.Get(c, Ui.S(90), list.ItemHeight - Ui.S(18), list); }
                 else if (c.Kind == "files") { ci.Title = num + Ui.FirstFileName(c.Text); }
                 else ci.Title = num + Ui.OneLine(Store.TitleFrom(c.Text), 100);
                 ci.Sub = c.Kind == "image" ? "" : Ui.OneLine(c.Text, 160);
@@ -176,6 +196,7 @@ namespace StickyPro
 
         void ShowPasteAs(Point at)
         {
+            if (searchTimer.Enabled) { Fill(); return; }
             var o = list.SelectedItem;
             if (o == null) return;
             var c = o as Clip;
@@ -201,6 +222,7 @@ namespace StickyPro
         // transform 0 = plain text as is
         void Pick(bool paste, int transform)
         {
+            if (searchTimer.Enabled) { Fill(); return; }
             var o = list.SelectedItem;
             if (o == null) return;
             bool ok;
@@ -231,6 +253,12 @@ namespace StickyPro
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (searchTimer.Enabled && (keyData == Keys.Down || keyData == Keys.Up || keyData == Keys.PageDown || keyData == Keys.PageUp ||
+                keyData == (Keys.Control | Keys.Enter) || keyData == (Keys.Control | Keys.P) ||
+                (keyData >= (Keys.Control | Keys.D1) && keyData <= (Keys.Control | Keys.D9))))
+            {
+                Fill();
+            }
             switch (keyData)
             {
                 case Keys.Escape: Hide(); return true;
@@ -288,10 +316,5 @@ namespace StickyPro
             if (!busy) Hide();
         }
 
-        protected override void OnVisibleChanged(EventArgs e)
-        {
-            base.OnVisibleChanged(e);
-            if (!Visible) Ui.Later(2000, App.I.Trim);
-        }
     }
 }

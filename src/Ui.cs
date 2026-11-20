@@ -22,6 +22,26 @@ namespace StickyPro
     {
         public static float Scale = 1f;
         public static int S(int v) { return (int)Math.Round(v * Scale); }
+        // Runs an expensive re-arrangement once, shortly after the last call (e.g. after a window resize settles),
+        // instead of on every resize step. Each key has its own timer.
+        static readonly Dictionary<string, Timer> debounce = new Dictionary<string, Timer>();
+        public static void Debounce(string key, int ms, Action a)
+        {
+            Timer t;
+            if (!debounce.TryGetValue(key, out t)) { t = new Timer(); debounce[key] = t; }
+            t.Stop(); t.Interval = Math.Max(1, ms);
+            t.Tag = a;
+            t.Tick -= DebounceTick; t.Tick += DebounceTick;
+            t.Start();
+        }
+        static void DebounceTick(object s, EventArgs e)
+        {
+            var t = (Timer)s;
+            t.Stop();
+            var action = t.Tag as Action;
+            t.Tag = null;
+            if (action != null) try { action(); } catch (Exception ex) { App.Log("Debounce: " + ex.Message); }
+        }
         public static Size S(int w, int h) { return new Size(S(w), S(h)); }
 
         public const int SpaceSmall = 4, Space = 8, SpaceLarge = 16, Radius = 8, ControlHeight = 32;
@@ -42,11 +62,15 @@ namespace StickyPro
             if (float.IsNaN(headingScale) || headingScale < 0.85f || headingScale > 1.4f) headingScale = 1f;
             string family = Installed(name) ? name : ChooseFont();
             string head = Installed(heading) ? heading : family;
+            var hs = FontStyle.Bold;
+            if (!Installed(heading))
+                foreach (var semi in new[] { "Segoe UI Variable Display Semib", "Segoe UI Semibold" })
+                    if (Installed(semi)) { head = semi; hs = FontStyle.Regular; break; }   // semibold face: calmer than bold
             float k = size / 10f, h = k * headingScale;
             FontName = family;
             Base = new Font(family, size); Bold = new Font(family, size, FontStyle.Bold); Small = new Font(family, 8.5f * k);
-            Big = new Font(head, 14f * h, FontStyle.Bold); Metric = new Font(head, 24f * h, FontStyle.Bold);
-            Title = new Font(head, 17f * h, FontStyle.Bold); Kpi = new Font(head, 20f * h, FontStyle.Bold);
+            Big = new Font(head, 14f * h, hs); Metric = new Font(head, 24f * h, hs);
+            Title = new Font(head, 17f * h, hs); Kpi = new Font(head, 20f * h, hs);
         }
         public static bool Installed(string family)
         {
@@ -77,9 +101,11 @@ namespace StickyPro
         }
 
         // Colour themes: the accent (and the classic sidebar colour) follow the theme.
-        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo", "SerQ blue" };
-        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230), Color.FromArgb(51, 102, 240) };
-        public const int SerqTheme = 7;
+        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo", "SerQ blue", "Soft coral" };
+        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230), Color.FromArgb(51, 102, 240), Color.FromArgb(232, 88, 44) };
+        public const int SerqTheme = 7, SoftTheme = 8;
+        // Soft design: charcoal floating sidebar, quiet grey canvas, white cards, coral accent (uses the SerQ layout).
+        public static bool Soft;
         // SerQ design: Nexus layout with a floating navy sidebar, blue-grey canvas and soft card shadows.
         public static bool Navy;
         public static int ThemeIndex;
@@ -131,35 +157,34 @@ namespace StickyPro
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
-        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ComboBox, ComboFrame> comboFrames = new System.Runtime.CompilerServices.ConditionalWeakTable<ComboBox, ComboFrame>();
 
         // ---------- Theme ----------
         public static bool Dark;
         public static Color Accent { get { return Dark ? Mix(TB, Color.White, 0.45) : Mix(TB, Color.Black, 0.08); } }
         public static Color AccentFill { get { return Mix(TB, Color.Black, 0.08); } }
-        public static Color Bg { get { return Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
-        public static Color Card { get { return Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
-        public static Color Field { get { return Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
+        public static Color Bg { get { return Soft ? (Dark ? H("#121214") : H("#ECECEF")) : Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
+        public static Color Card { get { return Soft ? (Dark ? H("#1C1C20") : H("#FFFFFF")) : Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
+        public static Color Field { get { return Soft ? (Dark ? H("#212126") : H("#FFFFFF")) : Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
         public static Color Nav { get { return Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
         // Nexus: white sidebar with dark text; classic: PicPick-style solid colour sidebar with white text.
-        public static Color Sidebar { get { return Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
-        public static Color SidebarSel { get { return Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
-        public static Color SidebarHover { get { return Navy ? (Dark ? H("#1A2550") : H("#233270")) : Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
-        public static Color SidebarText { get { return Navy ? (Dark ? H("#E3E8F7") : H("#E8EDFB")) : Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
-        public static Color SidebarMuted { get { return Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
+        public static Color Sidebar { get { return Soft ? (Dark ? H("#0B0B0D") : H("#26262A")) : Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
+        public static Color SidebarSel { get { return Soft ? (Dark ? H("#26262C") : H("#3A3A40")) : Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
+        public static Color SidebarHover { get { return Soft ? (Dark ? H("#18181B") : H("#303035")) : Navy ? (Dark ? H("#1A2550") : H("#233270")) : Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
+        public static Color SidebarText { get { return Soft ? (Dark ? H("#ECECEF") : H("#F3F3F5")) : Navy ? (Dark ? H("#E3E8F7") : H("#E8EDFB")) : Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
+        public static Color SidebarMuted { get { return Soft ? (Dark ? H("#85858F") : H("#9B9BA3")) : Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
         public static Color Header { get { return Nexus ? Text : Dark ? Mix(TB, Color.White, 0.5) : TB; } }
-        public static Color Line { get { return Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
-        public static Color Text { get { return Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
-        public static Color Muted { get { return Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
-        public static Color SelBg { get { return Nexus ? (Dark ? Mix(TB, H("#171A21"), 0.72) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
-        public static Color HoverBg { get { return Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
-        public static Color PressBg { get { return Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
+        public static Color Line { get { return Soft ? (Dark ? H("#2B2B31") : H("#E3E3E7")) : Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
+        public static Color Text { get { return Soft ? (Dark ? H("#EEEEF1") : H("#17171A")) : Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
+        public static Color Muted { get { return Soft ? (Dark ? H("#9A9AA4") : H("#6C6C75")) : Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
+        public static Color SelBg { get { return Nexus ? (Dark ? Mix(TB, Card, 0.80) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
+        public static Color HoverBg { get { return Soft ? (Dark ? H("#25252A") : H("#F2F2F4")) : Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
+        public static Color PressBg { get { return Soft ? (Dark ? H("#2E2E34") : H("#E7E7EA")) : Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
         public static Color AccentHover { get { return Mix(TB, Color.Black, 0.2); } }
         public static Color AccentPressed { get { return Mix(TB, Color.Black, 0.3); } }
         public static Color Success { get { return Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
         public static Color Danger { get { return Dark ? Color.FromArgb(255, 143, 143) : Color.FromArgb(196, 43, 48); } }
         public static Color Warning { get { return Dark ? Color.FromArgb(249, 202, 101) : Color.FromArgb(151, 98, 0); } }
-        public static Color Track { get { return Navy ? (Dark ? H("#232B42") : H("#EDF1F8")) : Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
+        public static Color Track { get { return Soft ? (Dark ? H("#2A2A30") : H("#E8E8EC")) : Navy ? (Dark ? H("#232B42") : H("#EDF1F8")) : Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
         public static Color Canvas { get { return Dark ? Color.FromArgb(28, 28, 28) : Color.FromArgb(225, 225, 225); } }
         public static Color Overlay { get { return Color.FromArgb(36, 36, 36); } }
         public static Color OverlayField { get { return Color.FromArgb(60, 60, 60); } }
@@ -274,6 +299,8 @@ namespace StickyPro
 
         static readonly System.Reflection.PropertyInfo doubleBufferedProp =
             typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ComboBox, DarkComboFace> comboFaces =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<ComboBox, DarkComboFace>();
 
         // Flicker-free resizing: containers paint off-screen. (Panel covers FlowLayoutPanel and TableLayoutPanel.)
         public static void Smooth(Control c)
@@ -312,14 +339,20 @@ namespace StickyPro
                     if (cb != null)
                     {
                         cb.FlatStyle = FlatStyle.Flat;
-                        cb.DrawMode = DrawMode.OwnerDrawFixed;
-                        cb.ItemHeight = cb.Font.Height + S(SpaceSmall);
-                        cb.DrawItem -= DrawCombo; cb.DrawItem += DrawCombo;
-                        comboFrames.GetValue(cb, cbox => new ComboFrame(cbox));
+                        // The light selection field and arrow use the system paint path.
+                        if (cb.DrawMode == DrawMode.Normal)
+                        {
+                            cb.DrawMode = DrawMode.OwnerDrawFixed;
+                            cb.ItemHeight = cb.Font.Height + S(SpaceSmall);
+                            cb.DrawItem += DrawCombo;
+                        }
+                        comboFaces.GetValue(cb, combo => new DarkComboFace(combo));
                     }
                 }
                 var check = c as CheckBox;
                 if (check != null) { check.FlatStyle = FlatStyle.Flat; check.ForeColor = Text; check.FlatAppearance.BorderColor = Line; check.FlatAppearance.CheckedBackColor = SelBg; }
+                var tree = c as TreeView;
+                if (tree != null) { tree.BackColor = Card; tree.ForeColor = Text; tree.LineColor = Line; DarkScroll(tree); }
                 var date = c as DateTimePicker;
                 if (date != null) { date.CalendarMonthBackground = Field; date.CalendarForeColor = Text; }
                 if (c is TextBox || c is ListBox || c is RichTextBox || c is ComboBox || c is ListView || c is NumericUpDown) DarkScroll(c);
@@ -342,55 +375,68 @@ namespace StickyPro
             var combo = (ComboBox)sender;
             bool selected = (e.State & DrawItemState.Selected) != 0;
             using (var b = new SolidBrush(selected ? SelBg : Field)) e.Graphics.FillRectangle(b, e.Bounds);
-            string text = e.Index >= 0 ? combo.GetItemText(combo.Items[e.Index]) : combo.Text;
+            string text = e.Index >= 0 && e.Index < combo.Items.Count ? combo.GetItemText(combo.Items[e.Index]) : combo.Text;
             var r = e.Bounds; r.Inflate(-S(SpaceSmall), 0);
             var dir = IsRtl(text) ? TextFormatFlags.RightToLeft | TextFormatFlags.Right : TextFormatFlags.Left;
             TextRenderer.DrawText(e.Graphics, text, combo.Font, r, combo.Enabled ? Text : Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | dir);
             if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
         }
 
-        class ComboFrame : NativeWindow
+        sealed class DarkComboFace : NativeWindow
         {
             readonly ComboBox combo;
-            public ComboFrame(ComboBox combo)
+
+            public DarkComboFace(ComboBox combo)
             {
                 this.combo = combo;
                 combo.HandleCreated += delegate { AssignHandle(combo.Handle); };
                 combo.HandleDestroyed += delegate { ReleaseHandle(); };
-                combo.Disposed += delegate { ReleaseHandle(); };
                 if (combo.IsHandleCreated) AssignHandle(combo.Handle);
             }
-            protected override void WndProc(ref Message m)
+
+            protected override void WndProc(ref Message message)
             {
-                base.WndProc(ref m);
-                bool printing = m.Msg == 0x317 || m.Msg == 0x318;
-                if ((!printing && m.Msg != 0xF) || combo.DropDownStyle == ComboBoxStyle.Simple) return;
-                IntPtr dc = printing ? m.WParam : Native.GetWindowDC(Handle);
+                base.WndProc(ref message);
+                if (!Dark || combo.DropDownStyle == ComboBoxStyle.Simple) return;
+                bool print = message.Msg == 0x317 || message.Msg == 0x318;
+                if (!print && message.Msg != 0xF) return;
+                IntPtr window = Handle;
+                IntPtr dc = print ? message.WParam : Native.GetWindowDC(window);
                 if (dc == IntPtr.Zero) return;
                 try
                 {
-                    using (var g = Graphics.FromHdc(dc))
-                    using (var fill = new SolidBrush(combo.Enabled ? Field : Bg))
-                    {
-                        int arrow = Math.Max(S(24), SystemInformation.VerticalScrollBarWidth);
-                        var r = new Rectangle(0, 0, combo.Width - 1, combo.Height - 1);
-                        if (combo.DropDownStyle == ComboBoxStyle.DropDownList)
-                        {
-                            g.FillRectangle(fill, new Rectangle(0, 0, combo.Width, combo.Height));
-                            var text = new Rectangle(S(6), 0, Math.Max(0, r.Width - arrow - S(8)), r.Height);
-                            var dir = combo.RightToLeft == RightToLeft.Yes || IsRtl(combo.Text) ? TextFormatFlags.RightToLeft | TextFormatFlags.Right : TextFormatFlags.Left;
-                            TextRenderer.DrawText(g, combo.Text, combo.Font, text, combo.Enabled ? Text : Muted, TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | dir);
-                        }
-                        // Editable combos retain their native edit child and selection.
-                        g.FillRectangle(fill, Math.Max(0, r.Right - arrow), 0, arrow + 1, r.Height + 1);
-                        int cx = r.Right - arrow / 2, cy = r.Height / 2;
-                        using (var ink = new SolidBrush(combo.Enabled ? Text : Muted)) g.FillPolygon(ink, new[] { new Point(cx - S(4), cy - S(1)), new Point(cx + S(4), cy - S(1)), new Point(cx, cy + S(3)) });
-                        g.SmoothingMode = SmoothingMode.AntiAlias;
-                        using (var path = Round(r, S(SpaceSmall)))
-                        using (var pen = new Pen(combo.ContainsFocus ? Accent : Line)) g.DrawPath(pen, path);
-                    }
+                    using (var g = Graphics.FromHdc(dc)) DrawFace(g);
                 }
-                finally { if (!printing) Native.ReleaseDC(Handle, dc); }
+                finally { if (!print) Native.ReleaseDC(window, dc); }
+            }
+
+            void DrawFace(Graphics g)
+            {
+                int width = combo.Width, height = combo.Height;
+                if (width < 2 || height < 2) return;
+                bool rtl = combo.RightToLeft == RightToLeft.Yes;
+                int button = Math.Min(width, Math.Max(S(24), SystemInformation.VerticalScrollBarWidth));
+                int buttonX = rtl ? 0 : width - button;
+                int arrowX = buttonX + button / 2, mid = height / 2;
+                Color background = combo.Enabled ? Field : Bg;
+                Color foreground = combo.Enabled ? Text : Muted;
+                using (var fill = new SolidBrush(background))
+                using (var ink = new SolidBrush(foreground))
+                using (var border = new Pen(combo.ContainsFocus ? Accent : Line))
+                {
+                    if (combo.DropDownStyle == ComboBoxStyle.DropDownList)
+                    {
+                        g.FillRectangle(fill, 0, 0, width, height);
+                        string text = combo.Text;
+                        var bounds = new Rectangle((rtl ? button : 0) + S(6), 0, Math.Max(0, width - button - S(12)), height);
+                        var flags = TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter;
+                        if (rtl || IsRtl(text)) flags |= TextFormatFlags.RightToLeft | TextFormatFlags.Right;
+                        TextRenderer.DrawText(g, text, combo.Font, bounds, foreground, flags);
+                    }
+                    else g.FillRectangle(fill, buttonX, 0, button, height);
+                    g.FillPolygon(ink, new[] { new Point(arrowX - S(4), mid - S(1)), new Point(arrowX + S(4), mid - S(1)), new Point(arrowX, mid + S(3)) });
+                    g.DrawRectangle(border, 0, 0, width - 1, height - 1);
+                }
             }
         }
 
@@ -554,7 +600,7 @@ namespace StickyPro
 
         public static TextBox Search(string cue)
         {
-            var t = new FluentTextBox();
+            var t = new FluentTextBox { SearchIcon = true };
             t.Font = Base;
             t.BorderStyle = BorderStyle.FixedSingle;
             Cue(t, cue);
@@ -850,11 +896,18 @@ namespace StickyPro
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
+        // Layout asks for this on every resize step: measure the text only when text, font or padding change.
+        string sizeKey; Size sizeCache; int textWKey = -1; string textWFor;
         public override Size GetPreferredSize(Size proposedSize)
         {
+            string key = Text + "\u0001" + Font.GetHashCode() + "|" + GlyphSpace + "|" + Padding + "|" + MinimumSize;
+            if (key == sizeKey) return sizeCache;
             var text = TextRenderer.MeasureText(Text, Font);
-            return new Size(Math.Max(MinimumSize.Width, text.Width + GlyphSpace + Padding.Horizontal + Ui.S(4)), Math.Max(MinimumSize.Height, Font.Height + Padding.Vertical + Ui.S(4)));
+            sizeCache = new Size(Math.Max(MinimumSize.Width, text.Width + GlyphSpace + Padding.Horizontal + Ui.S(4)), Math.Max(MinimumSize.Height, Font.Height + Padding.Vertical + Ui.S(4)));
+            sizeKey = key;
+            return sizeCache;
         }
+        int TextWidth() { string k = Text + "\u0001" + Font.GetHashCode(); if (k != textWFor) { textWKey = TextRenderer.MeasureText(Text, Font).Width; textWFor = k; } return textWKey; }
         public override void NotifyDefault(bool value) { defaultButton = value; base.NotifyDefault(value); Invalidate(); }
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hover = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
@@ -869,12 +922,15 @@ namespace StickyPro
             var g = e.Graphics;
             g.Clear(Parent == null ? Ui.Bg : Parent.BackColor);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color fill = !Enabled ? Ui.Bg : Primary ? (pressed ? Ui.AccentPressed : hover ? Ui.AccentHover : Ui.AccentFill) : pressed ? Ui.PressBg : hover ? Ui.HoverBg : BackColor;
+            var under = Parent == null ? Ui.Bg : Parent.BackColor;
+            Color fill = !Enabled ? Ui.Mix(under, Ui.Text, 0.03)
+                : Primary ? (pressed ? Ui.AccentPressed : hover ? Ui.AccentHover : Ui.AccentFill)
+                : Ui.Mix(under, Ui.Text, pressed ? 0.15 : hover ? 0.10 : Ui.Dark ? 0.07 : 0.055);   // soft secondary button
             var r = new Rectangle(0, 0, Width - 1, Height - 1);
             using (var path = Ui.Round(r, Ui.S(Ui.Radius)))
             {
                 using (var b = new SolidBrush(fill)) g.FillPath(b, path);
-                using (var p = new Pen((Focused || defaultButton) && Enabled ? Ui.Accent : Primary ? fill : Ui.Line)) g.DrawPath(p, path);
+                if ((Focused && ShowFocusCues) || defaultButton) using (var p = new Pen(Ui.Accent)) g.DrawPath(p, path);
             }
             var textRect = Rectangle.Inflate(ClientRectangle, -Ui.S(Ui.Space), -Ui.S(2));
             var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
@@ -883,7 +939,7 @@ namespace StickyPro
             if (GlyphSpace > 0)
             {
                 // Icon + text centred together.
-                int textW = TextRenderer.MeasureText(Text, Font).Width;
+                int textW = TextWidth();
                 int total = Math.Min(textRect.Width, GlyphSpace + textW);
                 int x = textRect.X + Math.Max(0, (textRect.Width - total) / 2);
                 TextRenderer.DrawText(g, Glyph, Ui.Icon(10.5f), new Rectangle(x, textRect.Y, Ui.S(18), textRect.Height), !Enabled ? Ui.Muted : Primary ? Color.White : Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
@@ -904,10 +960,21 @@ namespace StickyPro
     class FluentTextBox : TextBox
     {
         public FluentTextBox() { BorderStyle = BorderStyle.FixedSingle; BackColor = Ui.Field; ForeColor = Ui.Text; }
+        // Search boxes: a magnifier glyph and the same height as buttons and combos, text centred vertically.
+        public bool SearchIcon;
+        bool Tall { get { return SearchIcon && !Multiline; } }
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Native.SendMessage(Handle, 0xD3 /* EM_SETMARGINS */, (IntPtr)3, (IntPtr)((Ui.S(5) << 16) | Ui.S(5)));
+            int left = Tall ? Ui.S(26) : Ui.S(5);
+            Native.SendMessage(Handle, 0xD3 /* EM_SETMARGINS */, (IntPtr)3, (IntPtr)((Ui.S(5) << 16) | left));
+        }
+        protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); if (IsHandleCreated) OnHandleCreated(e); }
+        void PaintGlyph(Graphics g)
+        {
+            var ir = new Rectangle(Ui.S(4), 0, Ui.S(18), ClientSize.Height);
+            using (var b = new SolidBrush(BackColor)) g.FillRectangle(b, 0, 0, Ui.S(24), ClientSize.Height);
+            TextRenderer.DrawText(g, "", Ui.Icon(9.5f), ir, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
         protected override void OnResize(EventArgs e)
         {
@@ -923,9 +990,14 @@ namespace StickyPro
         protected override void WndProc(ref Message m)
         {
             base.WndProc(ref m);
+            if (Tall && IsHandleCreated && (m.Msg == 0xF || m.Msg == 0x318 /* WM_PRINTCLIENT */))
+            {
+                if (m.Msg == 0x318) using (var g = Graphics.FromHdc(m.WParam)) PaintGlyph(g);
+                else using (var g = Graphics.FromHwnd(Handle)) PaintGlyph(g);
+            }
             if (BorderStyle == BorderStyle.None || !IsHandleCreated) return;
             bool printing = m.Msg == 0x317 || m.Msg == 0x318;
-            if (printing || m.Msg == 0x85 || m.Msg == 0xF || m.Msg == 0x7 || m.Msg == 0x8)
+            if (printing || m.Msg == 0xF || m.Msg == 0x85 || m.Msg == 0x7 || m.Msg == 0x8)   // the themed edit redraws its frame during WM_PAINT too
             {
                 IntPtr dc = printing ? m.WParam : Native.GetWindowDC(Handle);
                 if (dc == IntPtr.Zero) return;
@@ -995,6 +1067,7 @@ namespace StickyPro
     public class CardList : ListBox
     {
         public Func<object, CardInfo> Info;
+        bool batchingSelection, selectionChanged;
 
         public CardList()
         {
@@ -1009,27 +1082,98 @@ namespace StickyPro
 
         public void SetItems(IEnumerable<object> items)
         {
-            var keep = new HashSet<object>(SelectedItems.Cast<object>());
+            var keep = new HashSet<object>(Selected<object>());
             object top = TopIndex >= 0 && TopIndex < Items.Count ? Items[TopIndex] : null;
-            BeginUpdate();
-            Items.Clear();
             var arr = items.ToArray();
-            Items.AddRange(arr);
-            bool any = false;
-            for (int i = 0; i < arr.Length && keep.Count > 0; i++)
+            UpdateSelection(delegate
             {
-                if (keep.Contains(arr[i]))
-                {
-                    if (SelectionMode == SelectionMode.One) { SelectedIndex = i; any = true; break; }
-                    SetSelected(i, true); any = true;
-                }
-            }
-            if (top != null) { int ti = Array.IndexOf(arr, top); if (ti >= 0) TopIndex = ti; }
-            EndUpdate();
-            if (!any && keep.Count > 0) OnSelectedIndexChanged(EventArgs.Empty);
+                Items.Clear();
+                Items.AddRange(arr);
+                RestoreSelection(arr, keep);
+                if (top != null) { int ti = Array.IndexOf(arr, top); if (ti >= 0) TopIndex = ti; }
+                if (keep.Count > 0) selectionChanged = true;
+            });
         }
 
-        public List<T> Selected<T>() { return SelectedItems.Cast<object>().OfType<T>().ToList(); }
+        public void SelectAll()
+        {
+            if (Items.Count == 0 || !MultiSelect) return;
+            UpdateSelection(delegate
+            {
+                if (IsHandleCreated)
+                {
+                    SetNativeSelected(-1, true);
+                    SetSelected(0, true);
+                }
+                else for (int i = 0; i < Items.Count; i++) SetSelected(i, true);
+            });
+        }
+
+        bool MultiSelect { get { return SelectionMode == SelectionMode.MultiExtended || SelectionMode == SelectionMode.MultiSimple; } }
+
+        void SetNativeSelected(int index, bool selected)
+        {
+            Native.SendMessage(Handle, 0x185 /* LB_SETSEL */, selected ? (IntPtr)1 : IntPtr.Zero, (IntPtr)index);
+        }
+
+        void RestoreSelection(object[] items, HashSet<object> keep)
+        {
+            if (items.Length == 0 || keep.Count == 0 || SelectionMode == SelectionMode.None) return;
+            if (MultiSelect && IsHandleCreated)
+            {
+                int retain = items.Count(keep.Contains);
+                if (retain == 0) return;
+                bool selectMost = retain > items.Length / 2;
+                if (selectMost) SetNativeSelected(-1, true);
+                for (int i = 0; i < items.Length; i++)
+                {
+                    bool selected = keep.Contains(items[i]);
+                    if (selected != selectMost) SetNativeSelected(i, selected);
+                }
+                // One managed call tells WinForms to synchronize SelectedItems with the native state.
+                SetSelected(0, keep.Contains(items[0]));
+                return;
+            }
+            for (int i = 0; i < items.Length; i++)
+            {
+                if (!keep.Contains(items[i])) continue;
+                if (SelectionMode == SelectionMode.One) { SelectedIndex = i; break; }
+                SetSelected(i, true);
+            }
+        }
+
+        void UpdateSelection(Action change)
+        {
+            BeginUpdate();
+            batchingSelection = true;
+            try { change(); }
+            finally
+            {
+                batchingSelection = false;
+                EndUpdate();
+                if (selectionChanged) { selectionChanged = false; OnSelectedIndexChanged(EventArgs.Empty); }
+            }
+        }
+
+        protected override void OnSelectedIndexChanged(EventArgs e)
+        {
+            if (batchingSelection) selectionChanged = true;
+            else base.OnSelectedIndexChanged(e);
+        }
+
+        public List<T> Selected<T>()
+        {
+            if (!MultiSelect || !IsHandleCreated) return SelectedItems.Cast<object>().OfType<T>().ToList();
+            int count = Native.SendMessage(Handle, 0x190 /* LB_GETSELCOUNT */, IntPtr.Zero, IntPtr.Zero).ToInt32();
+            if (count <= 0) return new List<T>();
+            var indices = new int[count];
+            var pin = System.Runtime.InteropServices.GCHandle.Alloc(indices, System.Runtime.InteropServices.GCHandleType.Pinned);
+            try { count = Native.SendMessage(Handle, 0x191 /* LB_GETSELITEMS */, (IntPtr)count, pin.AddrOfPinnedObject()).ToInt32(); }
+            finally { pin.Free(); }
+            var selected = new List<T>(Math.Max(0, count));
+            for (int i = 0; i < count; i++) if (Items[indices[i]] is T) selected.Add((T)Items[indices[i]]);
+            return selected;
+        }
 
         protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(); }
 
@@ -1194,7 +1338,7 @@ namespace StickyPro
             TabStop = true;
             AccessibleRole = AccessibleRole.PageTab;
             Glyph = glyph; Text = text;
-            Height = Ui.Nexus ? Ui.S(40) : Ui.S(46);
+            Height = Ui.Navy ? Ui.S(36) : Ui.Nexus ? Ui.S(40) : Ui.S(46);   // floating sidebars: all pages fit without scrolling
             Dock = DockStyle.Top;
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -1226,15 +1370,16 @@ namespace StickyPro
             g.Clear(Ui.Sidebar);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             bool narrow = Width < Ui.S(100);
-            var pill = new Rectangle(Ui.S(10), Ui.S(2), Width - Ui.S(20), Height - Ui.S(4));
+            var pill = new Rectangle(Ui.S(Ui.Navy ? 6 : 10), Ui.S(2), Width - Ui.S(Ui.Navy ? 12 : 20), Height - Ui.S(4));
             if (selected || hover || Focused)
                 using (var path = Ui.Round(pill, Ui.S(Ui.Navy ? 10 : 8)))
                 {
                     using (var b = new SolidBrush(selected ? Ui.SidebarSel : Ui.SidebarHover)) g.FillPath(b, path);
                     if (selected && Ui.Navy)
                     {
-                        using (var p = new Pen(Color.FromArgb(150, 110, 145, 255))) g.DrawPath(p, path);
-                        using (var b = new SolidBrush(Color.FromArgb(120, 160, 255))) g.FillRectangle(b, pill.Right - Ui.S(3), pill.Y + Ui.S(8), Ui.S(3), pill.Height - Ui.S(16));
+                        var mark = Ui.Soft ? Ui.Mix(Ui.AccentFill, Color.White, 0.15) : Color.FromArgb(120, 160, 255);
+                        using (var p = new Pen(Color.FromArgb(150, mark))) g.DrawPath(p, path);
+                        using (var b = new SolidBrush(mark)) g.FillRectangle(b, pill.Right - Ui.S(3), pill.Y + Ui.S(8), Ui.S(3), pill.Height - Ui.S(16));
                     }
                     if (Focused && !selected) using (var p = new Pen(Ui.Navy ? Ui.SidebarMuted : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(p, path);
                 }
@@ -1242,7 +1387,7 @@ namespace StickyPro
             var iconColor = Ui.Navy ? (selected ? Color.White : Ui.SidebarMuted) : selected ? Ui.Accent : Ui.SidebarMuted;
             TextRenderer.DrawText(g, Glyph, Ui.Icon(12f), iconRect, iconColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             if (narrow) return;
-            int tx = pill.X + Ui.S(42), right = pill.Right - Ui.S(8);
+            int tx = pill.X + Ui.S(38), right = pill.Right - Ui.S(6);
             if (!string.IsNullOrEmpty(Badge))
             {
                 var size = TextRenderer.MeasureText(Badge, Ui.Small, Size.Empty, TextFormatFlags.NoPadding);

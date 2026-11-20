@@ -26,7 +26,7 @@ namespace StickyPro
             t.Start();
             var steps = new List<KeyValuePair<string, Action>>();
             steps.Add(new KeyValuePair<string, Action>("open main", () => App.I.ShowMain("dashboard")));
-            foreach (var p in new[] { "dashboard", "notes", "prompts", "clips", "system:procs", "system:startup", "system:drives", "cards", "snip", "activity", "tagged", "tasks", "explorer", "chrome", "chrome:extensions", "system:uninstall", "power", "shortcuts", "dashboard" })
+            foreach (var p in new[] { "dashboard", "notes", "prompts", "clips", "agents", "terminals", "system:procs", "system:startup", "system:drives", "cards", "snip", "activity", "tagged", "tasks", "explorer", "agents", "terminals", "explorer", "chrome", "chrome:extensions", "system:uninstall", "power", "shortcuts", "dashboard" })
             { string page = p; steps.Add(new KeyValuePair<string, Action>("page " + page, () => App.I.ShowMain(page))); }
             int i = 0;
             var timer = new System.Windows.Forms.Timer { Interval = 1500 };
@@ -34,7 +34,7 @@ namespace StickyPro
             {
                 if (i < steps.Count) { phase = steps[i].Key; try { steps[i].Value(); } catch (Exception ex) { App.Log("perf step: " + ex.Message); } i++; return; }
                 timer.Stop(); timer.Dispose();
-                ResizePages(new List<string> { "dashboard", "prompts", "system:procs" }, 0);
+                ResizePages(new List<string> { "dashboard", "agents", "terminals", "explorer", "prompts", "system:procs" }, 0);
             };
             timer.Start();
         }

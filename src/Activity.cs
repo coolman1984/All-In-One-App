@@ -148,6 +148,13 @@ namespace StickyPro
         static void ReadOffice(string progId, string collection, string label, HashSet<string> into)
         {
             object app = null, coll = null;
+            DateTime until;
+            if (busyUntil.TryGetValue(label, out until) && DateTime.UtcNow < until)
+            {
+                // Office said it was busy a moment ago: keep what we knew, ask again later.
+                foreach (var kv in officeProc.Where(kv => kv.Value == label && officeOpen.Contains(kv.Key))) into.Add(kv.Key);
+                return;
+            }
             try
             {
                 app = Marshal.GetActiveObject(progId);
@@ -174,7 +181,12 @@ namespace StickyPro
             {
                 // Reflection wraps COM errors. A failed read is not evidence of closure.
                 foreach (var kv in officeProc.Where(kv => kv.Value == label && officeOpen.Contains(kv.Key))) into.Add(kv.Key);
-                LogOnce(label + " read: " + (ex.InnerException ?? ex).Message);
+                var com = (ex.InnerException ?? ex) as COMException;
+                uint hr = com != null ? (uint)com.ErrorCode : 0;
+                // Normal states, not errors: not running (MK_E_UNAVAILABLE), busy (RPC_E_CALL_REJECTED / SERVERCALL_RETRYLATER),
+                // just closed (RPC_E_DISCONNECTED), no document yet (DISP_E_MEMBERNOTFOUND). Busy: wait 20 s before asking again.
+                if (hr == 0x80010001 || hr == 0x8001010A) busyUntil[label] = DateTime.UtcNow.AddSeconds(20);
+                else if (hr != 0x800401E3 && hr != 0x80010108 && hr != 0x80020003) LogOnce(label + " read: " + (ex.InnerException ?? ex).Message);
             }
             finally
             {
@@ -184,6 +196,7 @@ namespace StickyPro
         }
 
         static readonly HashSet<string> logged = new HashSet<string>();
+        static readonly Dictionary<string, DateTime> busyUntil = new Dictionary<string, DateTime>();
         static void LogOnce(string msg) { if (logged.Count < 128 && logged.Add(msg)) App.Log("Activity " + msg); }
 
         // ---------- Other apps through Recent items ----------
@@ -397,7 +410,7 @@ namespace StickyPro
             lv.Columns.Add("Backup", Ui.S(130));
             lv.FillIndex = 3;
             lv.RetrieveVirtualItem += Retrieve;
-            lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 5 || e.Column == 6; } Fill(); };
+            lv.ColumnClick += (s, e) => { if (sortCol == e.Column) sortDesc = !sortDesc; else { sortCol = e.Column; sortDesc = e.Column == 5 || e.Column == 6; } Fill(true); };
             lv.MouseClick += (s, e) =>
             {
                 var hit = lv.HitTest(e.Location);
@@ -423,6 +436,7 @@ namespace StickyPro
             m.Items.Add("Favorite on/off", null, delegate { ToggleFav(Sel()); });
             m.Items.Add("Tag file...", null, delegate { var r = Sel(); if (r.Count > 0) TaggedPanel.AskTag(r.Select(x => x.Path).Distinct().ToList(), FindForm()); });
             m.Items.Add("Copy path", null, delegate { var r = Sel(); if (r.Count > 0) App.I.CopyText(string.Join("\r\n", r.Select(x => x.Path).Distinct())); });
+            m.Items.Add(AppLinks.LazySendTo(() => { var r = Sel().FirstOrDefault(); return r == null ? null : r.Path; }, null, FindForm()));
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Delete records", null, delegate { DeleteSel(); });
             Ui.ThemeMenu(m);
@@ -434,21 +448,21 @@ namespace StickyPro
             search.Width = Ui.S(200);
             search.Margin = new Padding(0, Ui.S(4), Ui.S(6), 0);
             searchTimer = new System.Windows.Forms.Timer { Interval = 250 };
-            searchTimer.Tick += delegate { searchTimer.Stop(); Fill(); };
+            searchTimer.Tick += delegate { searchTimer.Stop(); Fill(true); };
             search.TextChanged += delegate { searchTimer.Stop(); searchTimer.Start(); };
             bar.Controls.Add(search);
             typeFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(120), Margin = new Padding(0, Ui.S(4), Ui.S(6), 0) };
             typeFilter.Items.AddRange(new object[] { "All types", "Excel", "Word", "PowerPoint", "PDF Reader", "Image Viewer", "Text Editor", "Media Player", "Other" });
             typeFilter.SelectedIndex = 0;
-            typeFilter.SelectedIndexChanged += delegate { Fill(); };
+            typeFilter.SelectedIndexChanged += delegate { Fill(true); };
             bar.Controls.Add(typeFilter);
             timeFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(110), Margin = new Padding(0, Ui.S(4), Ui.S(6), 0) };
             timeFilter.Items.AddRange(new object[] { "All time", "Today", "Last 7 days", "Last 30 days" });
             timeFilter.SelectedIndex = 0;
-            timeFilter.SelectedIndexChanged += delegate { Fill(); };
+            timeFilter.SelectedIndexChanged += delegate { Fill(true); };
             bar.Controls.Add(timeFilter);
             favOnly = new CheckBox { Text = "★ Favorites", AutoSize = true, Margin = new Padding(0, Ui.S(7), Ui.S(6), 0) };
-            favOnly.CheckedChanged += delegate { Fill(); };
+            favOnly.CheckedChanged += delegate { Fill(true); };
             bar.Controls.Add(favOnly);
             bar.Controls.Add(Ui.Btn("Backup", delegate { BackupRecs(Sel()); }, true));
             bar.Controls.Add(Ui.Btn("Open dir", delegate { OpenDir(); }));
@@ -490,7 +504,9 @@ namespace StickyPro
             base.Dispose(disposing);
         }
 
-        void Fill()
+        void Fill() { Fill(false); }
+        // reset: a new filter or sort - start at the top. Live updates keep the scroll position.
+        void Fill(bool reset)
         {
             stale = false;
             string q = search.Text.Trim();
@@ -518,8 +534,12 @@ namespace StickyPro
             lv.VirtualListSize = rows.Count;
             lv.SelectedIndices.Clear();
             if (keep.Count > 0) for (int i = 0; i < rows.Count; i++) if (keep.Contains(rows[i])) lv.SelectedIndices.Add(i);
+            if ((reset || lv.TopItem == null) && rows.Count > 0) lv.EnsureVisible(0);
             lv.EndUpdate();
+            // The native list scrolls its old pixels when the row count shrinks; repaint once it has settled,
+            // or rows from the previous filter leave an empty band above the real rows.
             lv.Invalidate();
+            if (lv.IsHandleCreated) lv.BeginInvoke((Action)(() => { if (!lv.IsDisposed) lv.Invalidate(); }));
             count.Text = rows.Count.ToString("N0") + " records" + (Store.Settings.ActivityOn ? "" : "  (logging off)");
         }
 

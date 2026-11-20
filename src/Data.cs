@@ -202,6 +202,35 @@ namespace StickyPro
         public string OverlayDockEdge = "bottom";   // bottom | left | right
         public string OverlayCorner = "topleft";    // hot corner that opens the window overview
         public List<DockItem> OverlayApps = new List<DockItem>();   // pinned dock apps
+        public int ExplorerSortCol = 2; public bool ExplorerSortDesc = true;   // Explorer panes: Modified, newest first
+        public float AgentTextScale = 1f;   // Agents chat text size (1 = interface size)
+        public int AgentInputHeight;   // message box height on the Agents page (0 = default)
+        public Dictionary<string, List<string>> AgentMyModels = new Dictionary<string, List<string>>();   // your own model names per agent (shown first)
+        public List<FolderSet> FolderSets = new List<FolderSet>();
+        public List<TermLaunch> TermHistory = new List<TermLaunch>();
+        public DateTime CliCheckedAt;   // last automatic agent CLI update check
+        public List<string> MdVaults = new List<string>();   // Markdown notes: folders of .md files
+        public string MdAiAgent = "claude"; public bool MdAiOpen = true;   // old Markdown AI panel (kept for old settings files)
+        public bool AssistantOpen;   // the Assistant panel (right side of every page)
+        public Dictionary<string, string> ViewStacks = new Dictionary<string, string>();   // VS Code style side sections: state per stack
+        public List<string> MdTabs = new List<string>();   // Markdown: open note tabs
+        public List<string> ViewerTabs = new List<string>();   // Documents page: open files
+        public bool ViewerEdit = true;   // Documents page: Excel / Word / PowerPoint open inside the tab for editing
+        public bool MdTreeHidden, MdSideHidden;   // Markdown: note tree (Ctrl+B) and side panel (Ctrl+Shift+B) hidden
+        public List<string> SearchHistory = new List<string>();   // Ctrl+K: recent searches (newest first)
+        public Dictionary<string, string> AgentDefaultAccount = new Dictionary<string, string>();   // CLI id -> named account new chats use
+        public bool CodexManaged;   // Codex refused full access ("disallowed by requirements"): use workspace-write + on-request
+        public List<string> BrowserTabs = new List<string>();
+        public List<string> BrowserDownloads = new List<string>();                     // newest first
+        public Dictionary<string, double> BrowserZoom = new Dictionary<string, double>();   // site -> zoom  // Browser page: open tabs (restored at start)
+        public int BrowserActive; public string BrowserHome = ""; public bool BrowserAutomation;
+        public int MdVaultIndex; public string MdMode = "read", MdLast = "";   // terminals opened from the app (newest first)
+        // App-only defaults per agent for chats that did not pick their own (the CLI's own settings are not touched).
+        public Dictionary<string, string> AgentDefaultModel = new Dictionary<string, string>(), AgentDefaultEffort = new Dictionary<string, string>();
+        public int AgentDefaultsVersion;   // saved groups of folders (Explorer, Terminals, Agents)
+        public List<string> AgentDeadModels = new List<string>();   // "agent|model" the CLI said no longer exist (hidden from menus)
+        public List<string> AgentCmdFavs = new List<string>();      // favorite "/" commands of the Agents page, in your order
+        public List<AgentCustomCmd> AgentCustomCmds = new List<AgentCustomCmd>();   // your own "/" commands
     }
 
     // Generic management record for an item in any tab (folder, workspace, bookmark, program, process, ...):
@@ -222,7 +251,7 @@ namespace StickyPro
 
     // Terminals page: one pane = folder + shell + optional start command (e.g. claude).
     public class TermPane { public string Folder = ""; public string Shell = "pwsh"; public string Command = ""; public string Name = ""; public string Color = ""; }
-    public class TermWorkspace { public string Name = "My terminals"; public string Layout = "4"; public string Mode = "tiled"; public List<TermPane> Panes = new List<TermPane>(); }
+    public class TermWorkspace { public bool Fav; public string Name = "My terminals"; public string Layout = "4"; public string Mode = "tiled"; public List<TermPane> Panes = new List<TermPane>(); }
 
     static class Store
     {
@@ -267,7 +296,7 @@ namespace StickyPro
         public static void RaiseCards() { var h = CardsChanged; if (h != null) h(); }
         static System.Windows.Forms.Timer saveTimer;
         static readonly HashSet<string> recovered = new HashSet<string>();
-        public static bool Pending { get { return notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty || metaDirty; } }
+        public static bool Pending { get { return WritePending || notesDirty || promptsDirty || clipsDirty || settingsDirty || cardsDirty || historyDirty || activityDirty || taggedDirty || tasksDirty || metaDirty; } }
         public static void StopSaver() { if (saveTimer != null) { saveTimer.Dispose(); saveTimer = null; } }
 
         public static string NewId() { return Guid.NewGuid().ToString("N"); }
@@ -285,9 +314,9 @@ namespace StickyPro
         {
             Dir = DataFolder();
             ImgDir = Path.Combine(Dir, "images");
+            Backup.ApplyPending(Dir);
             Directory.CreateDirectory(Dir);
             Directory.CreateDirectory(ImgDir);
-            Backup.ApplyPending(Dir);
             Notes = Read<List<Note>>("notes.json") ?? new List<Note>();
             Prompts = Read<List<Prompt>>("prompts.json") ?? new List<Prompt>();
             Clips = Read<List<Clip>>("clips.json") ?? new List<Clip>();
@@ -328,7 +357,7 @@ namespace StickyPro
             foreach (var l in Settings.Launchers) { if (l.Id == null) l.Id = NewId(); if (l.Keys == null) l.Keys = ""; if (l.Name == null) l.Name = ""; if (l.Target == null) l.Target = ""; if (l.Args == null) l.Args = ""; }
             if (Settings.ExplorerPaths == null) Settings.ExplorerPaths = new List<string>();
             if (string.IsNullOrEmpty(Settings.ExplorerLayout)) Settings.ExplorerLayout = "2";
-            if (Settings.Theme < 0 || Settings.Theme > 5) Settings.Theme = 0;
+            if (Settings.Theme < 0 || Settings.Theme >= Ui.ThemeNames.Length) Settings.Theme = 0;
             if (Settings.UiFont == null) Settings.UiFont = "";
             if (float.IsNaN(Settings.UiFontSize) || Settings.UiFontSize < 8 || Settings.UiFontSize > 16) Settings.UiFontSize = 10f;
             Notes.RemoveAll(n => n == null);
@@ -356,12 +385,43 @@ namespace StickyPro
             if (s.Density != "compact" && s.Density != "roomy") s.Density = "normal";
             if (float.IsNaN(s.HeadingScale) || s.HeadingScale < 0.85f || s.HeadingScale > 1.4f) s.HeadingScale = 1f;
             if (float.IsNaN(s.MonoFontSize) || s.MonoFontSize < 7 || s.MonoFontSize > 20) s.MonoFontSize = 10f;
+            if (float.IsNaN(s.AgentTextScale) || s.AgentTextScale < 0.7f || s.AgentTextScale > 2.5f) s.AgentTextScale = 1f;
             if (s.CornerRadius > 24) s.CornerRadius = 24;
             if (s.PageNames == null) s.PageNames = new Dictionary<string, string>();
             if (s.NavOrder == null) s.NavOrder = new List<string>();
             if (s.NavHidden == null) s.NavHidden = new List<string>();
             if (s.NavFavorites == null) s.NavFavorites = new List<string>();
             if (s.OverlayApps == null) s.OverlayApps = new List<DockItem>();
+            if (s.AgentCmdFavs == null) s.AgentCmdFavs = new List<string>();
+            if (s.AgentDeadModels == null) s.AgentDeadModels = new List<string>();
+            if (s.TermHistory == null) s.TermHistory = new List<TermLaunch>();
+            if (s.MdVaults == null) s.MdVaults = new List<string>();
+            if (s.BrowserTabs == null) s.BrowserTabs = new List<string>();
+            if (s.BrowserDownloads == null) s.BrowserDownloads = new List<string>();
+            if (s.BrowserZoom == null) s.BrowserZoom = new Dictionary<string, double>();
+            if (s.SearchHistory == null) s.SearchHistory = new List<string>();
+            if (s.AgentDefaultAccount == null) s.AgentDefaultAccount = new Dictionary<string, string>();
+            if (s.ViewStacks == null) s.ViewStacks = new Dictionary<string, string>();
+            if (s.MdTabs == null) s.MdTabs = new List<string>();
+            if (s.ViewerTabs == null) s.ViewerTabs = new List<string>();
+            s.MdVaults.RemoveAll(string.IsNullOrWhiteSpace);
+            s.TermHistory.RemoveAll(x => x == null);
+            foreach (var x in s.TermHistory) { if (x.Folders == null) x.Folders = new List<string>(); if (x.Kind == null) x.Kind = ""; if (x.Title == null) x.Title = ""; if (x.Command == null) x.Command = ""; if (x.Shell == null) x.Shell = ""; if (x.Layout == null) x.Layout = ""; }
+            if (s.FolderSets == null) s.FolderSets = new List<FolderSet>();
+            if (s.AgentDefaultModel == null) s.AgentDefaultModel = new Dictionary<string, string>();
+            if (s.AgentDefaultEffort == null) s.AgentDefaultEffort = new Dictionary<string, string>();
+            if (s.AgentDefaultsVersion < 1)
+            {
+                // Owner's choice (2026-11-16): Cline in chats = Kimi K3.1 Pro on Cline Pass, effort high.
+                s.AgentDefaultModel["cline"] = "cline-pass: moonshotai/kimi-k3.1-pro";
+                s.AgentDefaultsVersion = 1;
+            }
+            if (s.AgentDefaultsVersion < 2) { s.AgentDefaultEffort["cline"] = "high"; s.AgentDefaultsVersion = 2; }
+            s.FolderSets.RemoveAll(x => x == null);
+            foreach (var fs in s.FolderSets) { if (fs.Name == null) fs.Name = ""; if (fs.Note == null) fs.Note = ""; if (fs.Folders == null) fs.Folders = new List<string>(); fs.Folders.RemoveAll(string.IsNullOrWhiteSpace); }
+            if (s.AgentMyModels == null) s.AgentMyModels = new Dictionary<string, List<string>>();
+            if (s.AgentCustomCmds == null) s.AgentCustomCmds = new List<AgentCustomCmd>();
+            s.AgentCustomCmds.RemoveAll(c => c == null || string.IsNullOrEmpty(c.Name));
             s.OverlayApps.RemoveAll(d => d == null || string.IsNullOrEmpty(d.Path));
             if (s.OverlayDockVersion < 2) { if (s.OverlayDockSize == 56) s.OverlayDockSize = 28; s.OverlayDockVersion = 2; }   // first dock was too big
             if (s.OverlayDockVersion < 3) { s.OverlayAutoHide = true; s.OverlayDockVersion = 3; }   // full screen: the dock appears only at the bottom edge
@@ -391,13 +451,13 @@ namespace StickyPro
         public static string DirOverride;
         public static string DataFolder()
         {
-            if (!string.IsNullOrEmpty(DirOverride)) { Directory.CreateDirectory(DirOverride); return DirOverride; }
+            if (!string.IsNullOrEmpty(DirOverride)) return DirOverride;
             try
             {
                 if (File.Exists(LocationFile))
                 {
                     string p = File.ReadAllText(LocationFile).Trim();
-                    if (p.Length > 0 && Path.IsPathRooted(p)) { Directory.CreateDirectory(p); return p; }
+                    if (p.Length > 0 && Path.IsPathRooted(p)) return p;
                 }
             }
             catch (Exception ex) { App.Log("Data folder: " + ex.Message + " - using the default."); }
@@ -409,18 +469,22 @@ namespace StickyPro
             try
             {
                 newDir = Path.GetFullPath(newDir);
-                if (string.Equals(newDir.TrimEnd('\\'), Dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return "That is already the data folder.";
+                DataFiles.CheckSeparate(Dir, newDir);
+                if (Directory.Exists(newDir) && Directory.EnumerateFileSystemEntries(newDir).Any())
+                    return "Choose an empty destination folder to avoid replacing existing data.";
                 SaveNow(); FlushWrites();
-                Directory.CreateDirectory(newDir);
-                foreach (var f in Directory.GetFiles(Dir, "*", SearchOption.AllDirectories))
-                {
-                    string rel = f.Substring(Dir.TrimEnd('\\').Length + 1);
-                    string to = Path.Combine(newDir, rel);
-                    Directory.CreateDirectory(Path.GetDirectoryName(to));
-                    if (!File.Exists(to)) File.Copy(f, to);
-                }
+                if (Pending) return "Current changes could not be saved. The data folder was not changed.";
+                if (!AgentStore.FlushWrites()) return "Agent chats could not be saved. The data folder was not changed.";
+                DataFiles.CopyTree(Dir, newDir);
                 if (string.Equals(newDir.TrimEnd('\\'), DefaultDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { if (File.Exists(LocationFile)) File.Delete(LocationFile); }
-                else File.WriteAllText(LocationFile, newDir, new UTF8Encoding(false));
+                else
+                {
+                    string temporary = LocationFile + ".tmp";
+                    File.WriteAllText(temporary, newDir, new UTF8Encoding(false));
+                    if (File.Exists(LocationFile)) File.Replace(temporary, LocationFile, LocationFile + ".bak", true);
+                    else File.Move(temporary, LocationFile);
+                }
+                if (!string.IsNullOrEmpty(DirOverride)) DirOverride = newDir;
                 return null;
             }
             catch (Exception ex) { return ex.Message; }
@@ -468,6 +532,8 @@ namespace StickyPro
         static readonly object ioLock = new object();
         static readonly Dictionary<string, object> pendingWrites = new Dictionary<string, object>();
         static bool writerBusy;
+        static readonly HashSet<string> failedWrites = new HashSet<string>();
+        static bool WritePending { get { lock (ioLock) return writerBusy || pendingWrites.Count > 0 || failedWrites.Count > 0; } }
         static void QueueWrite(string name, object snapshot)
         {
             lock (ioLock)
@@ -477,30 +543,6 @@ namespace StickyPro
                 writerBusy = true;
             }
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { Drain(); });
-        }
-
-        // Shallow copy of a settings-like object: its own fields plus a one-level copy of every list/dictionary field,
-        // so the UI thread can keep editing while the worker serializes.
-        static T Snap<T>(T o) where T : class
-        {
-            if (o == null) return o;
-            try
-            {
-                var clone = (T)typeof(object).GetMethod("MemberwiseClone", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(o, null);
-                foreach (var f in typeof(T).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
-                {
-                    object v = f.GetValue(clone);
-                    if (v == null) continue;
-                    Type t = v.GetType();
-                    if (t.IsGenericType)
-                    {
-                        Type d = t.GetGenericTypeDefinition();
-                        if (d == typeof(List<>) || d == typeof(Dictionary<,>)) f.SetValue(clone, Activator.CreateInstance(t, v));
-                    }
-                }
-                return clone;
-            }
-            catch { return o; }
         }
 
         static void Drain()
@@ -513,9 +555,10 @@ namespace StickyPro
                     if (pendingWrites.Count == 0) { writerBusy = false; System.Threading.Monitor.PulseAll(ioLock); return; }
                     var first = pendingWrites.First(); name = first.Key; snapshot = first.Value; pendingWrites.Remove(name);
                 }
-                try { WriteText(name, Js().Serialize(snapshot)); }
+                try { WriteText(name, Js().Serialize(snapshot)); lock (ioLock) failedWrites.Remove(name); }
                 catch (Exception ex)
                 {
+                    lock (ioLock) failedWrites.Add(name);
                     App.Log("Save failed " + name + ": " + ex.Message);
                     string n = name;
                     try { if (App.I != null) App.I.Sync.BeginInvoke(new Action(() => Remark(n))); } catch { }
@@ -544,8 +587,9 @@ namespace StickyPro
         {
             lock (ioLock)
             {
-                var until = DateTime.Now.AddSeconds(10);
-                while (writerBusy && DateTime.Now < until) System.Threading.Monitor.Wait(ioLock, 500);
+                var wait = System.Diagnostics.Stopwatch.StartNew();
+                while (writerBusy && wait.ElapsedMilliseconds < 10000) System.Threading.Monitor.Wait(ioLock, 100);
+                if (writerBusy) throw new IOException("Timed out waiting for pending saves; changes are still pending.");
             }
         }
 
@@ -554,7 +598,7 @@ namespace StickyPro
         {
             // Async: o is already a snapshot, serialized on the worker. Sync (exit, backup, restore): serialize here.
             if (asyncSave) QueueWrite(name, o);
-            else { string json = Js().Serialize(o); FlushWrites(); WriteText(name, json); }
+            else { string json = Js().Serialize(o); FlushWrites(); WriteText(name, json); lock (ioLock) failedWrites.Remove(name); }
         }
 
         static void Kick() { if (saveTimer != null) { saveTimer.Stop(); saveTimer.Start(); } }
@@ -570,12 +614,14 @@ namespace StickyPro
 
         public static void SaveNow()
         {
+            string[] failed; lock (ioLock) failed = failedWrites.ToArray();
+            foreach (string name in failed) Remark(name);
             if (notesDirty) notesDirty = !Safe("notes.json", Notes.ToList());
             if (promptsDirty) promptsDirty = !Safe("prompts.json", Prompts.ToList());
             if (clipsDirty) clipsDirty = !Safe("clips.json", Clips.ToList());
-            if (settingsDirty) settingsDirty = !Safe("settings.json", asyncSave ? (object)Snap(Settings) : Settings);
+            if (settingsDirty) settingsDirty = !Safe("settings.json", Settings);
             if (cardsDirty) cardsDirty = !Safe("cards.json", Cards.ToList());
-            if (historyDirty) historyDirty = !Safe("history.json", asyncSave ? (object)Snap(History) : History);
+            if (historyDirty) historyDirty = !Safe("history.json", History);
             // Activity is large and changes often: the timer path saves it at most about every 5 s; exit/backup saves at once.
             if (activityDirty && (!asyncSave || !ActivityWaiting()))
             {
@@ -607,7 +653,7 @@ namespace StickyPro
 
         static bool Safe(string name, object o)
         {
-            try { Write(name, o); return true; }
+            try { Write(name, asyncSave ? DataSnapshot.Copy(o) : o); return true; }
             catch (Exception ex) { App.Log("Save failed " + name + ": " + ex.Message); return false; }
         }
 
@@ -818,8 +864,11 @@ namespace StickyPro
             if (done && t.Repeat != "none" && t.Due > 0)
             {
                 long oldDue = t.Due, newDue = NextOccurrence(t.Due, t.Repeat);
-                t.Due = newDue;
-                t.RemindAt = t.RemindAt > 0 || t.DueHasTime ? (t.RemindAt > 0 ? t.RemindAt + (newDue - oldDue) : (t.DueHasTime ? newDue : 0)) : 0;
+                if (newDue <= oldDue) { t.Done = true; t.DoneAt = Now(); TouchTask(t); return; }
+                t.Due = newDue; t.Done = false; t.DoneAt = 0;
+                long reminder = t.RemindAt > 0 ? t.RemindAt : (t.DueHasTime ? oldDue : 0);
+                long delta = newDue - oldDue;
+                t.RemindAt = reminder == 0 ? 0 : reminder <= DateTime.MaxValue.Ticks - delta ? reminder + delta : newDue;
                 foreach (var s in t.Steps) s.Done = false;
                 t.Snoozes = 0;
             }
@@ -827,24 +876,38 @@ namespace StickyPro
             TouchTask(t);
         }
 
-        public static long NextOccurrence(long ticks, string repeat)
+        public static long NextOccurrence(long ticks, string repeat) { return NextOccurrenceAt(ticks, repeat, DateTime.Now); }
+
+        public static long NextOccurrenceAt(long ticks, string repeat, DateTime now)
         {
-            var d = new DateTime(ticks);
-            var now = DateTime.Now;
-            for (int guard = 0; guard < 5000; guard++)
+            if (ticks <= 0 || ticks > DateTime.MaxValue.Ticks) return ticks;
+            var due = new DateTime(ticks);
+            try
             {
                 switch (repeat)
                 {
-                    case "daily": d = d.AddDays(1); break;
-                    case "weekdays": d = d.AddDays(1); while (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday) d = d.AddDays(1); break;
-                    case "weekly": d = d.AddDays(7); break;
-                    case "monthly": d = d.AddMonths(1); break;
-                    case "yearly": d = d.AddYears(1); break;
+                    case "daily": case "weekly":
+                        long period = TimeSpan.TicksPerDay * (repeat == "weekly" ? 7 : 1);
+                        long count = Math.Max(1, (now.Ticks - ticks) / period + 1);
+                        return due.AddTicks(checked(count * period)).Ticks;
+                    case "weekdays":
+                        var day = due.AddDays(1);
+                        if (day <= now) { day = now.Date.Add(due.TimeOfDay); if (day <= now) day = day.AddDays(1); }
+                        while (day.DayOfWeek == DayOfWeek.Saturday || day.DayOfWeek == DayOfWeek.Sunday) day = day.AddDays(1);
+                        return day.Ticks;
+                    case "monthly":
+                        int months = Math.Max(1, (now.Year - due.Year) * 12 + now.Month - due.Month);
+                        var month = due.AddMonths(months);
+                        return (month > now ? month : due.AddMonths(months + 1)).Ticks;
+                    case "yearly":
+                        int years = Math.Max(1, now.Year - due.Year);
+                        var year = due.AddYears(years);
+                        return (year > now ? year : due.AddYears(years + 1)).Ticks;
                     default: return ticks;
                 }
-                if (d > now) break;
             }
-            return d.Ticks;
+            catch (ArgumentOutOfRangeException) { return ticks; }
+            catch (OverflowException) { return ticks; }
         }
 
         public static List<string> TaskLists()
@@ -893,32 +956,92 @@ namespace StickyPro
     // Small in-memory thumbnail cache for clipboard images.
     static class Thumbs
     {
-        static readonly Dictionary<string, Image> cache = new Dictionary<string, Image>();
+        class Request
+        {
+            public string Key, Path;
+            public int Width, Height;
+            public readonly HashSet<System.Windows.Forms.Control> Views = new HashSet<System.Windows.Forms.Control>();
+        }
 
-        public static Image Get(Clip c, int maxW, int maxH)
+        static readonly Dictionary<string, Image> cache = new Dictionary<string, Image>();
+        static readonly Dictionary<string, Request> pending = new Dictionary<string, Request>();
+        static readonly Queue<Request> queue = new Queue<Request>();
+        static bool decoding;
+
+        public static Image Get(Clip c, int maxW, int maxH, System.Windows.Forms.Control view)
         {
             Image t;
             string key = c.Id + "|" + maxW + "|" + maxH;
             if (cache.TryGetValue(key, out t)) return t;
-            t = null;
-            var img = Store.LoadImage(c);
-            if (img != null)
+            if (App.I == null) return null;
+            Request request;
+            if (!pending.TryGetValue(key, out request))
             {
-                double s = Math.Min((double)maxW / img.Width, (double)maxH / img.Height);
-                if (s > 1) s = 1;
-                int w = Math.Max(1, (int)(img.Width * s)), h = Math.Max(1, (int)(img.Height * s));
-                var bmp = new Bitmap(w, h);
-                using (var g = Graphics.FromImage(bmp))
+                if (queue.Count >= 48)
                 {
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(img, 0, 0, w, h);
+                    var dropped = queue.Dequeue();
+                    Request waiting;
+                    if (pending.TryGetValue(dropped.Key, out waiting) && waiting == dropped) pending.Remove(dropped.Key);
                 }
-                img.Dispose();
-                t = bmp;
+                request = new Request { Key = key, Path = Store.ImagePath(c), Width = maxW, Height = maxH };
+                pending[key] = request;
+                queue.Enqueue(request);
             }
-            if (cache.Count > 400) Clear();
-            cache[key] = t;
-            return t;
+            request.Views.Add(view);
+            DecodeNext();
+            return null;
+        }
+
+        static void DecodeNext()
+        {
+            if (decoding || queue.Count == 0) return;
+            var request = queue.Dequeue();
+            var sync = App.I.Sync;
+            decoding = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                var image = LoadScaled(request.Path, request.Width, request.Height);
+                try
+                {
+                    sync.BeginInvoke(new Action(() =>
+                    {
+                        decoding = false;
+                        Request waiting;
+                        if (pending.TryGetValue(request.Key, out waiting) && waiting == request)
+                        {
+                            pending.Remove(request.Key);
+                            if (cache.Count >= 400) ClearImages();
+                            cache[request.Key] = image;
+                            foreach (var view in request.Views) if (!view.IsDisposed && view.Visible) view.Invalidate();
+                        }
+                        else if (image != null) image.Dispose();
+                        DecodeNext();
+                    }));
+                }
+                catch (InvalidOperationException) { if (image != null) image.Dispose(); }
+            });
+        }
+
+        internal static Image LoadScaled(string path, int maxW, int maxH)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            Bitmap scaled = null;
+            try
+            {
+                using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var image = Image.FromStream(file))
+                {
+                    double scale = Math.Min(1, Math.Min((double)maxW / image.Width, (double)maxH / image.Height));
+                    scaled = new Bitmap(Math.Max(1, (int)(image.Width * scale)), Math.Max(1, (int)(image.Height * scale)));
+                    using (var graphics = Graphics.FromImage(scaled))
+                    {
+                        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        graphics.DrawImage(image, 0, 0, scaled.Width, scaled.Height);
+                    }
+                }
+                return scaled;
+            }
+            catch { if (scaled != null) scaled.Dispose(); return null; }
         }
 
         public static void Forget(string id)
@@ -928,9 +1051,17 @@ namespace StickyPro
                 if (cache[k] != null) cache[k].Dispose();
                 cache.Remove(k);
             }
+            foreach (var k in pending.Keys.Where(k => k.StartsWith(id + "|", StringComparison.Ordinal)).ToList()) pending.Remove(k);
         }
 
         public static void Clear()
+        {
+            ClearImages();
+            queue.Clear();
+            pending.Clear();
+        }
+
+        static void ClearImages()
         {
             foreach (var v in cache.Values) if (v != null) v.Dispose();
             cache.Clear();

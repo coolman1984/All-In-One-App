@@ -47,12 +47,13 @@ namespace StickyPro
             Store.Load();
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq";
+            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
             Ui.ApplyLook();
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
             if (Store.Settings.KeepAwake) Awake.Set(true);
             try { PopupHider.Apply(); } catch (Exception ex) { Log("Popup hider: " + ex.Message); }
+            Ui.Later(30000, () => { try { CliUpdates.AutoCheck(); } catch (Exception ex) { Log("CLI updates: " + ex.Message); } });   // once a day, in the background
 
             msg = new MsgWindow(this);
             var failed = RegisterHotkeys();
@@ -92,7 +93,6 @@ namespace StickyPro
             Application.ApplicationExit += delegate { FlushAll(); Snippets.Stop(); };
             Ui.Later(1500, CheckReminders);
             Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerMode;
-            Ui.Later(4000, Trim);
         }
 
         // ---------- Hotkeys ----------
@@ -286,7 +286,7 @@ namespace StickyPro
             if (!d.Visible) { d.Visible = true; Store.MarkCards(); }
             f = new CardForm(d);
             cardForms[d.Id] = f;
-            f.FormClosed += delegate { cardForms.Remove(d.Id); Ui.Later(1500, Trim); };
+            f.FormClosed += delegate { cardForms.Remove(d.Id); };
             f.Show();
             Native.EnsureRestored(f);
             if (activate) f.Activate();
@@ -525,13 +525,27 @@ namespace StickyPro
 
         public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }
         public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, i)); Store.MarkSettings(); ApplyTheme(); }
-        public void SetDesign(string d) { Store.Settings.Design = d == "classic" || d == "nexus" ? d : "serq"; Store.MarkSettings(); ApplyTheme(); }
+        public void SetDesign(string d) { Store.Settings.Design = d == "classic" || d == "nexus" || d == "soft" ? d : "serq"; Store.MarkSettings(); ApplyTheme(); }
+        // One click from the look picker: design, colour and light/dark together, one rebuild.
+        public void SetLook(string design, int theme, bool dark)
+        {
+            var s = Store.Settings;
+            s.Design = design == "classic" || design == "nexus" || design == "soft" ? design : "serq";
+            if (theme >= 0) { s.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, theme)); s.AccentColor = ""; }
+            s.Dark = dark;
+            Store.MarkSettings(); Ui.ApplyLook(); ApplyTheme();
+        }
 
         void ApplyTheme()
         {
+            if (!ConfirmDocumentClose())
+            {
+                Status("Appearance changes will apply after restarting All in One.");
+                return;
+            }
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq";
+            Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
             Ui.ThemeMenu(tray.ContextMenuStrip);
             if (Overlay.On) Overlay.ApplySettings();   // dock and menu bar repaint in the new theme
             string page = null;
@@ -931,9 +945,16 @@ namespace StickyPro
         {
             Ui.Later(300, () =>
             {
-                try { FlushAll(); Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--elevated") { UseShellExecute = false }); }
+                try
+                {
+                    if (!ConfirmDocumentClose()) return;
+                    FlushAll();
+                    if (!AgentStore.FlushWrites() || Store.Pending) { Balloon("Could not restart", "Pending changes could not be saved. Check free space and folder permissions."); return; }
+                    string args = "--elevated" + (string.IsNullOrEmpty(Store.DirOverride) ? "" : " --data " + AgentRun.Quote(Store.DirOverride));
+                    Process.Start(new ProcessStartInfo(Application.ExecutablePath, args) { UseShellExecute = false });
+                }
                 catch (Exception ex) { Log("Restart failed: " + ex.Message); Balloon("Restart failed", "Close and start the app again to finish the restore."); return; }
-                Exit();
+                Exit(true);
             });
         }
 
@@ -963,6 +984,18 @@ namespace StickyPro
         public void Status(string text) { if (main != null && !main.IsDisposed) main.Status(text); }
         public void AddAgentFolder(string folder) { ShowMain("agents"); main.AddAgentFolder(folder); }
         public void OpenInExplorerPage(string folder) { ShowMain("explorer"); main.OpenInExplorer(folder); }
+        public void OpenMarkdown(string path) { ShowMain("markdown"); main.OpenMarkdownFile(path); }
+        // A web address or a local file (PDF, email, HTML, picture) in a new Browser tab.
+        public void OpenInBrowser(string target) { ShowMain("browser"); main.OpenInBrowser(target); }
+        // Text into the message box of the active Agents chat.
+        public void SendToAgents(string text) { ShowMain("agents"); main.SendToAgents(text); }
+        public void OpenDocument(string path) { OpenDocument(path, null); }
+        public void OpenDocument(string path, bool? edit) { ShowMain("documents"); main.OpenDocument(path, edit); }
+        public void ToggleZen() { if (main != null && !main.IsDisposed) main.SetZen(!main.Zen); }
+        public void ToggleAssistant() { ShowMain(main != null && !main.IsDisposed ? main.Page : null); main.SetAssistant(!Store.Settings.AssistantOpen); }
+        public Dictionary<string, object> PageContext() { return main != null && !main.IsDisposed ? main.PageContext() : new Dictionary<string, object> { { "page", "" } }; }
+        public System.Threading.Tasks.Task<string> BrowserScript(string js) { ShowMain("browser"); return main.BrowserScript(js); }
+        public void OpenAgentChat(AgentChat c) { ShowMain("agents"); main.OpenAgentChat(c); }
 
         void ShowQuick(string mode)
         {
@@ -985,7 +1018,7 @@ namespace StickyPro
             if (!n.Open) { n.Open = true; Store.MarkNotes(); }
             f = new NoteForm(n);
             noteForms[n.Id] = f;
-            f.FormClosed += delegate { noteForms.Remove(n.Id); Ui.Later(1500, Trim); };
+            f.FormClosed += delegate { noteForms.Remove(n.Id); };
             f.Show();
             Native.EnsureRestored(f);
             notesHidden = false;
@@ -1081,17 +1114,6 @@ namespace StickyPro
             Store.SaveNow();
         }
 
-        public void Trim()
-        {
-            try
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                using (var p = Process.GetCurrentProcess()) Native.EmptyWorkingSet(p.Handle);
-            }
-            catch { }
-        }
-
         bool exitWaiting;
         bool exiting;
         void RecordingFinished() { Recorder.Finished -= RecordingFinished; exitWaiting = false; Exit(); }
@@ -1104,7 +1126,18 @@ namespace StickyPro
             try { Process.Start(new ProcessStartInfo(installedExe, "--after-install") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(installedExe) }); } catch (Exception ex) { Log("Start installed copy: " + ex.Message); }
         }
 
-        public void Exit()
+        bool confirmingDocumentClose;
+        bool ConfirmDocumentClose()
+        {
+            if (confirmingDocumentClose) return false;
+            if (main == null || main.IsDisposed) return true;
+            confirmingDocumentClose = true;
+            try { return main.ConfirmDocumentClose(); }
+            finally { confirmingDocumentClose = false; }
+        }
+
+        public void Exit() { Exit(false); }
+        void Exit(bool documentsConfirmed)
         {
             if (exiting) return;
             if (Recorder.Active || Recorder.Saving)
@@ -1112,8 +1145,9 @@ namespace StickyPro
                 if (!exitWaiting) { exitWaiting = true; Recorder.Finished += RecordingFinished; if (Recorder.Active) Recorder.Stop(true); }
                 return;
             }
+            if (!documentsConfirmed && !ConfirmDocumentClose()) return;
             FlushAll();
-            if (Store.Pending) { Balloon("Could not save changes", "The app will stay open and retry. Check free space and folder permissions."); return; }
+            if (!AgentStore.FlushWrites() || Store.Pending) { Balloon("Could not save changes", "The app will stay open and retry. Check free space and folder permissions."); return; }
             exiting = true;
             clipTimer.Dispose(); reminderTimer.Dispose();
             Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerMode;

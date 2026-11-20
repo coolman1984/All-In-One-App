@@ -33,8 +33,7 @@ namespace StickyPro
         readonly string[] todayNote = { "", "", "", "" };
         readonly bool[] todayAlert = new bool[4];
         List<DriveSnapshot> drives = new List<DriveSnapshot>();
-        class AppRow { public string Name, Path; public long Mem; public int Count; }
-        List<AppRow> topApps = new List<AppRow>();
+        List<MemoryApp> topApps = new List<MemoryApp>();
 
         public NexusBoard()
         {
@@ -55,9 +54,7 @@ namespace StickyPro
             memUsed = Fmt.Bytes((long)(ProcessSampler.MemTotal - ProcessSampler.MemAvail));
             memTotal = Fmt.Bytes((long)ProcessSampler.MemTotal);
             drives = DriveSnapshot.All();
-            topApps = ProcessSampler.Last.GroupBy(p => p.Display ?? "")
-                .Select(g => new AppRow { Name = g.Key, Mem = g.Sum(p => p.Mem), Count = g.Count(), Path = g.Select(p => p.Path).FirstOrDefault(p => !string.IsNullOrEmpty(p)) })
-                .OrderByDescending(a => a.Mem).Take(12).ToList();
+            topApps = ProcessSampler.MemoryApps;
             if (data || !dataLoaded) { dataLoaded = true; RefreshStoreData(); }
             Invalidate();
         }

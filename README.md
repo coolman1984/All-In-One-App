@@ -1,9 +1,16 @@
-# All in One
+﻿# All in One
 
 A small Windows tray app (no installs) that puts many daily tools in one window: tasks and reminders, sticky notes, prompts and
 snippets, clipboard history, a multi-pane file explorer, Chrome bookmarks and extensions, a system monitor with a deep uninstaller,
 screen capture and recording, power tools and a shortcut manager. Start it with `All in One.lnk`.
 Built with the C# compiler that ships with Windows.
+
+## Agent accounts and leader teams
+
+- In **Agents**, click a Codex or Claude Code chip and open **Account**. Choose an existing HERDR profile or select **Sign in to a named account** and complete the provider's login. The app passes the profile directory to that CLI process. Each profile keeps its own resume IDs. The team setup also lets two members use the same CLI with different accounts.
+- Choose **Leader team**, add a leader and one or more workers, select their models, and save. Send your request in the chat. The leader proposes a task for each worker. Review or edit the assignments, then choose **Send plan** to run them and have the leader review their output. **Send assignment**, **Stop worker**, **Leader review** and **Final answer** also work individually.
+- The workspace shows output from the selected worker. To include an existing HERDR terminal, select the worker, choose **Attach HERDR screen**, enter its pane ID, and review the captured text. Repeat the capture for a newer snapshot.
+- The Cline picker searches the installed npm CLI's model catalogue. You can also enter a provider and model ID directly, such as `provider: model-id`. The selected provider account determines which models can run.
 
 ## Shortcuts (work in any app, change them in Settings)
 | Keys | Action |
@@ -28,10 +35,14 @@ Popup keys: Enter paste (always plain text), Ctrl+Enter or right-click "Paste as
 Sentence case, trim spaces, remove empty lines, join into one line), Shift+Enter copy only, Ctrl+1..9 quick paste,
 Tab switch Clipboard/Prompts, Ctrl+P pin, Del delete, Esc close.
 
+In the main window, Ctrl+K opens **Search this app**. Results are grouped by type and ranked within each group.
+Use the arrow keys to select, Enter to open or copy, and Esc to close.
+
 Note keys: Ctrl+B/I/U, Ctrl+T strikethrough, Ctrl+Shift+L bullets, Ctrl+Shift+R right-to-left (Arabic),
 Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delete. Double-click the top bar to collapse.
 
 ## Features
+- Documents: preview Office and PDF files in tabs. Edit mode opens Excel, Word or PowerPoint in the document pane. The app toolbar, sidebar and document tabs stay available during editing.
 - Notes: 8 colors, rich text, images, links, keep on top, reminders (the note pops up and flashes), tags, archive, Arabic RTL.
 - Prompts: categories, tags, favorites, {{blanks}} filled when used, snippet codes (type `;sig` anywhere to insert the text),
   version history with restore, import/export.
@@ -95,6 +106,9 @@ Ctrl+Shift+V paste plain, Ctrl+ +/- zoom, Ctrl+N new, Ctrl+W close, Ctrl+D delet
   Settings > Design also offers Nexus (white sidebar) and Classic (blue sidebar).
 - **Less noise**: no emoji icons, gradients, fake drop-downs, decorative charts or made-up "Heavy / Light" labels. The top
   bar keeps CPU, RAM, drives, top app and due tasks; the urgent and recorder chips appear only when they have something to say.
+- **Chat files.** Under **Files** next to Send, choose a document format, describe the document, and click the filename in the reply to save it. Right-click any agent reply and choose **Save reply as** to export existing work. **Save code block as file** lets you choose a source filename and extension. Excel and Word support Markdown tables. PowerPoint uses a heading for each slide. PDF, Markdown, CSV and plain text are also available. Use **Files → Insert text file into draft** to include a local text, Markdown, code or CSV file before sending. The writers run locally without Office.
+- **Chat library.** Right-click a conversation to move it into a named folder, rename or dissolve the folder, favorite the chat, or archive and restore it. Use the library selector for folders, Favorites, Drafts and Archived. Unsent text is saved separately from the conversation. Sent messages and active replies are checkpointed.
+- **Terminal history.** Select **Edit as workspace** to inspect or change a previous launch before opening it. New multi-pane records retain each shell, startup command and folder. Favorited commands appear in the startup-command dropdown. History covers launches made through the app. Interactive shell scrollback stays with the terminal.
 - **Terminals** page: open 1, 2, 3, 4, 2 x 2, 5, 6, 3 x 2 or 4 x 2 terminals at once. Each pane has its own folder, shell
   (PWSH 7, Windows PowerShell, cmd) and start command (`claude`, `claude --continue`, `codex`, ...). "Separate windows" tiles
   real Windows Terminal windows side by side on the screen under the mouse; "One window, split panes" uses Windows Terminal
@@ -155,13 +169,22 @@ move selected, notes, remove from list (files are never deleted).
 Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic `.bak` copy of each file.
 
 ## Interface and reliability
+- Main-window pages are created on first use and keep their state when you switch away. Unused tools do not allocate controls or start their page services. Closing windows no longer forces full garbage collection or empties the process working set.
+- Backups include nested data such as agent chats, layouts, and saved file backups. Restore validates the main JSON files before swapping folders, retains the previous folder beside the data folder, and recovers interrupted folder swaps on startup. Linked folders/files and overlapping destinations are rejected; temporary save files and internal restore staging folders are excluded.
+- Moving the data folder requires an empty destination and successful saves first. The location changes only after copying succeeds. Explicit `--data` paths survive restarts and follow a successful move.
+- Agent-chat saves coalesce in order on a background worker, retain a previous-file backup, and finish before normal exit or backup. Deleting a chat cancels its queued saves.
+- Recurring tasks jump directly past overdue occurrences, handle weekends and date limits, and keep the original month-day anchor when skipping missed months.
 - Rounded buttons and inputs, keyboard focus feedback, and consistent light/dark controls. Windows 11 supplies rounded window corners where supported.
 - Toolbars, note formatting tools, and card tabs wrap in narrow windows. Prompts use a category dropdown when the sidebar would crowd the editor; short windows can scroll the main navigation.
 - Failed saves are retried. If changes cannot be saved when you choose Exit, the app stays open and explains why. Recovery preserves the last good backup.
 - Delayed pastes and snippet expansion check their target window. Restoring clipboard text never replaces a newer copy; failed queue copies stay queued.
 - Microphone discovery and recording shutdown run in the background. Recordings finish saving before a normal app exit. If merging fails, the original segments are kept and their locations are logged. Rapid snips and backups receive distinct filenames.
 
-Review checks (leave the running app open): `pwsh -NoProfile -File tools\test-build.ps1`, then run `tools\test-regressions.ps1`, `tools\test-forms.ps1`, `tools\test-visual.ps1`, and `tools\test-recorder.ps1` with Windows PowerShell 5.1. These load types and render controls offscreen without starting the app or accessing `data`. The recorder check uses an owned hidden sleeping helper, with no screen capture. Preview images and isolated fixtures stay under `build-test`.
+Review checks (leave the running app open): `powershell -NoProfile -ExecutionPolicy Bypass -File tools\test-all.ps1` compiles the test build and runs the isolated suites listed in [tools/test-all.ps1](tools/test-all.ps1). Tests use temporary fixtures under `build-test`, hidden controls, and an owned recorder helper; they do not start the app or load production data. `tools\measure-ui.ps1` measures hidden main-window construction; `tools\measure-process.ps1 -ProcessId <id>` samples a running app without changing it. Benchmark scope and review findings are recorded in [the review](tasks/review-2026-11-15.md).
+
+## Maintaining this project
+
+See the [maintenance guide](docs/maintenance.md) for code and test entry points and release checks. The [project instructions](AGENTS.md) explain how to keep the [history](HISTORY.md), [lessons](LESSONS.md) and [skills](skills/README.md) updated with every task.
 
 ## Build
 `powershell -ExecutionPolicy Bypass -File build.ps1` (asks the running copy to save and exit, then rebuilds).

@@ -45,7 +45,7 @@ namespace StickyPro
                     default: return;
                 }
                 open[id] = f;
-                f.FormClosed += delegate { open.Remove(id); Ui.Later(800, App.I.Trim); };
+                f.FormClosed += delegate { open.Remove(id); };
                 f.Show();
                 f.Activate();
             }

@@ -993,7 +993,6 @@ $stream.Dispose()
             baseImg.Dispose();
             Ui.ClearItems(tools.Items);
             base.OnFormClosed(e);
-            Ui.Later(1500, App.I.Trim);
         }
     }
 
@@ -1094,6 +1093,7 @@ $stream.Dispose()
                     }
             }
             catch { }
+            try { var b = Bundled.Tool("ffmpeg.exe"); if (b != null) return ffmpeg = b; } catch { }   // packed inside AllInOne.exe
             return null;
         }
 
@@ -1399,6 +1399,7 @@ $stream.Dispose()
             m.Items.Add("Text extract (OCR)", null, delegate { var f = list.SelectedItem as FileInfo; if (f != null && IsImage(f.FullName)) { var ed = OpenEditor(f.FullName); if (ed != null) ed.ShowOcr(); } });
             m.Items.Add("Pin on screen", null, delegate { var f = list.SelectedItem as FileInfo; if (f != null && IsImage(f.FullName)) { var img = Load(f.FullName); if (img != null) new PinnedImage(img).Show(); } });
             m.Items.Add("Show in folder", null, delegate { var f = list.SelectedItem as FileInfo; if (f != null) try { Process.Start("explorer.exe", "/select,\"" + f.FullName + "\""); } catch { } });
+            m.Items.Add(AppLinks.LazySendTo(() => { var f = list.SelectedItem as FileInfo; return f == null ? null : f.FullName; }, null, FindForm()));
             Term.AddMenu(m.Items, () => { var f = list.SelectedItem as FileInfo; return f != null ? f.DirectoryName : Shot.SnipFolder; });
             m.Items.Add("Delete", null, delegate { DeleteSel(); });
             Ui.ThemeMenu(m);

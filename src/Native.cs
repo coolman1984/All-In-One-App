@@ -109,7 +109,5 @@ namespace StickyPro
 
         public static bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
-        [DllImport("psapi.dll")]
-        public static extern bool EmptyWorkingSet(IntPtr hProcess);
     }
 }

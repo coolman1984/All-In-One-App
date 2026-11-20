@@ -33,7 +33,7 @@ namespace StickyPro
         public ItemShelf(string scope)
         {
             Scope = scope;
-            DoubleBuffered = true; AutoScroll = true;
+            DoubleBuffered = true;   // own scrolling: native AutoScroll moved old pixels and left blank, overlapping tiles
             SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
             Store.MetaChanged += OnMeta;
             Ui.ThemeMenu(menu);
@@ -45,17 +45,46 @@ namespace StickyPro
         protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); if (Visible && dirty) { Build(); Invalidate(); } }
         protected override void OnResize(EventArgs e) { base.OnResize(e); Arrange(); }
 
+        // ----- scrolling done here (whole repaint every time; a thin bar on the right that can be dragged) -----
+        int scrollY, contentH; bool dragBar; int dragFrom, dragStart;
+        int MaxScroll { get { return Math.Max(0, contentH - ClientSize.Height); } }
+        void ScrollTo(int y) { y = Math.Max(0, Math.Min(MaxScroll, y)); if (y != scrollY) { scrollY = y; Invalidate(); } }
+        Rectangle Thumb
+        {
+            get
+            {
+                if (MaxScroll <= 0) return Rectangle.Empty;
+                int h = Math.Max(Ui.S(30), ClientSize.Height * ClientSize.Height / Math.Max(1, contentH));
+                int y = (ClientSize.Height - h) * scrollY / MaxScroll;
+                return new Rectangle(ClientSize.Width - Ui.S(8), y, Ui.S(6), h);
+            }
+        }
+        protected override void OnMouseWheel(MouseEventArgs e) { base.OnMouseWheel(e); ScrollTo(scrollY - e.Delta * Ui.S(60) / 120); }
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            var t = Thumb;
+            if (e.Button == MouseButtons.Left && MaxScroll > 0 && e.X >= ClientSize.Width - Ui.S(12))
+            {
+                if (t.Contains(e.Location)) { dragBar = true; dragFrom = e.Y; dragStart = scrollY; Capture = true; }
+                else ScrollTo(scrollY + (e.Y < t.Y ? -ClientSize.Height : ClientSize.Height));
+            }
+        }
+
         static string NameOf(string id) { string s = id.TrimEnd('\\', '/'); int c = Math.Max(s.LastIndexOf('\\'), s.LastIndexOf('/')); return c >= 0 && c < s.Length - 1 ? s.Substring(c + 1) : id; }
 
         void Build()
         {
             dirty = false;
             tiles.Clear();
+            var slow = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             Func<string, ItemMeta, Tile> make = (id, m) =>
             {
                 var t = new Tile { Id = id, Name = m != null ? MetaStore.DisplayName(m) : NameOf(id), Sub = id, Fav = m != null && m.Fav, Color = m != null ? MetaStore.ColorOf(m.Color) : Color.Empty };
-                try { t.Missing = id.Length > 2 && id[1] == ':' && !Directory.Exists(id) && !File.Exists(id); } catch { }
+                // Local folders are checked at once; network folders on a worker (a slow share froze the Terminals page).
+                if (DriveCache.IsSlowPath(id)) slow.Add(id);
+                else try { t.Missing = id.Length > 2 && id[1] == ':' && !Directory.Exists(id) && !File.Exists(id); } catch { }
                 if (m != null && !string.IsNullOrEmpty(m.Note)) t.Sub = m.Note;
                 return t;
             };
@@ -67,6 +96,14 @@ namespace StickyPro
                     if (!string.IsNullOrWhiteSpace(id) && tiles.Count - favCount < MaxRecent && seen.Add(id)) tiles.Add(make(id, MetaStore.Get(Scope, id)));
             this.favCount = favCount;
             Arrange();
+            if (slow.Count > 0)
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    var missing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var id in slow) { try { if (!Directory.Exists(id) && !File.Exists(id)) missing.Add(id); } catch { } }
+                    if (missing.Count == 0) return;
+                    try { BeginInvoke((Action)delegate { foreach (var t in tiles) if (missing.Contains(t.Id)) t.Missing = true; Invalidate(); }); } catch { }
+                });
         }
         int favCount;
 
@@ -74,7 +111,7 @@ namespace StickyPro
         {
             heads.Clear();
             int pad = Ui.S(2), gap = Ui.S(8), th = Ui.S(52), minW = Ui.S(230);
-            int w = ClientSize.Width - pad * 2;
+            int w = ClientSize.Width - pad * 2 - Ui.S(12);   // room for the scroll bar
             int cols = Math.Max(1, (w + gap) / (minW + gap));
             int tw = Math.Max(Ui.S(120), (w - gap * (cols - 1)) / cols);
             int y = Ui.S(34);
@@ -95,7 +132,8 @@ namespace StickyPro
             };
             section("Favorites", 0, favCount);
             section("Recent", favCount, tiles.Count);
-            AutoScrollMinSize = new Size(0, y);
+            contentH = y;
+            scrollY = Math.Max(0, Math.Min(MaxScroll, scrollY));
             Invalidate();
         }
 
@@ -104,7 +142,7 @@ namespace StickyPro
             var g = e.Graphics;
             g.Clear(BackColor);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
+            g.TranslateTransform(0, -scrollY);
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
             // header: title + links
             TextRenderer.DrawText(g, Title, Ui.Big, new Rectangle(0, 0, ClientSize.Width, Ui.S(30)), Ui.Text, flags);
@@ -146,13 +184,18 @@ namespace StickyPro
                 if (t.Fav || isHot)
                     TextRenderer.DrawText(g, t.Fav ? "" : "", Ui.Icon(11f), t.Star, t.Fav ? Color.FromArgb(245, 176, 40) : (isHot && hotStar ? Ui.Accent : Ui.Muted), flags | TextFormatFlags.HorizontalCenter);
             }
+            g.ResetTransform();
+            var thumb = Thumb;
+            if (!thumb.IsEmpty)
+                using (var path = Ui.Round(thumb, Ui.S(3))) using (var b = new SolidBrush(dragBar ? Ui.Muted : Ui.Mix(Ui.Bg, Ui.Muted, 0.55))) g.FillPath(b, path);
         }
 
-        Point Doc(Point p) { return new Point(p.X - AutoScrollPosition.X, p.Y - AutoScrollPosition.Y); }
+        Point Doc(Point p) { return new Point(p.X, p.Y + scrollY); }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            if (dragBar) { int track = ClientSize.Height - Thumb.Height; if (track > 0) ScrollTo(dragStart + (e.Y - dragFrom) * MaxScroll / track); return; }
             var p = Doc(e.Location);
             var t = tiles.FirstOrDefault(x => x.R.Contains(p));
             bool s = t != null && t.Star.Contains(p), a = addLink.Contains(p), c = clearLink.Contains(p);
@@ -164,6 +207,8 @@ namespace StickyPro
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            if (dragBar) { dragBar = false; Capture = false; Invalidate(); return; }
+            if (e.X >= ClientSize.Width - Ui.S(12) && MaxScroll > 0) return;
             var p = Doc(e.Location);
             if (e.Button == MouseButtons.Left)
             {
@@ -188,6 +233,7 @@ namespace StickyPro
                 if (MenuItems != null) MenuItems(id, menu);
                 if (menu.Items.Count > 0) menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add("Copy path", null, delegate { try { Clipboard.SetText(id); } catch { } });
+                menu.Items.Add(AppLinks.SendTo(id, null, FindForm()));
                 menu.Items.Add(MetaStore.Menu(Scope, id, NameOf(id), null));
                 menu.Show(this, e.Location);
             }

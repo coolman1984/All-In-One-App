@@ -62,7 +62,7 @@ namespace StickyPro
             {
                 using (var b = new SolidBrush(Ui.Nav)) e.Graphics.FillRectangle(b, e.Bounds);
                 using (var p = new Pen(Ui.Line)) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
-                var r = e.Bounds; r.Inflate(-Ui.S(Ui.Space), 0);
+                var r = e.Bounds; r.Inflate(e.Bounds.Width < Ui.S(48) ? -Ui.S(2) : -Ui.S(Ui.Space), 0);   // narrow icon columns keep their glyph
                 var align = e.Header.TextAlign == HorizontalAlignment.Right ? TextFormatFlags.Right : e.Header.TextAlign == HorizontalAlignment.Center ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
                 TextRenderer.DrawText(e.Graphics, e.Header.Text, Ui.Bold, r, Ui.Text, align | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             };
@@ -1052,6 +1052,7 @@ namespace StickyPro
     {
         readonly TabStrip tabs;
         readonly Control[] views;
+        readonly Button pop;
         static readonly string[] ids = { "procs", "startup", "drives", "uninstall" };
 
         public SystemPage(MainForm owner)
@@ -1084,7 +1085,7 @@ namespace StickyPro
             };
             Resize += delegate { bool s = Wide; if (s != split) { split = s; SuspendLayout(); ApplyVisibility(); ResumeLayout(true); } };
             top.Controls.Add(tabs);
-            var pop = Ui.Btn("Pop out as floating card", delegate { App.I.NewCard(new List<string> { ids[Math.Min(2, Math.Max(0, tabs.Selected))] }, null); });
+            pop = Ui.Btn("Pop out as floating card", delegate { if (selected >= 0 && selected < 3) App.I.NewCard(new List<string> { ids[selected] }, null); });
             top.Controls.Add(pop);
             Controls.Add(kpis);
             Controls.Add(top);
@@ -1108,6 +1109,7 @@ namespace StickyPro
             tabs.ShowTab(0, !split);
             if (split && tabs.Selected != rightTab) { tabs.Select(rightTab); return; }
             for (int k = 0; k < views.Length; k++) views[k].Visible = split ? (k == 0 || k == rightTab) : k == selected;
+            pop.Visible = selected != 3;
             kpis.Visible = split || selected == 0;   // the performance strip belongs to Processes
             host.PerformLayout();
         }

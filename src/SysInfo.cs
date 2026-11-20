@@ -23,6 +23,13 @@ namespace StickyPro
         public string Key { get { return Pids != null ? "g:" + Display : "p:" + Pid; } }
     }
 
+    class MemoryApp
+    {
+        public string Name, Path;
+        public long Mem;
+        public int Count;
+    }
+
     // One NtQuerySystemInformation call gives every process with memory, CPU time and I/O:
     // no handles, no exceptions, very cheap. Samples only while some view is visible.
     static class ProcessSampler
@@ -35,16 +42,19 @@ namespace StickyPro
 
         static IntPtr buf = IntPtr.Zero;
         static int bufLen;
-        static Dictionary<int, long[]> prev = new Dictionary<int, long[]>();
+        struct ProcessTotals { public long Cpu, Io, Created; }
+        static Dictionary<int, ProcessTotals> prev = new Dictionary<int, ProcessTotals>(320);
+        static Dictionary<int, ProcessTotals> next = new Dictionary<int, ProcessTotals>(320);
         static long prevStamp, prevIdle, prevKernel, prevUser;
         static readonly HashSet<object> watchers = new HashSet<object>();
         static System.Windows.Forms.Timer timer;
-        static readonly object sampleLock = new object();
         static bool sampling;              // UI thread only
+        static int resetBaseline;
 
-        class SampleResult { public List<ProcInfo> List; public double Cpu; public int MemLoad; public ulong MemTotal, MemAvail; public bool Ok; }
+        class SampleResult { public List<ProcInfo> List; public List<MemoryApp> Apps; public double Cpu; public int MemLoad; public ulong MemTotal, MemAvail; public bool Ok; }
 
         public static List<ProcInfo> Last = new List<ProcInfo>();
+        public static List<MemoryApp> MemoryApps = new List<MemoryApp>();
         public static readonly Queue<double> CpuHistory = new Queue<double>();
         public static readonly Queue<double> RamHistory = new Queue<double>();
         public static void PushHistory(Queue<double> history, double value) { if (history.Count >= 60) history.Dequeue(); history.Enqueue(value); }
@@ -63,7 +73,7 @@ namespace StickyPro
                 timer.Tick += delegate { Sample(); };
             }
             if (watchers.Count > 0 && !timer.Enabled) { Sample(); timer.Start(); }
-            else if (watchers.Count == 0 && timer.Enabled) { timer.Stop(); lock (sampleLock) { prev.Clear(); prevStamp = 0; } }
+            else if (watchers.Count == 0 && timer.Enabled) { timer.Stop(); Interlocked.Exchange(ref resetBaseline, 1); }
         }
 
         public static void Sample()
@@ -86,7 +96,7 @@ namespace StickyPro
             sampling = false;
             if (r != null && r.Ok)
             {
-                Last = r.List; CpuTotal = r.Cpu; MemLoad = r.MemLoad; MemTotal = r.MemTotal; MemAvail = r.MemAvail;
+                Last = r.List; MemoryApps = r.Apps; CpuTotal = r.Cpu; MemLoad = r.MemLoad; MemTotal = r.MemTotal; MemAvail = r.MemAvail;
             }
             PushHistory(CpuHistory, CpuTotal); PushHistory(RamHistory, MemLoad);
             var h = Updated; if (h != null) h();
@@ -94,8 +104,11 @@ namespace StickyPro
 
         static SampleResult SampleCore()
         {
-            lock (sampleLock)
+            if (Interlocked.Exchange(ref resetBaseline, 0) != 0)
             {
+                prev.Clear();
+                prevStamp = prevIdle = prevKernel = prevUser = 0;
+            }
             var r = new SampleResult();
             r.Cpu = CpuTotal; r.MemLoad = MemLoad; r.MemTotal = MemTotal; r.MemAvail = MemAvail;
             if (IntPtr.Size != 8) return r;
@@ -113,7 +126,7 @@ namespace StickyPro
             double secs = prevStamp == 0 ? 0 : (now - prevStamp) / (double)Stopwatch.Frequency;
             int cores = Environment.ProcessorCount;
             var list = new List<ProcInfo>(320);
-            var next = new Dictionary<int, long[]>(320);
+            next.Clear();
             int offset = 0;
             while (true)
             {
@@ -133,19 +146,21 @@ namespace StickyPro
                     int nameLen = Marshal.ReadInt16(p, 56);
                     IntPtr namePtr = Marshal.ReadIntPtr(p, 64);
                     pi.Name = namePtr == IntPtr.Zero ? "System" : Marshal.PtrToStringUni(namePtr, nameLen / 2);
-                    long[] old;
-                    if (secs > 0 && prev.TryGetValue(pid, out old) && old[2] == pi.Created)
+                    ProcessTotals old;
+                    if (secs > 0 && prev.TryGetValue(pid, out old) && old.Created == pi.Created)
                     {
-                        pi.Cpu = Math.Max(0, (pi.CpuTime - old[0]) / (secs * 1e7 * cores) * 100);
-                        pi.Io = Math.Max(0, (pi.IoBytes - old[1]) / secs);
+                        pi.Cpu = Math.Max(0, (pi.CpuTime - old.Cpu) / (secs * 1e7 * cores) * 100);
+                        pi.Io = Math.Max(0, (pi.IoBytes - old.Io) / secs);
                     }
-                    next[pid] = new[] { pi.CpuTime, pi.IoBytes, pi.Created };
+                    next[pid] = new ProcessTotals { Cpu = pi.CpuTime, Io = pi.IoBytes, Created = pi.Created };
                     list.Add(pi);
                 }
                 if (nextOff == 0) break;
                 offset += nextOff;
             }
+            var previous = prev;
             prev = next;
+            next = previous;
             prevStamp = now;
 
             long idle, kernel, user;
@@ -159,9 +174,24 @@ namespace StickyPro
             if (GlobalMemoryStatusEx(ms)) { r.MemLoad = (int)ms.dwMemoryLoad; r.MemTotal = ms.ullTotalPhys; r.MemAvail = ms.ullAvailPhys; }
 
             ProcMeta.Fill(list);
+            r.Apps = GroupMemoryApps(list);
             r.List = list; r.Ok = true;
             return r;
+        }
+
+        internal static List<MemoryApp> GroupMemoryApps(List<ProcInfo> processes)
+        {
+            var groups = new Dictionary<string, MemoryApp>(StringComparer.Ordinal);
+            foreach (var process in processes)
+            {
+                string name = process.Display ?? "";
+                MemoryApp app;
+                if (!groups.TryGetValue(name, out app)) groups[name] = app = new MemoryApp { Name = name };
+                app.Mem += process.Mem;
+                app.Count++;
+                if (string.IsNullOrEmpty(app.Path)) app.Path = process.Path;
             }
+            return groups.Values.OrderByDescending(app => app.Mem).Take(12).ToList();
         }
 
         // ---------- Ending tasks ----------

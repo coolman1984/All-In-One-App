@@ -17,7 +17,7 @@ namespace StickyPro
     static class Term
     {
         public static readonly string[] Shells = { "pwsh", "powershell", "cmd" };
-        public static readonly string[] Commands = { "claude", "claude --continue", "claude --resume", "codex", "git status", "npm run dev" };
+        public static readonly string[] Commands = { "claude", "claude --continue", "claude --resume", "codex", "codex resume --last", "codex resume", "git status", "npm run dev" };
         // id, label, columns, rows
         public static readonly string[][] Layouts =
         {
@@ -73,7 +73,7 @@ namespace StickyPro
 
         public static string ShellArgs(string shell, string command)
         {
-            command = (command ?? "").Trim();
+            command = AgentAccounts.TerminalCommand(shell, command);
             if (shell == "cmd") return command.Length > 0 ? "/K " + command : "";
             return command.Length > 0 ? "-NoLogo -NoExit -Command \"" + command.Replace("\"", "\\\"") + "\"" : "-NoLogo";
         }
@@ -158,6 +158,7 @@ namespace StickyPro
                 if (HasWt) Start(wt, "-w new nt " + PaneArgs(p), dir);
                 else Start(ShellExe(shell), ShellArgs(shell, command), dir);
                 Remember(dir);
+                TermHistory.Add("terminal", "", new[] { dir }, command, shell, "");
             }
             catch (Exception ex) { App.Log("Terminal: " + ex.Message); MessageBox.Show("Could not open a terminal in " + dir + ":\n" + ex.Message, App.Name); }
         }
@@ -176,7 +177,15 @@ namespace StickyPro
         public static void AddMenu(ToolStripItemCollection items, Func<string> folder)
         {
             items.Add("PWSH here", null, delegate { var f = Safe(folder); if (f != null) Open(f, ""); });
-            items.Add("Claude here (in PWSH)", null, delegate { var f = Safe(folder); if (f != null) Open(f, "claude"); });
+            // Agent CLIs in this folder: a new session, the last one again, or a session picked from the list.
+            Action<string, string, string[][]> agent = (title, glyph, cmds) =>
+            {
+                var sub = new ToolStripMenuItem(title);
+                foreach (var c in cmds) { string cmd = c[1]; sub.DropDownItems.Add(c[0] + "     " + cmd, null, delegate { var f = Safe(folder); if (f != null) Open(f, cmd); }); }
+                items.Add(sub);
+            };
+            agent("Claude Code here", "", new[] { new[] { "New session", "claude" }, new[] { "Continue the last session", "claude --continue" }, new[] { "Resume a session (pick from list)", "claude --resume" } });
+            agent("Codex here", "", new[] { new[] { "New session", "codex" }, new[] { "Continue the last session", "codex resume --last" }, new[] { "Resume a session (pick from list)", "codex resume" } });
             items.Add("Add to my terminals workspace", null, delegate { var f = Safe(folder); if (f != null) App.I.AddTerminalFolder(f); });
             items.Add("Chat with agents here", null, delegate { var f = Safe(folder); if (f != null) App.I.AddAgentFolder(f); });
         }
@@ -214,7 +223,9 @@ namespace StickyPro
         {
             int cols, rows; Grid(ws.Layout, out cols, out rows);
             int n = cols * rows;
-            var panes = Enumerable.Range(0, n).Select(i => PaneAt(ws, i)).Select(p => new TermPane { Folder = Folder(p.Folder), Shell = p.Shell, Command = p.Command }).ToList();
+            var panes = Enumerable.Range(0, n).Select(i => PaneAt(ws, i)).Select(p => new TermPane { Folder = Folder(p.Folder), Shell = p.Shell, Command = p.Command, Name = p.Name, Color = p.Color }).ToList();
+            TermHistory.Add("workspace", ws.Name, panes.Select(p => p.Folder), string.Join(" | ", panes.Select(p => p.Command).Where(c => !string.IsNullOrEmpty(c)).Distinct()), panes.Count > 0 ? panes[0].Shell : "", ws.Layout,
+                new TermWorkspace { Name = ws.Name, Layout = ws.Layout, Mode = ws.Mode, Panes = panes });
             foreach (var p in panes.AsEnumerable().Reverse()) Remember(p.Folder);
             try
             {
@@ -365,6 +376,15 @@ namespace StickyPro
             top.Controls.Add(Ui.Btn("New workspace", delegate { NewWorkspace(); }));
             top.Controls.Add(Ui.Btn("Rename", delegate { var n = Ui.Ask("Rename workspace", "Name", Ws.Name, FindForm()); if (!string.IsNullOrWhiteSpace(n)) { Ws.Name = n.Trim(); Store.MarkSettings(); FillWorkspaces(); } }));
             top.Controls.Add(Ui.Btn("Delete", delegate { DeleteWorkspace(); }));
+            top.Controls.Add(Ui.Btn("★", delegate { Ws.Fav = !Ws.Fav; Store.MarkSettings(); FillWorkspaces(); }));
+            top.Controls.Add(Ui.Btn("Manage...", delegate { ManageWorkspaces(); }));
+            top.Controls.Add(Ui.Btn("History", delegate { TermHistory.Show(FindForm(), ws => {
+                Commit(); Store.Settings.TermWorkspaces.Add(ws); Store.Settings.TermLast = Store.Settings.TermWorkspaces.Count - 1;
+                Store.MarkSettings(); FillWorkspaces(); LoadWs();
+            }); }));
+            Button setsBtn = null;
+            setsBtn = Ui.Btn("Folder sets", delegate { FolderSets.ShowMenu(setsBtn, new Point(0, setsBtn.Height), OpenFolders, OpenSet, 8, "Terminals"); });
+            top.Controls.Add(setsBtn);
 
             // Layout chips + mode
             var options = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, Ui.S(4), 0, Ui.S(4)) };
@@ -389,7 +409,7 @@ namespace StickyPro
             preview.PaneClicked += i => { if (i < rowsHost.Controls.Count) { var row = rowsHost.Controls[i] as PaneRow; if (row != null) row.FocusFolder(); } };
 
             rowsHost = new FlowLayoutPanel { Dock = DockStyle.Top, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, Ui.S(6), 0, 0) };
-            rowsHost.Resize += delegate { FitRows(); };
+            rowsHost.Resize += delegate { Ui.Debounce("terminals.rows", 90, FitRows); };   // once after the resize settles, not on every step
 
             // Bottom actions
             var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, Ui.S(8), 0, Ui.S(2)) };
@@ -461,10 +481,40 @@ namespace StickyPro
             workspaces.BeginUpdate();
             workspaces.Items.Clear();
             var cur = Ws;
-            foreach (var w in Store.Settings.TermWorkspaces) workspaces.Items.Add(w.Name);
+            foreach (var w in Store.Settings.TermWorkspaces) workspaces.Items.Add((w.Fav ? "★ " : "") + w.Name);
             workspaces.SelectedIndex = Math.Max(0, Store.Settings.TermWorkspaces.IndexOf(cur));
             workspaces.EndUpdate();
             loading = false;
+        }
+
+        // Folder sets: the folders of the panes, and opening a set (one terminal per folder, up to 8).
+        List<string> OpenFolders() { Commit(); return Enumerable.Range(0, Term.Count(Ws.Layout)).Select(i => Term.PaneAt(Ws, i).Folder).ToList(); }
+        void OpenSet(FolderSet s)
+        {
+            Commit();
+            int n = Math.Max(1, Math.Min(8, s.Folders.Count));
+            Ws.Layout = n <= 6 ? n.ToString() : "4x2";
+            for (int i = 0; i < n; i++) Term.PaneAt(Ws, i).Folder = s.Folders[i];
+            Store.MarkSettings(); LoadWs();
+            App.I.Status("Folder set \"" + s.Name + "\" is in the panes. Press Launch to open the terminals.");
+        }
+
+        // Open, rename, favorite, duplicate, order and delete workspaces in one place.
+        void ManageWorkspaces()
+        {
+            Commit();
+            var L = Store.Settings.TermWorkspaces;
+            Action save = () => { Store.MarkSettings(); };
+            using (var dlg = new ListManager("Terminal workspaces", () => L.Select(w => w.Name + "   (" + Term.Count(w.Layout) + " terminals)").ToList(), i => L[i].Fav,
+                i => { Store.Settings.TermLast = i; save(); },
+                i => { var n = Ui.Ask("Rename workspace", "Name", L[i].Name, FindForm()); if (!string.IsNullOrWhiteSpace(n)) { L[i].Name = n.Trim(); save(); } },
+                i => { L[i].Fav = !L[i].Fav; save(); },
+                i => { var s = L[i]; L.Insert(i + 1, new TermWorkspace { Name = s.Name + " (copy)", Layout = s.Layout, Mode = s.Mode, Fav = false, Panes = s.Panes.Select(p => new TermPane { Folder = p.Folder, Shell = p.Shell, Command = p.Command, Name = p.Name, Color = p.Color }).ToList() }); save(); },
+                (i, d) => { int j = i + d; if (j < 0 || j >= L.Count) return; var cur = Ws; var w = L[i]; L.RemoveAt(i); L.Insert(j, w); Store.Settings.TermLast = Math.Max(0, L.IndexOf(cur)); save(); },
+                i => { if (L.Count <= 1) { MessageBox.Show(FindForm(), "Keep at least one workspace.", App.Name); return; } var cur = Ws; L.RemoveAt(i); Store.Settings.TermLast = Math.Max(0, L.IndexOf(cur)); save(); }))
+                dlg.ShowDialog(FindForm());
+            if (Store.Settings.TermLast >= L.Count) Store.Settings.TermLast = 0;
+            FillWorkspaces(); LoadWs();
         }
 
         void NewWorkspace()
@@ -619,6 +669,12 @@ namespace StickyPro
             shell.SelectedIndexChanged += delegate { pane.Shell = (string)shell.SelectedItem; Raise(); };
             command = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Dock = DockStyle.Fill, Margin = new Padding(0, Ui.S(2), Ui.S(6), 0) };
             command.Items.AddRange(Term.Commands);
+            command.DropDown += delegate {
+                string typed = command.Text;
+                var saved = TermHistory.All.Where(x => x != null && x.Fav).SelectMany(x => x.Kind == "workspace" ? TermHistory.Restore(x).Panes.Select(p => p.Command) : new[] { x.Command })
+                    .Where(c => !string.IsNullOrWhiteSpace(c)).Concat(Term.Commands).Distinct(StringComparer.Ordinal).ToArray();
+                command.BeginUpdate(); command.Items.Clear(); command.Items.AddRange(saved); command.Text = typed; command.EndUpdate();
+            };
             command.Text = pane.Command;
             command.TextChanged += delegate { pane.Command = command.Text.Trim(); Raise(); };
             ComboFix.NoSelect(command);

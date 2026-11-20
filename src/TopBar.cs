@@ -54,7 +54,7 @@ namespace StickyPro
             Add("tasks", "", "Due today", "#64748B", "tasks");
             Add("urgent", "", "Urgent", "#64748B", "tagged");
             Add("rec", "", "Recorder", "#64748B", "snip");
-            foreach (var k in new[] { "overlay", "theme", "awake", "wifi" }) toggles.Add(new Toggle { Key = k });
+            foreach (var k in new[] { "assistant", "overlay", "theme", "awake", "wifi" }) toggles.Add(new Toggle { Key = k });
             clock.Tick += delegate { if (DateTime.Now.Minute != lastMinute) { lastMinute = DateTime.Now.Minute; Invalidate(clockRect); } };
             update = () => { if (Live) RefreshValues(); };
             // Store events can come in bursts (typing in a note, copying): recompute the data facts once, 400 ms after the last one.
@@ -97,10 +97,10 @@ namespace StickyPro
                 chip.Value = d.Value.Replace(" free", "") + " free"; chip.Bar = d.Used; chip.Tip = key.ToUpperInvariant() + ": " + d.Value + " " + d.Detail;
                 chip.Alert = d.Used > 0.9; chip.Tint = d.Used > 0.95 ? Red : Amber;
             }
-            var top = ProcessSampler.Last.GroupBy(p => p.Display).Select(g => new { Name = g.Key, Memory = g.Sum(p => p.Mem) }).OrderByDescending(g => g.Memory).Take(3).ToList();
+            var top = ProcessSampler.MemoryApps;
             var apps = C("apps");
-            apps.Value = top.Count > 0 ? Ui.OneLine(top[0].Name, 14) + " " + Fmt.Bytes(top[0].Memory) : "-";
-            apps.Tip = "Top memory apps:\n" + string.Join("\n", top.Select(p => p.Name + "  " + Fmt.Bytes(p.Memory)));
+            apps.Value = top.Count > 0 ? Ui.OneLine(top[0].Name, 14) + " " + Fmt.Bytes(top[0].Mem) : "-";
+            apps.Tip = "Top memory apps:\n" + string.Join("\n", top.Take(3).Select(p => p.Name + "  " + Fmt.Bytes(p.Mem)));
             var tasks = C("tasks"); tasks.Value = facts.RemindersToday.ToString(); tasks.Alert = facts.RemindersToday > 0; tasks.Tint = Red;
             tasks.Tip = "Due today / overdue tasks and reminders: " + facts.RemindersToday;
             var urgent = C("urgent"); urgent.Value = facts.Urgent.ToString(); urgent.Alert = true; urgent.Tint = Red;
@@ -261,7 +261,7 @@ namespace StickyPro
                     var kr = new Rectangle(searchRect.Right - kw - Ui.S(8), searchRect.Y + Ui.S(9), kw, searchRect.Height - Ui.S(18));
                     using (var path = Ui.Round(kr, Ui.S(5))) { using (var b = new SolidBrush(Ui.Card)) g.FillPath(b, path); using (var p = new Pen(Ui.Line)) g.DrawPath(p, path); }
                     TextRenderer.DrawText(g, key, Ui.Small, kr, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                    TextRenderer.DrawText(g, "Search everything", Ui.Base, new Rectangle(ir.Right, searchRect.Y, kr.Left - ir.Right - Ui.S(4), searchRect.Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "Search this app", Ui.Base, new Rectangle(ir.Right, searchRect.Y, kr.Left - ir.Right - Ui.S(4), searchRect.Height), Ui.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
                 }
             }
             foreach (var c in chips) if (!c.Bounds.IsEmpty && c.Bounds.IntersectsWith(e.ClipRectangle)) DrawChipNexus(g, c);
@@ -346,8 +346,9 @@ namespace StickyPro
                 TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y, tw, r.Height), Color.White, flags | TextFormatFlags.VerticalCenter);
             else
             {
-                TextRenderer.DrawText(g, c.Label, Ui.Small, new Rectangle(tx, r.Y + Ui.S(3), tw, Ui.S(15)), Color.FromArgb(205, 255, 255, 255), flags);
-                TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y + Ui.S(17), tw, Ui.S(18)), Color.White, flags);
+                // Classic pills are shorter: text sits higher so the usage bar below never touches it.
+                TextRenderer.DrawText(g, c.Label, Ui.Small, new Rectangle(tx, r.Y + Ui.S(2), tw, Ui.S(15)), Color.FromArgb(205, 255, 255, 255), flags);
+                TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y + Ui.S(14), tw, Ui.S(18)), Color.White, flags);
             }
             if (c.Spark != null && c.Spark.Length > 1)
             {
@@ -358,9 +359,9 @@ namespace StickyPro
             }
             else if (c.Bar >= 0)
             {
-                int bx = r.X + r.Height / 2, bwid = r.Width - r.Height, by = r.Bottom - Ui.S(5);
-                using (var b = new SolidBrush(Color.FromArgb(70, 255, 255, 255))) g.FillRectangle(b, bx, by, bwid, Ui.S(3));
-                using (var b = new SolidBrush(Color.White)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(3));
+                int bx = tx, bwid = Math.Max(Ui.S(10), r.Right - Ui.S(12) - tx), by = r.Bottom - Ui.S(4);
+                using (var b = new SolidBrush(Color.FromArgb(70, 255, 255, 255))) g.FillRectangle(b, bx, by, bwid, Ui.S(2));
+                using (var b = new SolidBrush(Color.White)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
             }
         }
 
@@ -368,13 +369,14 @@ namespace StickyPro
         {
             switch (t.Key)
             {
+                case "assistant": return "";
                 case "theme": return Ui.Dark ? "" : "";
                 case "overlay": return "";
                 case "awake": return "";
                 default: return WiFi.State == "Off" ? "" : "";
             }
         }
-        bool ToggleOn(Toggle t) { return t.Key == "overlay" ? Overlay.On : t.Key == "awake" ? Awake.On : t.Key == "wifi" ? WiFi.State == "On" : false; }
+        bool ToggleOn(Toggle t) { return t.Key == "assistant" ? Store.Settings.AssistantOpen : t.Key == "overlay" ? Overlay.On : t.Key == "awake" ? Awake.On : t.Key == "wifi" ? WiFi.State == "On" : false; }
 
         void DrawToggle(Graphics g, Toggle t)
         {
@@ -412,7 +414,7 @@ namespace StickyPro
         {
             var c = h as Chip; if (c != null) return c.Tip ?? (c.Label + ": " + c.Value);
             var t = h as Toggle;
-            if (t != null) return t.Key == "overlay" ? "Desktop overlay (dock, menu bar, hot corner, window overview): " + (Overlay.On ? "on" : "off") : t.Key == "theme" ? (Ui.Dark ? "Switch to light mode" : "Switch to dark mode") : t.Key == "awake" ? "Keep screen awake (no sleep / screensaver): " + (Awake.On ? "on" : "off") : "Wi-Fi: " + (WiFi.Busy ? "working..." : WiFi.State);
+            if (t != null) return t.Key == "assistant" ? "Assistant: chat with an agent that works the app for you (Ctrl+J)" : t.Key == "overlay" ? "Desktop overlay (dock, menu bar, hot corner, window overview): " + (Overlay.On ? "on" : "off") : t.Key == "theme" ? "Look: design, colour, light or dark" : t.Key == "awake" ? "Keep screen awake (no sleep / screensaver): " + (Awake.On ? "on" : "off") : "Wi-Fi: " + (WiFi.Busy ? "working..." : WiFi.State);
             var s = h as string;
             if (s == "brand") return "Home";
             if (s == "search") return "Search notes, prompts, clips, tasks and pages";
@@ -432,7 +434,8 @@ namespace StickyPro
             var t = h as Toggle;
             if (t != null)
             {
-                if (t.Key == "theme") BeginInvoke(new Action(() => App.I.ToggleDark()));
+                if (t.Key == "theme") LookPicker.Open(this, PointToScreen(new Point(e.X, Height)));   // designs and light/dark, one click
+                else if (t.Key == "assistant") App.I.ToggleAssistant();
                 else if (t.Key == "awake") Awake.Set(!Awake.On);
                 else if (t.Key == "overlay") Overlay.Toggle();
                 else WiFi.Toggle();
@@ -456,6 +459,7 @@ namespace StickyPro
             if (c != null) { var page = c.Page; m.Items.Add("Open " + c.Label, null, delegate { App.I.ShowMain(page); }); m.Items.Add("Copy \"" + c.Label + ": " + c.Value + "\"", null, delegate { App.I.CopyText(c.Label + ": " + c.Value); }); m.Items.Add(new ToolStripSeparator()); }
             m.Items.Add("Copy all values", null, delegate { App.I.CopyText(string.Join("\n", chips.Where(x => x.Visible).Select(x => x.Label + ": " + x.Value))); });
             m.Items.Add(Ui.Dark ? "Light mode" : "Dark mode", null, delegate { BeginInvoke(new Action(() => App.I.ToggleDark())); });
+            m.Items.Add("Choose a look...", null, delegate { LookPicker.Open(this, Cursor.Position); });
             var themes = new ToolStripMenuItem("Theme");
             for (int i = 0; i < Ui.ThemeNames.Length; i++) { int k = i; var it = new ToolStripMenuItem(Ui.ThemeNames[i], Ui.Swatch(Ui.ThemeColor(i), Ui.S(14)), delegate { BeginInvoke(new Action(() => App.I.SetTheme(k))); }) { Checked = Ui.ThemeIndex == i }; themes.DropDownItems.Add(it); }
             m.Items.Add(themes);

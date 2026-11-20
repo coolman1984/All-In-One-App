@@ -607,6 +607,7 @@ namespace StickyPro
             var t = new TableLayoutPanel { Dock = DockStyle.Left, ColumnCount = 3, AutoScroll = true, Padding = new Padding(Ui.S(8)), Width = Ui.S(320 + 200 + 190 + 16 + 24) };
             t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(320))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(200))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(190)));
             var boxes = new Dictionary<string, HotkeyBox>();
+            t.SuspendLayout();   // one layout pass for the whole table, not one per row
             foreach (var a in Hotkeys.Actions)
             {
                 var l = new Label { Text = a[1], AutoSize = true, Margin = new Padding(0, Ui.S(8), Ui.S(8), 0) };
@@ -615,6 +616,7 @@ namespace StickyPro
                 var d = new Label { Text = "default " + a[2], AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0) };
                 t.Controls.Add(l); t.Controls.Add(hb); t.Controls.Add(d);
             }
+            t.ResumeLayout();
             p.Controls.Add(t);
             var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, Ui.S(4), 0, Ui.S(4)) };
             var status = new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0), Text = "Click a box and press the keys. Backspace turns a shortcut off." };
@@ -674,7 +676,7 @@ namespace StickyPro
             bar.Controls.Add(Ui.Btn("New shortcut...", delegate { AddLauncherFor("", "", "", FindForm()); }, true));
             bar.Controls.Add(Ui.Btn("Edit", delegate { var u = sel(); if (u != null && Edit(u, FindForm())) Changed(); }));
             bar.Controls.Add(Ui.Btn("Delete", delegate { var u = sel(); if (u != null) { Store.Settings.Launchers.Remove(u); Changed(); } }));
-            bar.Controls.Add(new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0), Text = "Your own keys that open any app, file, folder or web page from anywhere in Windows." });
+            bar.Controls.Add(new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0), Text = "Your keys for apps, files, folders and web pages." });
             p.Controls.Add(bar);
             return p;
         }
@@ -713,7 +715,7 @@ namespace StickyPro
                 row("Name", name, null);
                 row("Opens", target, Ui.Btn("Browse...", delegate { using (var d = new OpenFileDialog { Filter = "All files|*.*" }) if (d.ShowDialog(f) == DialogResult.OK) { target.Text = d.FileName; if (name.Text.Length == 0) name.Text = Path.GetFileNameWithoutExtension(d.FileName); } }));
                 row("Arguments", args, null);
-                t.Controls.Add(new Label { Text = "Opens can be a program, file, folder, web address or ms-settings: page.", AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small }, 1, 4);
+                t.Controls.Add(new Label { Text = "A program, file, folder, web address or ms-settings: page.", AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small }, 1, 4);
                 var bar = LayoutKit.Actions(DockStyle.Bottom);
                 var ok = Ui.Btn("Save", null, true); var cancel = Ui.Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
                 ok.Click += delegate
@@ -736,12 +738,17 @@ namespace StickyPro
 
         static readonly string[][] InApp =
         {
-            new[] { "Ctrl+1 ... Ctrl+9, Ctrl+0", "Main window: switch pages" }, new[] { "Ctrl+F", "Search on the current page" }, new[] { "Ctrl+K", "Search everything (Home)" },
+            new[] { "Ctrl+1 ... Ctrl+9, Ctrl+0", "Main window: switch pages" }, new[] { "Ctrl+F", "Search on the current page" }, new[] { "Ctrl+K", "Search this app" },
             new[] { "F5", "Explorer: copy selection to the next pane" }, new[] { "F6", "Explorer: move selection to the next pane" }, new[] { "F2", "Explorer: rename" },
             new[] { "F7 / Ctrl+Shift+N", "Explorer: new folder" }, new[] { "Del / Shift+Del", "Explorer: Recycle Bin / delete for good" }, new[] { "Ctrl+C / X / V", "Explorer: copy, cut, paste (works with Windows Explorer too)" },
             new[] { "Backspace / Alt+Up", "Explorer: parent folder" }, new[] { "Alt+Left / Alt+Right", "Explorer: back / forward" }, new[] { "Ctrl+L", "Explorer: type a path" },
             new[] { "Alt+Enter", "Explorer: properties" }, new[] { "Enter", "Tasks: add the typed task (\"call Ali tomorrow 3pm !high #work\")" },
             new[] { "Ctrl+N", "Sticky note: new note" }, new[] { "Esc", "Close popups and quick windows" }, new[] { "Ctrl+Enter", "Quick run: run as administrator" },
+            new[] { "Ctrl+K, then Tab", "Search: switch scope (Pages, Tasks, Notes...)" }, new[] { "Right arrow", "Search: accept the suggestion" }, new[] { "Ctrl+D", "Search: favourite the selected result" },
+            new[] { "Ctrl+ / Ctrl- / Ctrl+0", "Agents: chat text size (also Ctrl+mouse wheel)" }, new[] { "Enter / Shift+Enter", "Agents: send / new line" }, new[] { "Ctrl+F", "Agents: find in this chat" },
+            new[] { "Ctrl+T / Ctrl+W", "Browser: new tab / close tab" }, new[] { "Ctrl+Tab", "Browser: next tab" }, new[] { "Ctrl+L", "Browser: address bar" }, new[] { "Ctrl+O", "Browser: open a file (PDF, email, report)" },
+            new[] { "Ctrl+F", "Browser: find on page" }, new[] { "Ctrl+P", "Browser: print" }, new[] { "Ctrl+ / Ctrl- / Ctrl+0", "Browser: zoom" }, new[] { "F5", "Browser: reload" },
+            new[] { "Ctrl+O", "Markdown: open a note by name" }, new[] { "Ctrl+N", "Markdown: new note" }, new[] { "Ctrl+E", "Markdown: read / edit" }, new[] { "Ctrl+Shift+F", "Markdown: search all notes" },
         };
         static readonly string[][] WindowsKeys =
         {

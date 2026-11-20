@@ -37,6 +37,27 @@ try {
     Assert ($editor.Width -ge 280) 'Narrow prompt layout crowded out its editor.'
     $picker = $pageType.GetField('compactCats', $instance).GetValue($page)
     Assert ($picker.Visible -and $picker.Items.Count -gt 0) 'Narrow prompt layout lost its category selector.'
+    $ui=$assembly.GetType('StickyPro.Ui')
+    foreach ($dark in @($false,$true)) {
+        $ui.GetField('Dark',$static).SetValue($null,$dark)
+        $sample=[Activator]::CreateInstance($pageType,$instance,$null,[object[]]@($null),$null)
+        try {
+            $sample.Size=New-Object Drawing.Size(1800,850)
+            $sample.CreateControl(); $sample.PerformLayout()
+            foreach ($field in @('tbTitle','cbCat','tbTrigger','tbTags','tbBody')) {
+                $inputControl=$pageType.GetField($field,$instance).GetValue($sample)
+                $frame=$inputControl.Parent
+                Assert ($frame.GetType() -eq [Windows.Forms.Panel] -and $inputControl.Width -gt 50 -and $inputControl.Height -ge $inputControl.Font.Height) "Prompt field clipped: $field"
+                $bitmap=[Drawing.Bitmap]::new($frame.Width,$frame.Height)
+                try {
+                    $frame.DrawToBitmap($bitmap,$frame.ClientRectangle)
+                    Assert ($bitmap.GetPixel(0,0).ToArgb() -ne $frame.BackColor.ToArgb()) "Prompt field border invisible: $field"
+                } finally { $bitmap.Dispose() }
+            }
+            $cat=$pageType.GetField('cbCat',$instance).GetValue($sample)
+            Assert ($cat.DropDownStyle -eq 'DropDown') 'Prompt categories are no longer editable'
+        } finally { $sample.Dispose(); $ui.GetField('Dark',$static).SetValue($null,$false) }
+    }
 } finally { $event.RemoveEventHandler($null, $handler); $page.Dispose() }
 
 $definition = [Activator]::CreateInstance($assembly.GetType('StickyPro.CardDef'))
@@ -58,4 +79,53 @@ try {
     $body = $card.GetType().GetField('body', $instance).GetValue($card)
     Assert ($body.Height -gt 40) 'Wrapped card tabs left no space for their content.'
 } finally { $card.Dispose() }
-Write-Host 'FORMS OK: prompt duplication survives refresh; card expansion preserves dimensions; no windows shown'
+$settingsType = $assembly.GetType('StickyPro.SettingsForm')
+$ui = $assembly.GetType('StickyPro.Ui')
+$preferences = $store.GetField('Settings', $static).GetValue($null)
+$preferences.Design = 'nexus'
+[void]$ui.GetMethod('InitFonts', [type[]]@([string], [single])).Invoke($null, @('Calibri', [single]10))
+foreach ($scale in @([single]1, [single]1.5)) {
+    $ui.GetField('Scale', $static).SetValue($null, $scale)
+    $settings = [Activator]::CreateInstance($settingsType, $instance, $null, [object[]]@($false), $null)
+    try {
+        $settings.Width = $settings.MinimumSize.Width
+        $settings.PerformLayout()
+        $table = $settings.Controls | Where-Object { $_ -is [Windows.Forms.TableLayoutPanel] } | Select-Object -First 1
+        $table.PerformLayout()
+        $awake = $settingsType.GetField('keepAwake', $instance).GetValue($settings)
+        $checkSize = $awake.GetPreferredSize([Drawing.Size]::new($awake.Width, 0))
+        Assert ($awake.Right -le $table.ClientSize.Width -and $awake.Height -ge $checkSize.Height) "Awake text clips at scale $scale."
+        $theme = $settingsType.GetField('colorTheme', $instance).GetValue($settings)
+        Assert ($theme.SelectedIndex -eq $preferences.Theme -and $theme.ItemHeight -ge $theme.Font.Height) "Color theme selection or row height changed at scale $scale."
+    } finally { $settings.Dispose() }
+}
+
+$searchType = $assembly.GetType('StickyPro.GlobalSearch')
+$find = $searchType.GetMethod('Find', $static)
+$keep = $searchType.GetMethod('KeepResult', $static)
+$listType = [Collections.Generic.List[object]].GetGenericTypeDefinition().MakeGenericType($searchType.GetNestedType('Hit', $static -bor $instance))
+function Search-Hits([string]$text) {
+    $result = [Activator]::CreateInstance($listType)
+    foreach ($candidate in $find.Invoke($null, @($null, $text))) {
+        if ($null -ne $candidate) { [void]$keep.Invoke($null, @($result, $candidate)) }
+    }
+    $result.ToArray()
+}
+$tasks = $store.GetField('Tasks', $static).GetValue($null)
+foreach ($entry in @(@('Team follow-up', 'Review budget'), @('Review budget draft', ''), @('Review budget', ''))) {
+    $task = [Activator]::CreateInstance($assembly.GetType('StickyPro.TaskItem'))
+    $task.Title = $entry[0]; $task.Notes = $entry[1]; $tasks.Add($task)
+}
+$clips = $store.GetField('Clips', $static).GetValue($null)
+for ($i = 0; $i -lt 25; $i++) {
+    $clip = [Activator]::CreateInstance($assembly.GetType('StickyPro.Clip'))
+    $clip.Text = 'Budget review, item ' + $i; $clip.Time = [datetime]::Today.AddMinutes($i).Ticks; $clips.Add($clip)
+}
+$hits = @(Search-Hits 'rEVIEW   Budget')
+Assert ($hits.Count -eq 9) 'Search missed a group or failed to cap the clipboard history.'
+Assert (($hits[0..2].Title -join '|') -eq 'Review budget|Review budget draft|Team follow-up') 'Search did not prioritize exact and prefix titles ahead of body text.'
+Assert ($hits[3].Title -eq 'Budget review, item 24' -and $hits[8].Title -eq 'Budget review, item 19') 'Clipboard results were not grouped last and ordered by recency.'
+Assert (@(Search-Hits 'Settings')[0].Group.ToString() -eq 'Page') 'Settings is missing from app search.'
+Assert (@(Search-Hits 'unrelated PC filename').Count -eq 0) 'Unrelated query returned an app result.'
+Assert (@(Search-Hits '  ').Count -eq 0) 'Blank search returned data.'
+Write-Host 'FORMS OK: prompt duplication, card expansion, Settings layout and app search ranking and limits; no windows shown'

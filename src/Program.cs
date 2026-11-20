@@ -11,9 +11,37 @@ namespace StickyPro
         const string ShowEventName = "StickyNotesPro_Show_v1";
         const string ExitEventName = "StickyNotesPro_Exit_v1";
 
-        [STAThread]
+        // When the app is started from inside an AI agent session (for example a Claude Code terminal), it inherits that
+        // session's variables (CLAUDE_CODE_CHILD_SESSION, CLAUDE_CODE_SESSION_ID, messaging socket and token...).
+        // Every terminal and agent the app opens would inherit them too, and Claude there would think it is a child
+        // session ("Transcript saving is off"). Remove them, but keep anything set in your permanent Windows settings.
+        static void CleanInheritedAgentEnv()
+        {
+            try
+            {
+                foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
+                {
+                    string name = e.Key as string;
+                    if (string.IsNullOrEmpty(name)) continue;
+                    string up = name.ToUpperInvariant();
+                    // Agent session variables, plus the "plain output" ones an agent's shell sets (NO_COLOR made every
+                    // terminal and CLI opened from the app lose its colors) and a parent terminal's own ids.
+                    bool agent = up.StartsWith("CLAUDE") || up.StartsWith("CODEX_");
+                    bool plain = up == "NO_COLOR" || up == "FORCE_COLOR" || up == "CLICOLOR" || up == "CLICOLOR_FORCE" || up == "TERM" || up == "WT_SESSION" || up == "WT_PROFILE_ID";
+                    if (!agent && !plain) continue;
+                    if (Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User) != null) continue;
+                    if (Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine) != null) continue;
+                    Environment.SetEnvironmentVariable(name, null);
+                }
+            }
+            catch { }
+        }
+
+        [STAThread]   // must stay directly on Main: the UI, drag and drop and the clipboard need it
         static void Main(string[] args)
         {
+            WebViewHost.Hook();   // browser engine DLLs are packed in the exe
+            CleanInheritedAgentEnv();
             bool startup = false, exit = false;
             string page = null;
             for (int i = 0; i < args.Length - 1; i++) if (args[i] == "--page") page = args[i + 1];

@@ -38,17 +38,20 @@ namespace StickyPro
             MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
-            ClientSize = Ui.S(560, 720);
-            MaximumSize = Screen.FromPoint(Cursor.Position).WorkingArea.Size;
-            MinimumSize = Ui.S(420, 360);
+            var work = Screen.FromPoint(Cursor.Position).WorkingArea.Size;
+            MaximumSize = work;
+            MinimumSize = new Size(Math.Min(work.Width, Ui.S(430)), Math.Min(work.Height, Ui.S(360)));
+            var frame = SizeFromClientSize(Size.Empty);
+            ClientSize = new Size(Math.Min(work.Width - frame.Width, Ui.S(640)), Math.Min(work.Height - frame.Height, Ui.S(720)));
             Ui.DarkTitle(this);
 
             var t = new TableLayoutPanel();
+            t.SuspendLayout();
             t.Dock = DockStyle.Fill;
             t.Padding = new Padding(Ui.S(18), Ui.S(12), Ui.S(18), Ui.S(8));
             t.ColumnCount = 2;
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
             t.AutoScroll = true;
 
             Section(t, "Look");
@@ -56,21 +59,26 @@ namespace StickyPro
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
             Row(t, "Light or dark mode", theme);
             design = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-            design.Items.AddRange(new object[] { "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)" });
-            design.SelectedIndex = Store.Settings.Design == "classic" ? 2 : Store.Settings.Design == "nexus" ? 1 : 0;
+            design.Items.AddRange(new object[] { "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)", "Soft (charcoal sidebar, coral accent)" });
+            design.SelectedIndex = Store.Settings.Design == "soft" ? 3 : Store.Settings.Design == "classic" ? 2 : Store.Settings.Design == "nexus" ? 1 : 0;
             Row(t, "Design", design);
             colorTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(22) };
             colorTheme.Items.AddRange(Ui.ThemeNames);
             colorTheme.SelectedIndex = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, Store.Settings.Theme));
             colorTheme.DrawItem += (s, e) =>
             {
-                if (e.Index < 0) return;
+                if (e.Index < 0 || e.Index >= Ui.ThemeNames.Length) return;
                 bool sel = (e.State & DrawItemState.Selected) != 0;
                 using (var b = new SolidBrush(sel ? Ui.SelBg : Ui.Field)) e.Graphics.FillRectangle(b, e.Bounds);
                 var r = new Rectangle(e.Bounds.X + Ui.S(4), e.Bounds.Y + Ui.S(3), Ui.S(26), e.Bounds.Height - Ui.S(6));
                 using (var b = new SolidBrush(Ui.ThemeColor(e.Index))) e.Graphics.FillRectangle(b, r);
-                TextRenderer.DrawText(e.Graphics, Ui.ThemeNames[e.Index], Ui.Base, new Rectangle(r.Right + Ui.S(8), e.Bounds.Y, e.Bounds.Width, e.Bounds.Height), Ui.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+                int left = r.Right + Ui.S(8);
+                TextRenderer.DrawText(e.Graphics, Ui.ThemeNames[e.Index], colorTheme.Font,
+                    new Rectangle(left, e.Bounds.Y, Math.Max(0, e.Bounds.Right - left), e.Bounds.Height), Ui.Text,
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                if ((e.State & DrawItemState.Focus) != 0) e.DrawFocusRectangle();
             };
+            colorTheme.SelectedIndexChanged += delegate { ShowAccent(); };
             Row(t, "Color theme", colorTheme);
             uiFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             uiFont.Items.Add("(default: Segoe UI)");
@@ -96,7 +104,7 @@ namespace StickyPro
             Row(t, "Code font (agent chats, code blocks)", monoFont);
             monoSize = new NumericUpDown { Minimum = 7, Maximum = 20, DecimalPlaces = 1, Increment = 0.5m, Value = (decimal)Math.Max(7f, Math.Min(20f, Store.Settings.MonoFontSize)) };
             Row(t, "Code font size", monoSize);
-            var accentBar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+            var accentBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
             accentBtn = Ui.Btn("", delegate
             {
                 using (var cd = new ColorDialog { FullOpen = true, Color = AccentNow() })
@@ -123,7 +131,7 @@ namespace StickyPro
             Row(t, "Shadows", shadows);
             dockVisible = new CheckBox { Text = "Show the quick launch bar on the right", AutoSize = true, Checked = Store.Settings.DockVisible };
             Row(t, "Quick launch", dockVisible);
-            keepAwake = new CheckBox { Text = "Keep the PC awake (no sleep, screen stays on)", AutoSize = true, Checked = Awake.On };
+            keepAwake = new CheckBox { Text = "Keep the PC and display awake", AutoSize = true, Checked = Awake.On };
             Row(t, "Awake", keepAwake);
             fontName = new ComboBox(); fontName.DropDownStyle = ComboBoxStyle.DropDownList;
             foreach (var f in FontFamily.Families) { using (f) fontName.Items.Add(f.Name); }
@@ -236,12 +244,31 @@ namespace StickyPro
             Controls.Add(t);
             Controls.Add(bar);
             CancelButton = cancel;
-            t.Resize += delegate
+            int layoutWidth = -1;
+            Action fitRows = delegate
             {
-                int fieldWidth = Math.Max(80, (t.ClientSize.Width - t.Padding.Horizontal) * 56 / 100 - Ui.S(8));
-                foreach (Control child in t.Controls) if (child is CheckBox) child.MaximumSize = new Size(fieldWidth, 0);
+                int width = t.ClientSize.Width;
+                if (width == layoutWidth) return;
+                layoutWidth = width;
+                int innerWidth = Math.Max(1, width - t.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth);
+                int labelWidth = innerWidth * 42 / 100;
+                t.SuspendLayout();
+                try
+                {
+                    foreach (Control child in t.Controls)
+                    {
+                        if (child is Label)
+                            child.MaximumSize = new Size(Math.Max(1, (t.GetColumnSpan(child) > 1 ? innerWidth : labelWidth) - child.Margin.Horizontal), 0);
+                        else if (child is CheckBox || child is FlowLayoutPanel)
+                            child.MaximumSize = new Size(Math.Max(1, innerWidth - labelWidth - child.Margin.Horizontal), 0);
+                    }
+                }
+                finally { t.ResumeLayout(true); }
             };
             Ui.Theme(this);
+            t.ClientSizeChanged += delegate { fitRows(); };
+            fitRows();
+            t.ResumeLayout(true);
         }
 
         Color AccentNow()
@@ -279,6 +306,9 @@ namespace StickyPro
         static void Row(TableLayoutPanel t, string label, Control c)
         {
             var l = new Label(); l.Text = label; l.AutoSize = true; l.Margin = new Padding(0, Ui.S(6), Ui.S(8), Ui.S(4));
+            c.AccessibleName = label;
+            var number = c as NumericUpDown;
+            if (number != null) number.BorderStyle = BorderStyle.FixedSingle;
             c.Margin = new Padding(0, Ui.S(2), 0, Ui.S(4));
             c.Dock = DockStyle.Fill;
             t.Controls.Add(l);
@@ -311,7 +341,7 @@ namespace StickyPro
             var s = Store.Settings;
             s.Dark = theme.SelectedIndex == 1;
             s.Theme = colorTheme.SelectedIndex;
-            s.Design = design.SelectedIndex == 2 ? "classic" : design.SelectedIndex == 1 ? "nexus" : "serq";
+            s.Design = design.SelectedIndex == 3 ? "soft" : design.SelectedIndex == 2 ? "classic" : design.SelectedIndex == 1 ? "nexus" : "serq";
             s.UiFont = uiFont.SelectedIndex > 0 ? (string)uiFont.SelectedItem : "";
             s.UiFontSize = (float)uiSize.Value;
             s.HeadingFont = headFont.SelectedIndex > 0 ? (string)headFont.SelectedItem : "";
@@ -348,77 +378,6 @@ namespace StickyPro
                 if (s.ActivityOn) ActivityMonitor.Start(); else ActivityMonitor.Stop();
             }
             DialogResult = DialogResult.OK;
-        }
-    }
-
-    // Full data backup to a plain folder (JSON + images) and restore on the next start.
-    static class Backup
-    {
-        public static void Export(IWin32Window owner)
-        {
-            using (var d = new FolderBrowserDialog { Description = "Choose where to put the backup folder", ShowNewFolderButton = true })
-            {
-                if (d.ShowDialog(owner) != DialogResult.OK) return;
-                try
-                {
-                    Store.SaveNow();
-                    string target = System.IO.Path.Combine(d.SelectedPath, "All in One backup " + DateTime.Now.ToString("yyyy-MM-dd HHmm"));
-                    CopyData(Store.Dir, target);
-                    MessageBox.Show(owner, "Backup saved to:\n" + target, App.Name);
-                    try { System.Diagnostics.Process.Start("explorer.exe", "\"" + target + "\""); } catch { }
-                }
-                catch (Exception ex) { MessageBox.Show(owner, "Backup failed: " + ex.Message, App.Name); }
-            }
-        }
-
-        public static bool Import(IWin32Window owner)
-        {
-            using (var d = new FolderBrowserDialog { Description = "Choose an All in One backup folder (it contains notes.json)" })
-            {
-                if (d.ShowDialog(owner) != DialogResult.OK) return false;
-                if (!System.IO.File.Exists(System.IO.Path.Combine(d.SelectedPath, "notes.json")) && !System.IO.File.Exists(System.IO.Path.Combine(d.SelectedPath, "settings.json")))
-                { MessageBox.Show(owner, "That folder is not a backup (no notes.json or settings.json).", App.Name); return false; }
-                if (MessageBox.Show(owner, "Replace all current data with this backup?\n\nYour current data is kept in data\\before-restore first. The app restarts.", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return false;
-                try
-                {
-                    string pending = System.IO.Path.Combine(Store.Dir, "restore-pending");
-                    if (System.IO.Directory.Exists(pending)) System.IO.Directory.Delete(pending, true);
-                    CopyData(d.SelectedPath, pending);
-                    App.I.RestartNow();
-                    return true;
-                }
-                catch (Exception ex) { MessageBox.Show(owner, "Restore failed: " + ex.Message, App.Name); return false; }
-            }
-        }
-
-        // Copies *.json and the images folder only.
-        public static void CopyData(string from, string to)
-        {
-            System.IO.Directory.CreateDirectory(to);
-            foreach (var f in System.IO.Directory.GetFiles(from, "*.json")) System.IO.File.Copy(f, System.IO.Path.Combine(to, System.IO.Path.GetFileName(f)), true);
-            string img = System.IO.Path.Combine(from, "images");
-            if (System.IO.Directory.Exists(img))
-            {
-                string imgTo = System.IO.Path.Combine(to, "images");
-                System.IO.Directory.CreateDirectory(imgTo);
-                foreach (var f in System.IO.Directory.GetFiles(img)) System.IO.File.Copy(f, System.IO.Path.Combine(imgTo, System.IO.Path.GetFileName(f)), true);
-            }
-        }
-
-        // Called by Store.Load before reading: applies a restore chosen in Settings.
-        public static void ApplyPending(string dir)
-        {
-            string pending = System.IO.Path.Combine(dir, "restore-pending");
-            if (!System.IO.Directory.Exists(pending)) return;
-            try
-            {
-                CopyData(dir, System.IO.Path.Combine(dir, "before-restore " + DateTime.Now.ToString("yyyy-MM-dd HHmmss")));
-                foreach (var f in System.IO.Directory.GetFiles(dir, "*.json")) System.IO.File.Delete(f);
-                foreach (var f in System.IO.Directory.GetFiles(dir, "*.json.bak")) System.IO.File.Delete(f);
-                CopyData(pending, dir);
-                System.IO.Directory.Delete(pending, true);
-            }
-            catch (Exception ex) { App.Log("Restore failed: " + ex.Message); }
         }
     }
 

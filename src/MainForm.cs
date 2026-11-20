@@ -13,25 +13,29 @@ namespace StickyPro
         public bool Exiting;
         readonly NavItem navNotes, navPrompts, navClips, navSettings, navSystem, navCards;
         readonly NavItem navHome;
-        readonly DashboardPanel home;
-        readonly NotesPage notes;
-        readonly PromptsPage prompts;
-        readonly ClipsPage clips;
-        readonly SystemPage system;
-        readonly CardsPage cards;
+        NotesPage notes;
+        PromptsPage prompts;
+        ClipsPage clips;
+        SystemPage system;
+        CardsPage cards;
         readonly NavItem navSnip, navActivity, navTagged, navKeys;
-        readonly Panel snipPage, activityPage, taggedPage;
         readonly NavItem navTasks, navExplorer, navChrome, navPower;
-        readonly TasksPage tasks;
-        readonly ExplorerPage explorer;
-        readonly ChromePage chrome;
-        readonly PowerPage power;
-        readonly ShortcutsPage shortcuts;
+        TasksPage tasks;
+        ExplorerPage explorer;
+        ChromePage chrome;
+        ShortcutsPage shortcuts;
         readonly TopBar topBar;
         readonly QuickDock dock;
         readonly NavItem navTerminals;
-        readonly TerminalPage terminals;
-        readonly AgentsPage agents;
+        TerminalPage terminals;
+        MarkdownPage markdown;
+        NavItem navMarkdown;
+        BrowserPage browser;
+        DocumentsPage documents; NavItem navDocs;
+        NavItem navBrowser;
+        AccountsPage accountsPage;
+        NavItem navAccounts;
+        AgentsPage agents;
         readonly NavItem navAgents;
 
         Panel PageWith(string title, Control inner)
@@ -41,7 +45,8 @@ namespace StickyPro
             p.Controls.Add(inner);
             var bar = Bar();
             bar.Controls.Add(Heading(title));
-            var pop = Ui.Btn("Pop out as floating card", null);
+            var pop = Ui.Btn("Pop out", null);
+            new ToolTip().SetToolTip(pop, "Open this page as a floating card");
             string fid = title == "Snip & record" ? "snip" : title == "File activity" ? "activity" : "tagged";
             pop.Click += delegate { App.I.NewCard(new List<string> { fid }, null); };
             pop.Margin = new Padding(0, Ui.S(4), 0, 0);
@@ -75,42 +80,12 @@ namespace StickyPro
             content = new Panel();
             content.Dock = DockStyle.Fill;
             content.Padding = Ui.Nexus ? new Padding(Ui.S(22), Ui.S(16), Ui.S(22), Ui.S(6)) : new Padding(Ui.S(12), Ui.S(10), Ui.S(12), Ui.S(4));
-            home = new DashboardPanel { Visible = false };
-            content.Controls.Add(home);
-            notes = new NotesPage(this);
-            prompts = new PromptsPage(this);
-            clips = new ClipsPage(this);
-            system = new SystemPage(this);
-            cards = new CardsPage(this);
-            system.Visible = false;
-            cards.Visible = false;
-            content.Controls.Add(notes);
-            content.Controls.Add(prompts);
-            content.Controls.Add(clips);
-            content.Controls.Add(system);
-            content.Controls.Add(cards);
-            Action<string> st = s => Status(s);
-            snipPage = PageWith("Snip & record", new SnipPanel(st));
-            activityPage = PageWith("File activity", new ActivityPanel(st));
-            taggedPage = PageWith("Tagged files", new TaggedPanel(st));
-            content.Controls.Add(snipPage);
-            content.Controls.Add(activityPage);
-            content.Controls.Add(taggedPage);
-            tasks = new TasksPage { Visible = false };
-            explorer = new ExplorerPage();
-            chrome = new ChromePage(this) { Visible = false };
-            power = new PowerPage();
-            shortcuts = new ShortcutsPage();
-            content.Controls.Add(tasks);
-            content.Controls.Add(explorer);
-            content.Controls.Add(chrome);
-            content.Controls.Add(power);
-            content.Controls.Add(shortcuts);
-            terminals = new TerminalPage { Visible = false };
-            content.Controls.Add(terminals);
-            agents = new AgentsPage();
-            content.Controls.Add(agents);
             Controls.Add(content);
+            // The Assistant: one chat on the right of every page (Ctrl+J), created when first shown.
+            assistantHost = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("assistant", DockStyle.Right, Ui.S(420), Ui.S(1200)), Visible = false };
+            Controls.Add(assistantHost);
+            PaneGrip.Attach(assistantHost, "assistant", Ui.S(320));
+            if (Store.Settings.AssistantOpen) Shown += delegate { SetAssistant(true); };
 
             status = new Label();
             status.Dock = DockStyle.Bottom;
@@ -170,10 +145,6 @@ namespace StickyPro
             navTagged.Click += delegate { ShowPage("tagged"); };
             navPower = new NavItem("\uE945", "Power tools");
             navPower.Click += delegate { ShowPage("power"); };
-            navigation.Controls.Add(navPower);
-            navigation.Controls.Add(navTagged);
-            navigation.Controls.Add(navActivity);
-            navigation.Controls.Add(navSnip);
 
             navClips = new NavItem(Ui.GClip, "Clipboard history");
             navPrompts = new NavItem(Ui.GPrompt, "Prompts & snippets");
@@ -185,32 +156,32 @@ namespace StickyPro
             navNotes.Click += delegate { ShowPage("notes"); };
             navSystem.Click += delegate { ShowPage("system"); };
             navCards.Click += delegate { ShowPage("cards"); };
-            navigation.Controls.Add(navCards);
-            navigation.Controls.Add(navSystem);
             navChrome = new NavItem("\uE774", "Chrome bookmarks");
             navChrome.Click += delegate { ShowPage("chrome"); };
-            navigation.Controls.Add(navChrome);
             navExplorer = new NavItem("\uEC50", "Explorer");
             navExplorer.Click += delegate { ShowPage("explorer"); };
-            navigation.Controls.Add(navExplorer);
-            navigation.Controls.Add(navClips);
-            navigation.Controls.Add(navPrompts);
-            navigation.Controls.Add(navNotes);
             navTasks = new NavItem("\uE73A", "Tasks & reminders");
             navTasks.Click += delegate { ShowPage("tasks"); };
-            navigation.Controls.Add(navTasks);
             navHome = new NavItem("", "Home");
             navHome.Click += delegate { ShowPage("dashboard"); };
             navigation.Controls.Add(navHome);
             navTerminals = new NavItem("", "Terminals");
             navTerminals.Click += delegate { ShowPage("terminals"); };
+            navMarkdown = new NavItem("", "Markdown notes");
+            navMarkdown.Click += delegate { ShowPage("markdown"); };
+            navBrowser = new NavItem("", "Browser");
+            navBrowser.Click += delegate { ShowPage("browser"); };
+            navDocs = new NavItem("", "Documents");
+            navDocs.Click += delegate { ShowPage("documents"); };
+            navAccounts = new NavItem("", "Accounts");
+            navAccounts.Click += delegate { ShowPage("accounts"); };
             navAgents = new NavItem("", "Agents");
             navAgents.Click += delegate { ShowPage("agents"); };
             // Sidebar pages: your names, order, favorites and hidden pages come from Settings (right-click a page).
             navList = navigation;
             AddNavPage("dashboard", navHome, "General"); AddNavPage("tasks", navTasks, "General"); AddNavPage("notes", navNotes, "General");
             AddNavPage("prompts", navPrompts, "General"); AddNavPage("clips", navClips, "General");
-            AddNavPage("agents", navAgents, "Tools"); AddNavPage("terminals", navTerminals, "Tools"); AddNavPage("explorer", navExplorer, "Tools");
+            AddNavPage("agents", navAgents, "Tools"); AddNavPage("terminals", navTerminals, "Tools"); AddNavPage("explorer", navExplorer, "Tools"); AddNavPage("markdown", navMarkdown, "Tools"); AddNavPage("browser", navBrowser, "Tools"); AddNavPage("documents", navDocs, "Tools"); AddNavPage("accounts", navAccounts, "Tools");
             AddNavPage("snip", navSnip, "Tools"); AddNavPage("chrome", navChrome, "Tools"); AddNavPage("power", navPower, "Tools");
             AddNavPage("system", navSystem, "System"); AddNavPage("cards", navCards, "System"); AddNavPage("activity", navActivity, "System"); AddNavPage("tagged", navTagged, "System");
             BuildNav();
@@ -235,7 +206,6 @@ namespace StickyPro
             Resize += adaptNav; adaptNav(this, EventArgs.Empty);
 
             Ui.Theme(this);
-            foreach (var item in navigation.Controls.OfType<NavItem>()) navigationTips.SetToolTip(item, item.Text);
             navigationTips.SetToolTip(navSettings, "Settings"); navigationTips.SetToolTip(navKeys, "Shortcuts");
             Store.NotesChanged += OnNotes;
             Store.PromptsChanged += OnPrompts;
@@ -257,6 +227,35 @@ namespace StickyPro
             var p = new NavPage { Key = key, Glyph = item.Glyph, Name = item.Text, Group = group, Item = item };
             navPages.Add(p);
             item.MouseUp += (s, e) => { if (e.Button == MouseButtons.Right) NavMenu(p, item.PointToScreen(e.Location)); };
+            // Drop files or folders on a page in the sidebar to hand them to that page.
+            if (DropTargets.Contains(key))
+            {
+                item.AllowDrop = true;
+                item.DragEnter += (s, e) => { if (e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effect = DragDropEffects.Copy; item.Selected = true; } };
+                item.DragLeave += delegate { item.Selected = Page == key; };
+                item.DragDrop += (s, e) => { var files = e.Data.GetData(DataFormats.FileDrop) as string[]; item.Selected = Page == key; if (files != null && files.Length > 0) DropOn(key, files); };
+            }
+        }
+
+        static readonly string[] DropTargets = { "explorer", "terminals", "agents", "browser", "documents", "markdown", "tagged" };
+        void DropOn(string key, string[] paths)
+        {
+            string first = paths[0];
+            bool folder = System.IO.Directory.Exists(first);
+            string dir = folder ? first : System.IO.Path.GetDirectoryName(first);
+            switch (key)
+            {
+                case "explorer": App.I.OpenInExplorerPage(dir); break;
+                case "terminals": App.I.AddTerminalFolder(dir); break;
+                case "agents":
+                    if (folder) App.I.AddAgentFolder(first);
+                    else App.I.SendToAgents("Please look at " + (paths.Length == 1 ? "this file: " + first : "these files:\r\n" + string.Join("\r\n", paths.Take(20))));
+                    break;
+                case "browser": if (!folder) foreach (var f in paths.Take(10)) App.I.OpenInBrowser(f); break;
+                case "markdown": App.I.OpenMarkdown(first); break;
+                case "documents": if (!folder) foreach (var f in paths.Take(12)) OpenDocument(f); break;
+                case "tagged": TaggedPanel.AskTag(paths.ToList(), this); break;
+            }
         }
 
         // Pages in display order: Favorites first, then General / Tools / System in your order.
@@ -337,14 +336,16 @@ namespace StickyPro
             nav = nav ?? navPanel;
             if (navToggle == null || dockToggle == null || nav == null || topBar == null) return;
             int d = navToggle.Width, y = topBar.Bottom + Ui.S(10);
-            navToggle.PointsLeft = nav.Width > Ui.S(80);
-            navToggle.Tip = navToggle.PointsLeft ? "Fold the sidebar to icons" : "Expand the sidebar";
-            navToggle.Location = new Point(nav.Right - d / 2 - Ui.S(2), y);
-            dockToggle.PointsLeft = !dock.Visible;
+            bool navLeft = nav.Width > Ui.S(80), dockLeft = !dock.Visible;
+            if (navToggle.PointsLeft != navLeft) { navToggle.PointsLeft = navLeft; navToggle.Invalidate(); }
+            navToggle.Tip = navLeft ? "Fold the sidebar to icons" : "Expand the sidebar";
+            var np = new Point(nav.Right - d / 2 - Ui.S(2), y);
+            if (navToggle.Location != np) navToggle.Location = np;
+            if (dockToggle.PointsLeft != dockLeft) { dockToggle.PointsLeft = dockLeft; dockToggle.Invalidate(); }
             dockToggle.Tip = dock.Visible ? "Hide the quick launch bar" : "Show the quick launch bar";
-            dockToggle.Location = new Point(dock.Visible ? dock.Left - d / 2 : ClientSize.Width - d - Ui.S(4), y);
-            navToggle.BringToFront(); dockToggle.BringToFront();
-            navToggle.Invalidate(); dockToggle.Invalidate();
+            var dp = new Point(dock.Visible ? dock.Left - d / 2 : ClientSize.Width - d - Ui.S(4), y);
+            if (dockToggle.Location != dp) dockToggle.Location = dp;
+            if (Controls.GetChildIndex(navToggle) > 1 || Controls.GetChildIndex(dockToggle) > 1) { navToggle.BringToFront(); dockToggle.BringToFront(); }
         }
 
         public void UpdateShortcutHelp()
@@ -369,9 +370,9 @@ namespace StickyPro
             base.Dispose(disposing);
         }
 
-        void OnNotes() { if (Visible && page == "notes") notes.RefreshList(); else notes.Stale = true; }
-        void OnPrompts() { if (Visible && page == "prompts") prompts.RefreshAll(); else prompts.Stale = true; }
-        void OnClips() { if (Visible && page == "clips") clips.RefreshList(); else clips.Stale = true; }
+        void OnNotes() { if (notes == null) return; if (Visible && page == "notes") notes.RefreshList(); else notes.Stale = true; }
+        void OnPrompts() { if (prompts == null) return; if (Visible && page == "prompts") prompts.RefreshAll(); else prompts.Stale = true; }
+        void OnClips() { if (clips == null) return; if (Visible && page == "clips") clips.RefreshList(); else clips.Stale = true; }
 
         protected override void OnVisibleChanged(EventArgs e)
         {
@@ -381,15 +382,21 @@ namespace StickyPro
 
         void RefreshCurrent()
         {
-            if (page == "notes" && notes.Stale) notes.RefreshList();
-            if (page == "prompts" && prompts.Stale) prompts.RefreshAll();
-            if (page == "clips" && clips.Stale) clips.RefreshList();
-            if (page == "cards") cards.RefreshList();
+            if (notes != null && page == "notes" && notes.Stale) notes.RefreshList();
+            if (prompts != null && page == "prompts" && prompts.Stale) prompts.RefreshAll();
+            if (clips != null && page == "clips" && clips.Stale) clips.RefreshList();
+            if (cards != null && page == "cards") cards.RefreshList();
         }
 
         public void ShowPage(string p)
         {
-            if (page == "prompts" && p != "prompts") prompts.Commit();
+            if (string.IsNullOrEmpty(p)) p = "dashboard";
+            string key = p.Split(':')[0];
+            if (p != key && key != "system" && key != "chrome") return;
+            if (key == "home") key = "dashboard";
+            EnsurePage(key);
+            if (!loadedPages.ContainsKey(key)) return;
+            if (prompts != null && page == "prompts" && p != "prompts") prompts.Commit();
             if (p.StartsWith("system:")) { system.SelectTab(p.Substring(7)); p = "system"; }
             if (p.StartsWith("chrome:")) { chrome.SelectTab(p.Substring(7)); p = "chrome"; }
             if (p == "home") p = "dashboard";
@@ -397,61 +404,67 @@ namespace StickyPro
             Ui.Batch(content, () =>
             {
                 page = target;
-                navHome.Selected = target == "dashboard"; home.Visible = target == "dashboard";
+                navHome.Selected = target == "dashboard";
+                foreach (var entry in loadedPages) entry.Value.Visible = entry.Key == target;
                 navNotes.Selected = target == "notes";
                 navPrompts.Selected = target == "prompts";
                 navClips.Selected = target == "clips";
                 navSystem.Selected = target == "system";
                 navCards.Selected = target == "cards";
-                notes.Visible = target == "notes";
-                prompts.Visible = target == "prompts";
-                clips.Visible = target == "clips";
-                system.Visible = target == "system";
-                cards.Visible = target == "cards";
                 navSnip.Selected = target == "snip";
                 navActivity.Selected = target == "activity";
                 navTagged.Selected = target == "tagged";
-                snipPage.Visible = target == "snip";
-                activityPage.Visible = target == "activity";
-                taggedPage.Visible = target == "tagged";
-                navTasks.Selected = target == "tasks"; tasks.Visible = target == "tasks";
-                navExplorer.Selected = target == "explorer"; explorer.Visible = target == "explorer";
-                navChrome.Selected = target == "chrome"; chrome.Visible = target == "chrome";
-                navPower.Selected = target == "power"; power.Visible = target == "power";
-                navKeys.Selected = target == "shortcuts"; shortcuts.Visible = target == "shortcuts";
-                navTerminals.Selected = target == "terminals"; terminals.Visible = target == "terminals";
-                navAgents.Selected = target == "agents"; agents.Visible = target == "agents";
+                navTasks.Selected = target == "tasks";
+                navExplorer.Selected = target == "explorer";
+                navChrome.Selected = target == "chrome";
+                navPower.Selected = target == "power";
+                navKeys.Selected = target == "shortcuts";
+                navTerminals.Selected = target == "terminals";
+                navAgents.Selected = target == "agents";
+                navMarkdown.Selected = target == "markdown";
+                navBrowser.Selected = target == "browser";
+                navDocs.Selected = target == "documents";
+                navAccounts.Selected = target == "accounts";
             });
             RefreshCurrent();
             FocusSearch();
         }
 
-        bool prewarmStarted;
-        protected override void OnShown(EventArgs e)
+        // Pages retain their state once visited; unused tools allocate no controls or handles.
+        readonly Dictionary<string, Control> loadedPages = new Dictionary<string, Control>();
+        void EnsurePage(string key)
         {
-            base.OnShown(e);
-            if (!prewarmStarted) { prewarmStarted = true; Ui.Later(1500, PrewarmPages); }
-        }
-
-        // Creates the native handles of hidden pages one at a time after the window is shown, so the first visit of a
-        // page only has to paint. Each step is small; stops as soon as the window hides.
-        void PrewarmPages()
-        {
-            var pages = new List<Control> { tasks, notes, prompts, clips, system, cards, snipPage, activityPage, taggedPage, chrome, power, terminals };
-            int i = 0;
-            var t = new Timer { Interval = 250 };
-            t.Tick += delegate
+            if (loadedPages.ContainsKey(key)) return;
+            Control control;
+            Action<string> report = s => Status(s);
+            switch (key)
             {
-                if (IsDisposed || !Visible || i >= pages.Count) { t.Stop(); t.Dispose(); return; }
-                try { CreateHandles(pages[i++]); } catch (Exception ex) { App.Log("Prewarm: " + ex.Message); }
-            };
-            t.Start();
-        }
-
-        static void CreateHandles(Control c)
-        {
-            var unused = c.Handle;            // forces the handle even while hidden
-            foreach (Control child in c.Controls) CreateHandles(child);
+                case "dashboard": control = new DashboardPanel(); break;
+                case "notes": control = notes = new NotesPage(this); break;
+                case "prompts": control = prompts = new PromptsPage(this); break;
+                case "clips": control = clips = new ClipsPage(this); break;
+                case "system": control = system = new SystemPage(this); break;
+                case "cards": control = cards = new CardsPage(this); break;
+                case "snip": control = PageWith("Snip & record", new SnipPanel(report)); break;
+                case "activity": control = PageWith("File activity", new ActivityPanel(report)); break;
+                case "tagged": control = PageWith("Tagged files", new TaggedPanel(report)); break;
+                case "tasks": control = tasks = new TasksPage(); break;
+                case "explorer": control = explorer = new ExplorerPage(); break;
+                case "chrome": control = chrome = new ChromePage(this); break;
+                case "power": control = new PowerPage(); break;
+                case "shortcuts": control = shortcuts = new ShortcutsPage(); break;
+                case "terminals": control = terminals = new TerminalPage(); break;
+                case "agents": control = agents = new AgentsPage(); break;
+                case "markdown": control = markdown = new MarkdownPage(); break;
+                case "browser": control = browser = new BrowserPage(); break;
+                case "documents": control = documents = new DocumentsPage(); break;
+                case "accounts": control = accountsPage = new AccountsPage(); break;
+                default: return;
+            }
+            control.Visible = false;
+            content.Controls.Add(control);
+            Ui.Theme(control);
+            loadedPages.Add(key, control);
         }
 
         public void FocusSearch()
@@ -465,14 +478,65 @@ namespace StickyPro
 
         public void SelectTask(TaskItem t) { ShowPage("tasks"); tasks.Select(t); }
         public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); }
+        public void OpenMarkdownFile(string path) { ShowPage("markdown"); if (markdown != null) markdown.Open(path, true); }
+        public void OpenDocument(string path, bool? edit = null) { ShowPage("documents"); if (documents != null) documents.Open(path, edit); }
+        public void OpenInBrowser(string target)
+        {
+            ShowPage("browser");
+            if (browser == null || string.IsNullOrEmpty(target)) return;
+            bool file = false; try { file = System.IO.File.Exists(target); } catch { }
+            if (file) browser.OpenPath(target); else browser.Go(target, true);
+        }
+        // What the user is looking at, for the Assistant and the MCP tool page_context.
+        public Dictionary<string, object> PageContext()
+        {
+            var d = new Dictionary<string, object> { { "page", page ?? "" } };
+            if (page == "markdown" && markdown != null) { d["note"] = markdown.CurrentPath ?? ""; string sel = markdown.SelectedText; if (sel.Length > 0) d["selected_text"] = sel.Length > 4000 ? sel.Substring(0, 4000) : sel; }
+            if (page == "explorer" && explorer != null) d["folder"] = explorer.CurrentFolder;
+            if (page == "browser" && browser != null) { d["browser_title"] = browser.ActiveTitle; d["browser_url"] = browser.ActiveUrl; }
+            if (page == "agents" || page == "terminals") d["note_for_agent"] = "The user is on the " + page + " page.";
+            return d;
+        }
+        public System.Threading.Tasks.Task<string> BrowserScript(string js) { if (browser == null) { ShowPage("browser"); } if (browser == null) throw new InvalidOperationException("The Browser page is not open."); return browser.RunScript(js); }
+        Panel assistantHost; AssistantPanel assistant;
+        // Zen mode (F11, Esc leaves): only the page; the menu, top bar, dock and status line step aside.
+        bool zen;
+        public bool Zen { get { return zen; } }
+        public void SetZen(bool on)
+        {
+            zen = on;
+            SuspendLayout();
+            if (navPanel != null) navPanel.Visible = !on;
+            if (topBar != null) topBar.Visible = !on;
+            dock.Visible = !on && Store.Settings.DockVisible;
+            status.Visible = !on;
+            if (navToggle != null) navToggle.Visible = !on;
+            if (dockToggle != null) dockToggle.Visible = !on;
+            ResumeLayout();
+            if (markdown != null) markdown.SetZen(on);
+            if (on) Status("Zen mode: F11 or Esc to leave.");
+        }
+        public void SetAssistant(bool show)
+        {
+            if (show && assistant == null) { assistant = new AssistantPanel(this) { Dock = DockStyle.Fill }; assistantHost.Controls.Add(assistant); }
+            assistantHost.Visible = show;
+            if (Store.Settings.AssistantOpen != show) { Store.Settings.AssistantOpen = show; Store.MarkSettings(); }
+            if (topBar != null) topBar.Invalidate();
+            if (show && assistant != null) assistant.FocusInput();
+        }
+        public void PageChangedForAssistant() { if (assistant != null) assistant.PageChanged(page); }
+        public void InsertIntoNote(string text) { if (markdown != null && markdown.CurrentPath != null) { ShowPage("markdown"); markdown.AppendText(text); } }
+        public void SendToAgents(string text) { ShowPage("agents"); if (agents != null) agents.InsertText(text); }
+        public void OpenAgentChat(AgentChat c) { ShowPage("agents"); if (agents != null) agents.OpenChatPublic(c); }
         public void AddTerminalFolder(string folder) { ShowPage("terminals"); terminals.UseFolder(folder); }
         public void AddAgentFolder(string folder) { ShowPage("agents"); agents.UseFolder(folder); }
-        public void RefreshLaunchers() { shortcuts.RefreshLaunchers(); }
+        public void RefreshLaunchers() { if (shortcuts != null) shortcuts.RefreshLaunchers(); }
         public void SetDockVisible(bool v) { dock.Visible = v; PlaceToggles(null); }
 
         public void StartNewPrompt() { ShowPage("prompts"); prompts.NewPrompt(); }
-        public void UpdatePaused() { clips.UpdatePaused(); }
-        public void CommitEdits() { prompts.Commit(); }
+        public void UpdatePaused() { if (clips != null) clips.UpdatePaused(); }
+        public void CommitEdits() { if (prompts != null) prompts.Commit(); }
+        public bool ConfirmDocumentClose() { return documents == null || documents.ConfirmCloseEditors(); }
 
         public void Status(string text)
         {
@@ -483,6 +547,9 @@ namespace StickyPro
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
+            if (e.KeyCode == Keys.F11 && !e.Control && !e.Alt && !e.Shift) { SetZen(!zen); e.SuppressKeyPress = true; return; }
+            if (zen && e.KeyCode == Keys.Escape) { SetZen(false); e.SuppressKeyPress = true; return; }
+            if (e.Control && e.Alt && e.KeyCode == Keys.B) { SetAssistant(!assistantHost.Visible); e.SuppressKeyPress = true; return; }   // VS Code: secondary side bar
             if (e.Control && !e.Alt)
             {
                 if (e.KeyCode == Keys.D0) { ShowPage("dashboard"); e.SuppressKeyPress = true; }
@@ -496,7 +563,9 @@ namespace StickyPro
                 else if (e.KeyCode == Keys.D8) { ShowPage("tagged"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.D9) { ShowPage("tasks"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.F && page != "explorer") { FocusSearch(); e.SuppressKeyPress = true; }
-                else if (e.KeyCode == Keys.K) { GlobalSearch.Open(this); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.K || (e.KeyCode == Keys.P && e.Shift)) { GlobalSearch.Open(this); e.SuppressKeyPress = true; }   // Ctrl+Shift+P like VS Code
+                else if (e.KeyCode == Keys.J) { SetAssistant(!assistantHost.Visible); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.B && !e.Shift) { Store.Settings.PaneSizes["nav.collapsed"] = NavCollapsed ? 0 : 1; Store.MarkSettings(); AdaptNav(navPanel); e.SuppressKeyPress = true; }   // VS Code: side bar
                 else if (e.KeyCode == Keys.N && !e.Shift)
                 {
                     e.SuppressKeyPress = true;
@@ -509,12 +578,11 @@ namespace StickyPro
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            prompts.Commit();
+            if (prompts != null) prompts.Commit();
             if (!Exiting && e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
                 Hide();
-                Ui.Later(1500, App.I.Trim);
                 return;
             }
             Store.NotesChanged -= OnNotes;
@@ -531,14 +599,16 @@ namespace StickyPro
             bar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             bar.MinimumSize = Ui.S(0, 40);
             bar.WrapContents = true;
-            bar.Padding = new Padding(0, Ui.S(2), 0, Ui.S(4));
+            bar.Padding = new Padding(0, Ui.S(6), 0, Ui.S(10));
             return bar;
         }
 
         public static Label Heading(string text)
         {
-            var l = new Label();
+            var l = new PageHeading();
             l.Text = text;
+            l.Accent = PageHeading.ColorFor(text);
+            l.Padding = new Padding(Ui.S(14), 0, 0, 0);
             l.UseMnemonic = false;
             l.Font = Ui.Nexus ? Ui.Title : Ui.Big;
             l.ForeColor = Ui.Header; // PicPick-style blue page headers (dark text in Nexus)
@@ -685,6 +755,7 @@ namespace StickyPro
         {
             var m = Ui.Menu();
             m.Items.Add("Open", null, delegate { OpenSelected(); });
+            m.Items.Add(AppLinks.LazySendTo(null, () => { var n = Sel(); return n == null ? null : n.Text; }, null));
             var colors = new ToolStripMenuItem("Color");
             foreach (var c in Ui.Colors)
             {
@@ -769,30 +840,47 @@ namespace StickyPro
             editor.ColumnCount = 1;
             editor.AutoScroll = true;
             editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            tbTitle = new FluentTextBox(); tbTitle.Font = Ui.Bold;
-            cbCat = new ComboBox(); cbCat.DropDownStyle = ComboBoxStyle.DropDown;
-            tbTags = new FluentTextBox();
-            tbTrigger = new FluentTextBox();
-            Ui.Cue(tbTrigger, "e.g.  ;sig   (type this anywhere and it becomes the prompt text)");
-            tbBody = new FluentTextBox(); tbBody.Multiline = true; tbBody.ScrollBars = ScrollBars.Vertical; tbBody.AcceptsReturn = true; tbBody.AcceptsTab = true;
+            tbTitle = new TextBox(); tbTitle.Font = Ui.Bold; tbTitle.AccessibleName = "Title";
+            cbCat = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, FlatStyle = FlatStyle.Flat, Font = Ui.Base };
+            tbTags = new TextBox { AccessibleName = "Tags", Font = Ui.Base };
+            tbTrigger = new TextBox { AccessibleName = "Snippet code", Font = Ui.Base };
+            Ui.Cue(tbTrigger, "e.g. ;sig");
+            cbCat.AccessibleName = "Category"; Ui.Cue(tbTags, "Separate tags with commas");
+            tbBody = new TextBox { AccessibleName = "Prompt text" }; tbBody.Multiline = true; tbBody.ScrollBars = ScrollBars.Vertical; tbBody.AcceptsReturn = true; tbBody.AcceptsTab = true;
             Ui.UseFont(tbBody, new Font(Store.Settings.NoteFontName, 10.5f)); tbBody.WordWrap = true;
             foreach (var c in new Control[] { tbTitle, cbCat, tbTags, tbTrigger, tbBody }) { c.Dock = DockStyle.Fill; c.Margin = new Padding(0, 0, 0, Ui.S(6)); }
             AddRow(FieldLabel("Title"), SizeType.AutoSize);
-            AddRow(tbTitle, SizeType.AutoSize);
+            AddRow(EditorField(tbTitle, false), SizeType.AutoSize);
             var two = new TableLayoutPanel(); two.ColumnCount = 2; two.RowCount = 2; two.Dock = DockStyle.Fill; two.AutoSize = true; two.Margin = new Padding(0);
             two.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); two.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            two.Controls.Add(FieldLabel("Category"), 0, 0); two.Controls.Add(FieldLabel("Snippet code (optional)"), 1, 0);
-            cbCat.Margin = new Padding(0, 0, Ui.S(8), Ui.S(6));
-            two.Controls.Add(cbCat, 0, 1); two.Controls.Add(tbTrigger, 1, 1);
+            two.Controls.Add(FieldLabel("Category"), 0, 0); two.Controls.Add(FieldLabel("Snippet code"), 1, 0);
+            var categoryField = EditorField(cbCat, false); categoryField.Margin = new Padding(0, 0, Ui.S(10), Ui.S(6));
+            two.Controls.Add(categoryField, 0, 1); two.Controls.Add(EditorField(tbTrigger, false), 1, 1);
             AddRow(two, SizeType.AutoSize);
-            AddRow(FieldLabel("Tags  (comma separated)"), SizeType.AutoSize);
-            AddRow(tbTags, SizeType.AutoSize);
-            AddRow(FieldLabel("Prompt text  -  use {{name}} for blanks you fill in when you use it"), SizeType.AutoSize);
-            AddRow(tbBody, SizeType.Percent);
+            AddRow(FieldLabel("Tags"), SizeType.AutoSize);
+            AddRow(EditorField(tbTags, false), SizeType.AutoSize);
+            var bodyLabel = FieldLabel("Prompt text");
+            AddRow(bodyLabel, SizeType.AutoSize);
+            var editorTips = new ToolTip();
+            tbBody.AccessibleDescription = "Use {{name}} to insert a fill-in field.";
+            editorTips.SetToolTip(bodyLabel, tbBody.AccessibleDescription);
+            editorTips.SetToolTip(tbBody, tbBody.AccessibleDescription);
+            editorTips.SetToolTip(tbTrigger, "Typing this code expands the prompt.");
+            editor.Disposed += delegate { editorTips.Dispose(); };
+            AddRow(EditorField(tbBody, true), SizeType.Percent);
             var actions = new FlowLayoutPanel(); actions.AutoSize = true; actions.Dock = DockStyle.Fill; actions.WrapContents = true; actions.Margin = new Padding(0);
             btnFav = Ui.Btn("Favorite", delegate { ToggleFav(); });
             btnHistory = Ui.Btn("History", delegate { ShowHistory(); });
-            actions.Controls.Add(Ui.Btn("Copy  (Ctrl+Enter)", delegate { CopyCurrent(); }, true));
+            actions.Controls.Add(Ui.Btn("Copy", delegate { CopyCurrent(); }, true));
+            var sendPrompt = Ui.Btn("Send to", null);
+            sendPrompt.Click += delegate
+            {
+                if (cur == null) return; Commit();
+                var sm = Ui.Menu(); var send = AppLinks.SendTo(null, cur.Body, owner);
+                while (send.DropDownItems.Count > 0) { var it = send.DropDownItems[0]; send.DropDownItems.RemoveAt(0); sm.Items.Add(it); }
+                Ui.ThemeMenu(sm); sm.Show(sendPrompt, new Point(0, sendPrompt.Height));
+            };
+            actions.Controls.Add(sendPrompt);
             actions.Controls.Add(btnFav);
             actions.Controls.Add(btnHistory);
             actions.Controls.Add(Ui.Btn("Duplicate", delegate { Duplicate(); }));
@@ -874,6 +962,7 @@ namespace StickyPro
             EventHandler layout = delegate
             {
                 SuspendLayout();
+                var before = left.Visible + "|" + left.Width + "|" + mid.Dock + "|" + mid.Width + "|" + mid.Height + "|" + compactCats.Visible;
                 try
                 {
                     bool compact = Width < Ui.S(850);
@@ -892,9 +981,9 @@ namespace StickyPro
                         if (mid.Width != mw) mid.Width = mw;
                     }
                 }
-                finally { ResumeLayout(true); }
+                finally { ResumeLayout(before != left.Visible + "|" + left.Width + "|" + mid.Dock + "|" + mid.Width + "|" + mid.Height + "|" + compactCats.Visible); }
             };
-            Resize += layout;
+            Resize += (s, e) => Ui.Debounce("prompts.layout", 90, () => layout(this, EventArgs.Empty));   // once after the resize settles
             layout(this, EventArgs.Empty);
 
             LoadEditor(null);
@@ -913,9 +1002,31 @@ namespace StickyPro
             base.Dispose(disposing);
         }
 
+        static Panel EditorField(Control input, bool multiline)
+        {
+            var frame = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Field,
+                Padding = new Padding(Ui.S(8), Ui.S(5), Ui.S(6), Ui.S(5)), Margin = new Padding(0, 0, 0, Ui.S(6)) };
+            var box = input as TextBox;
+            if (box != null) box.BorderStyle = BorderStyle.None;
+            int inputHeight = input.PreferredSize.Height;
+            int height = Math.Max(Ui.S(34), inputHeight + Ui.S(8));
+            if (!multiline)
+            {
+                int above = (height - inputHeight) / 2;
+                frame.Padding = new Padding(Ui.S(8), above, Ui.S(6), height - inputHeight - above);
+            }
+            frame.Height = height; frame.MinimumSize = new Size(0, multiline ? Ui.S(68) : height);
+            if (!multiline) frame.MaximumSize = new Size(0, height);
+            input.Dock = DockStyle.Fill; input.Margin = Padding.Empty; frame.Controls.Add(input);
+            frame.Paint += (s, e) => ControlPaint.DrawBorder(e.Graphics, frame.ClientRectangle,
+                input.ContainsFocus ? Ui.Accent : Ui.Muted, ButtonBorderStyle.Solid);
+            input.Enter += delegate { frame.Invalidate(); }; input.Leave += delegate { frame.Invalidate(); };
+            return frame;
+        }
+
         static Label FieldLabel(string t)
         {
-            var l = new Label(); l.Text = t; l.AutoSize = true; l.ForeColor = Ui.Muted; l.Font = Ui.Small; l.Margin = new Padding(0, Ui.S(4), 0, Ui.S(2));
+            var l = new Label(); l.Text = t; l.AutoSize = true; l.ForeColor = Ui.Text; l.Font = Ui.Bold; l.Margin = new Padding(0, Ui.S(4), 0, Ui.S(4));
             return l;
         }
 
@@ -1003,13 +1114,22 @@ namespace StickyPro
             if (list.SelectedItem == null && cur != null && !list.Items.Contains(cur)) LoadEditor(null);
         }
 
+        Label editorHint;
         void LoadEditor(Prompt p)
         {
             if (p == cur && p != null) return;
             Commit();
             cur = p;
             loading = true;
-            editor.Enabled = p != null;
+            // No prompt chosen: a short hint instead of greyed-out fields (unreadable in dark mode).
+            editor.Visible = p != null;
+            if (editorHint == null && editor.Parent != null)
+            {
+                editorHint = new Label { Dock = DockStyle.Top, Height = Ui.S(110), TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Muted, BackColor = Ui.Bg,
+                    Text = "Pick a prompt on the left\r\nor press New prompt." };
+                editor.Parent.Controls.Add(editorHint);
+            }
+            if (editorHint != null) editorHint.Visible = p == null;
             tbTitle.Text = p != null ? p.Title : "";
             cbCat.Text = p != null ? p.Category : "";
             tbTags.Text = p != null ? p.Tags : "";
@@ -1024,7 +1144,7 @@ namespace StickyPro
 
         void UpdateButtons()
         {
-            btnFav.Text = cur != null && cur.Fav ? "★ Favorite" : "☆ Favorite";
+            btnFav.Text = cur != null && cur.Fav ? "Remove favorite" : "Favorite";
             btnHistory.Text = cur != null && cur.Versions.Count > 0 ? "History (" + cur.Versions.Count + ")" : "History";
         }
 
@@ -1228,6 +1348,7 @@ namespace StickyPro
 
     class ClipsPage : Panel
     {
+        const int PreviewLimit = 32000;
         public bool Stale = true;
         readonly MainForm owner;
         readonly TextBox search, preview;
@@ -1237,6 +1358,9 @@ namespace StickyPro
         readonly PictureBox picture;
         readonly Label previewMeta;
         bool reloading;
+        bool decodingPreview;
+        int previewRevision;
+        string pendingPreview;
 
         public ClipsPage(MainForm owner)
         {
@@ -1247,7 +1371,8 @@ namespace StickyPro
             list.Dock = DockStyle.Fill;
             list.SelectionMode = SelectionMode.MultiExtended;
             list.Info = o => ClipInfo((Clip)o);
-            list.SelectedIndexChanged += delegate { ShowPreview(); };
+            var previewSoon = Ui.Debounce(list, 60, ShowPreview);
+            list.SelectedIndexChanged += delegate { previewSoon(); };
             list.DoubleClick += delegate { CopySelected(0); };
             list.KeyDown += (s, e) =>
             {
@@ -1255,7 +1380,7 @@ namespace StickyPro
                 else if (e.KeyCode == Keys.Delete) { DeleteSelected(); e.SuppressKeyPress = true; }
                 else if (e.Control && e.KeyCode == Keys.C) { CopySelected(0); e.SuppressKeyPress = true; }
                 else if (e.Control && e.KeyCode == Keys.P) { TogglePin(); e.SuppressKeyPress = true; }
-                else if (e.Control && e.KeyCode == Keys.A) { list.BeginUpdate(); for (int i = 0; i < list.Items.Count; i++) list.SetSelected(i, true); list.EndUpdate(); e.SuppressKeyPress = true; }
+                else if (e.Control && e.KeyCode == Keys.A) { list.SelectAll(); e.SuppressKeyPress = true; }
             };
             list.ContextMenuStrip = Ui.Menu();
             BuildMenu(list.ContextMenuStrip); // has items so it opens; rebuilt each time for fresh folder names
@@ -1322,7 +1447,7 @@ namespace StickyPro
             {
                 ci.Title = "Image";
                 ci.Sub = c.ImgW + " x " + c.ImgH + " px";
-                ci.Thumb = Thumbs.Get(c, Ui.S(90), list.ItemHeight - Ui.S(18));
+                ci.Thumb = Thumbs.Get(c, Ui.S(90), list.ItemHeight - Ui.S(18), list);
             }
             else if (c.Kind == "files")
             {
@@ -1378,19 +1503,21 @@ namespace StickyPro
                 src = src.Where(c => words.All(w => c.Text.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0 || (c.Source ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0 || (c.Folder ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0));
             }
             list.SetItems(src.Cast<object>());
-            ShowPreview();
+            if (list.SelectedIndex < 0) previewMeta.Text = Store.Clips.Count + " items saved";
         }
 
         void ShowPreview()
         {
+            previewRevision++;
+            pendingPreview = null;
             var sel = list.Selected<Clip>();
             if (picture.Image != null) { var old = picture.Image; picture.Image = null; old.Dispose(); }
-            if (sel.Count == 0) { preview.Visible = true; picture.Visible = false; preview.Text = ""; previewMeta.Text = Store.Clips.Count + " items saved"; return; }
+            if (sel.Count == 0) { preview.Visible = true; picture.Visible = false; preview.Text = Store.Clips.Count == 0 ? "Copy something anywhere and it appears here." : "Select an item to see it here."; previewMeta.Text = Store.Clips.Count + " items saved"; return; }
             if (sel.Count > 1)
             {
                 picture.Visible = false; preview.Visible = true;
                 previewMeta.Text = sel.Count + " selected - Copy joins them, one per line";
-                preview.Text = string.Join("\r\n", sel.Where(c => c.Kind != "image").Select(c => c.Text));
+                preview.Text = PreviewText(sel);
                 preview.RightToLeft = Ui.IsRtl(preview.Text) ? RightToLeft.Yes : RightToLeft.No;
                 return;
             }
@@ -1399,16 +1526,70 @@ namespace StickyPro
             if (c1.Kind == "image")
             {
                 preview.Visible = false; picture.Visible = true;
-                picture.Image = Store.LoadImage(c1);
+                pendingPreview = Store.ImagePath(c1);
+                DecodePreview();
             }
             else
             {
                 picture.Visible = false; preview.Visible = true;
-                string t = c1.Text.Length > 200000 ? c1.Text.Substring(0, 200000) + "\r\n..." : c1.Text;
+                string t = PreviewText(sel);
                 preview.Text = t.Replace("\r\n", "\n").Replace("\n", "\r\n");
                 var rtl = Ui.IsRtl(preview.Text) ? RightToLeft.Yes : RightToLeft.No;
                 if (preview.RightToLeft != rtl) preview.RightToLeft = rtl;
             }
+        }
+
+        void DecodePreview()
+        {
+            if (decodingPreview || string.IsNullOrEmpty(pendingPreview) || !IsHandleCreated) return;
+            string path = pendingPreview;
+            pendingPreview = null;
+            int revision = previewRevision;
+            decodingPreview = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                var image = Thumbs.LoadScaled(path, 1280, 960);
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        decodingPreview = false;
+                        if (!IsDisposed && previewRevision == revision)
+                        {
+                            picture.Image = image;
+                            if (image == null) previewMeta.Text = "Image unavailable";
+                        }
+                        else if (image != null) image.Dispose();
+                        if (!IsDisposed) DecodePreview();
+                    }));
+                }
+                catch (InvalidOperationException) { if (image != null) image.Dispose(); }
+            });
+        }
+
+        internal static string PreviewText(IEnumerable<Clip> clips)
+        {
+            var preview = new System.Text.StringBuilder();
+            bool first = true;
+            foreach (var clip in clips)
+            {
+                if (clip.Kind == "image") continue;
+                string text = clip.Text ?? "";
+                if (!first)
+                {
+                    if (preview.Length > PreviewLimit - 2) return preview.Append("\r\n…").ToString();
+                    preview.Append("\r\n");
+                }
+                int remaining = PreviewLimit - preview.Length;
+                if (text.Length > remaining)
+                {
+                    int length = remaining > 0 && char.IsHighSurrogate(text[remaining - 1]) ? remaining - 1 : remaining;
+                    return preview.Append(text, 0, length).Append("\r\n…").ToString();
+                }
+                preview.Append(text);
+                first = false;
+            }
+            return preview.ToString();
         }
 
         // transform 0 = as is
@@ -1530,6 +1711,13 @@ namespace StickyPro
             var asMenu = new ToolStripMenuItem("Copy as");
             AddTransforms(asMenu.DropDownItems);
             m.Items.Add(asMenu);
+            var one = list.Selected<Clip>().FirstOrDefault();
+            if (one != null)
+            {
+                string t = one.Text ?? "";
+                bool isPath = t.Length > 2 && t.Length < 400 && t.IndexOf('\n') < 0 && (System.IO.File.Exists(t.Trim('"')) || System.IO.Directory.Exists(t.Trim('"')));
+                m.Items.Add(AppLinks.SendTo(isPath ? t.Trim('"') : null, isPath ? null : (t.Length > 0 ? t : null), FindForm()));
+            }
             m.Items.Add("Pin / Unpin\tCtrl+P", null, delegate { TogglePin(); });
             var folder = new ToolStripMenuItem("Move to folder");
             AddFolderItems(folder.DropDownItems);
@@ -1561,6 +1749,42 @@ namespace StickyPro
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Delete\tDel", null, delegate { DeleteSelected(); });
             Ui.ThemeMenu(m);
+        }
+    }
+}
+
+namespace StickyPro
+{
+    // Page title with a slim rounded bar in the page's own color (what the page is for), in light and dark mode.
+    class PageHeading : System.Windows.Forms.Label
+    {
+        public System.Drawing.Color Accent = System.Drawing.Color.Empty;
+
+        static readonly string[][] Map =
+        {
+            new[] { "agent", "#9B5CF6" }, new[] { "council", "#9B5CF6" }, new[] { "terminal", "#10B981" }, new[] { "explorer", "#F97316" },
+            new[] { "snip", "#EF4444" }, new[] { "record", "#EF4444" }, new[] { "chrome", "#3B82F6" }, new[] { "power", "#EAB308" },
+            new[] { "system", "#14B8A6" }, new[] { "task", "#6366F1" }, new[] { "note", "#F59E0B" }, new[] { "prompt", "#8B5CF6" },
+            new[] { "clip", "#06B6D4" }, new[] { "card", "#EC4899" }, new[] { "activity", "#64748B" }, new[] { "tag", "#84CC16" },
+            new[] { "home", "#3B82F6" }, new[] { "dashboard", "#3B82F6" }, new[] { "setting", "#94A3B8" }, new[] { "shortcut", "#94A3B8" },
+            new[] { "uninstall", "#F43F5E" }, new[] { "startup", "#14B8A6" }, new[] { "drive", "#0EA5E9" }
+        };
+
+        public static System.Drawing.Color ColorFor(string title)
+        {
+            string t = (title ?? "").ToLowerInvariant();
+            foreach (var m in Map) if (t.Contains(m[0])) return System.Drawing.ColorTranslator.FromHtml(m[1]);
+            return Ui.Accent;
+        }
+
+        protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (Accent.IsEmpty) return;
+            var g = e.Graphics; g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            int h = (int)(Font.Height * 0.72), w = Ui.S(5);
+            var r = new System.Drawing.Rectangle(Ui.S(2), (Height - h) / 2 + Ui.S(1), w, h);
+            using (var path = Ui.Round(r, w / 2)) using (var b = new System.Drawing.SolidBrush(Accent)) g.FillPath(b, path);
         }
     }
 }
