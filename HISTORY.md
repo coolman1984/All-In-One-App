@@ -2,6 +2,14 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-20 — Plan-page workflow and the first plan (data safety at startup)
+
+- Asked to understand a shared workflow (an engineering plan written as a blog-style web page and reviewed before building, plus plain-writing rules) and apply it to this project.
+- Added the [plan page skill](skills/plan-page/SKILL.md) and linked it from [AGENTS.md](AGENTS.md), the [skills index](skills/README.md) and the [maintenance guide](docs/maintenance.md).
+- Wrote the first plan, [never lose a note](docs/plans/never-lose-a-note.html) (Arabic, Rev 1), published as a private artifact: https://claude.ai/artifact/Nkm3m9jGR7urpiC8mscK5H. It targets the open `Data.cs` transient-lock item. Confirmed in source: `Read<T>` (`src/Data.cs:494`) treats a busy file like a missing one and returns null, `Load` then starts that section empty, and the next two saves overwrite the primary file and then its single `.bak`. A busy primary with a readable `.bak` also loads older data and writes it over the newer file.
+- Proof: source reading only. App source, tests and binaries were not changed.
+- Open: owner approval of the plan, then phases 1–3 (busy-aware reads and write lock with a banner; daily snapshots and shrink guard; the same rules for agent chats).
+
 ## 2026-11-20 — Flow theme (FlowTask dashboard look) and P0 safety/workflow fixes
 
 - Asked to fix confirmed issues and match the app theme and dashboard to the provided FlowTask Project Dashboard reference image.

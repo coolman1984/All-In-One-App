@@ -53,6 +53,10 @@ rendering separately when they are in scope.
 3. Build the release from the verified source. Check the resources needed by the features being shipped, including `ChatSlides.pptx` and ffmpeg when distributing the bundled recorder. Smoke-test the exact executable with temporary fixtures.
 4. When updating the main executable, keep the previous build available for rollback. Verify the replacement hash and confirm the project's shortcut points to that executable. Record the release filenames, checks and any real-user scenarios still open in [HISTORY.md](../HISTORY.md).
 
+## Plan large changes as a page
+
+Write large or risky changes as a short plan page in `docs/plans/` and publish it for review before building. Follow the [plan page skill](../skills/plan-page/SKILL.md). The first plan is [never lose a note](plans/never-lose-a-note.html), which covers the silent data wipe when a data file is busy at startup.
+
 ## Carry the findings forward
 
 The [customer map](customer-map.html) covers the screen routes, shared tools, dependencies and acceptance checks in Egyptian Arabic. The [November 20 audit](customer-audit.md) gives the evidence behind its findings. Keep the route IDs aligned with the sweep and the page constructors. The repository HTML loads `customer-map-tools.png` beside it. For a single-file handout, embed that PNG as a data URL in the HTML's `sprite` constant and verify the handout with networking disabled.
