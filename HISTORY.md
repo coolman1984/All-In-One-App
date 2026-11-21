@@ -2,6 +2,26 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-21 — GitHub planning guides and main sync
+
+- Asked to push, merge and sync with GitHub `main`. Brought in the planning docs from `7de5271` on top of `5c5d555` and kept the repository copies of both guides. Removed private artifact links from the public history entry.
+- Checked the documentation diff and local links. The merge adds documentation only. App tests and release builds were outside this sync. The screen recording remains local.
+
+## 2026-11-20 — Owner's guide: how the app works
+
+- Asked for a plan-style page that explains how the whole app works, because it has grown too big to keep track of.
+- Wrote [how the app works](docs/plans/how-the-app-works.html) (Arabic, Rev 1). It covers three layers (UI, background services, data), the 20 sidebar pages in five purpose groups, code share per group (core 24%, AI 23%, PC tools 21%, files 19%, daily tools 13% of 37.5k lines; approximate file-to-group split), three end-to-end journeys, the five cross-page links (search, Send to, drag to sidebar, global hotkeys, MCP), why it feels out of control, and five steering rules with a suggested keep/freeze/trim call per group.
+- Proof: source reading (`src/MainForm.cs` page registration, `src/App.cs` background services, line counts of `src/*.cs`) and existing history. App source, tests and binaries were not changed.
+- Open: the owner decides the per-group calls; the data-safety plan above still awaits approval.
+
+## 2026-11-20 — Plan-page workflow and the first plan (data safety at startup)
+
+- Asked to understand a shared workflow (an engineering plan written as a blog-style web page and reviewed before building, plus plain-writing rules) and apply it to this project.
+- Added the [plan page skill](skills/plan-page/SKILL.md) and linked it from [AGENTS.md](AGENTS.md), the [skills index](skills/README.md) and the [maintenance guide](docs/maintenance.md).
+- Wrote the first plan, [never lose a note](docs/plans/never-lose-a-note.html) (Arabic, Rev 1). It targets the open `Data.cs` transient-lock item. Confirmed in source: `Read<T>` (`src/Data.cs:494`) treats a busy file like a missing one and returns null, `Load` then starts that section empty, and the next two saves overwrite the primary file and then its single `.bak`. A busy primary with a readable `.bak` also loads older data and writes it over the newer file.
+- Proof: source reading only. App source, tests and binaries were not changed.
+- Open: owner approval of the plan, then phases 1–3 (busy-aware reads and write lock with a banner; daily snapshots and shrink guard; the same rules for agent chats).
+
 ## 2026-11-20 — Flow theme (FlowTask dashboard look) and P0 safety/workflow fixes
 
 - Asked to fix confirmed issues and match the app theme and dashboard to the provided FlowTask Project Dashboard reference image.
