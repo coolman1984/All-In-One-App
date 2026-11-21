@@ -2,6 +2,8 @@
 
 Use [All in One maintenance](all-in-one-maintenance/SKILL.md) for app development, regression checks, local releases and knowledge updates. The repository instructions point Codex and Claude to it when they work here.
 
+Use [Plan page](plan-page/SKILL.md) before a large or risky change: write the plan as a short blog-style page, get the owner's approval, then build.
+
 ## Companion, Automation & Design Craft Skills
 
 | Skill | Use it for |
