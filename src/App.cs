@@ -51,6 +51,11 @@ namespace StickyPro
             Ui.ApplyLook();
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
+            var busy = Store.LockedSections();
+            if (busy.Length > 0)
+                Ui.Later(1500, () => Balloon("Some data was busy at start", "Another program (OneDrive, antivirus) held: " + string.Join(", ", busy) +
+                    ". Those files are protected from overwriting; the app opens them again every 30 s and merges your changes."));
+            Store.LockedChanged += () => { if (Store.LockedSections().Length == 0) Balloon("Data opened", "All data files are open again and your changes were merged."); };
             if (Store.Settings.KeepAwake) Awake.Set(true);
             try { PopupHider.Apply(); } catch (Exception ex) { Log("Popup hider: " + ex.Message); }
             Ui.Later(30000, () => { try { CliUpdates.AutoCheck(); } catch (Exception ex) { Log("CLI updates: " + ex.Message); } });   // once a day, in the background
@@ -1176,6 +1181,7 @@ namespace StickyPro
             foreach (var f in cardForms.Values.ToList()) f.Close();
             Store.SaveNow();
             if (main != null && !main.IsDisposed) { main.Exiting = true; main.Close(); }
+            try { AgentStore.FlushWrites(); Store.ReconcilePendingMove(); } catch (Exception ex) { Log("Move reconcile: " + ex.Message); }
             if (quick != null && !quick.IsDisposed) quick.Dispose();
             Store.StopSaver();
             Store.PromptsChanged -= Snippets.Update;

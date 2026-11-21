@@ -1950,7 +1950,17 @@ namespace StickyPro
 
         public void SetChat(AgentChat chat)
         {
-            if (Busy) Stop();
+            if (Busy)
+            {
+                // Switching away from a working chat: stop it AND detach its run now. Before, the stopped run kept
+                // reporting until it exited, so its last output, its session id and its "done" landed in the newly
+                // opened chat, and the old chat stayed marked busy.
+                string waiting = string.Join("\n\n", queued.Select(q => q.Key).Where(t => t.Length > 0).ToArray());
+                queued.Clear();
+                Stop();
+                if (run != null) { run = null; Done(); }
+                if (waiting.Length > 0) input.Text = (input.Text.Trim().Length > 0 ? input.Text.TrimEnd() + "\r\n\r\n" : "") + waiting;   // kept as the old chat's draft
+            }
             if (checkpoint.Enabled) { checkpoint.Stop(); AgentStore.Save(Chat); }
             ResetTeamDesk();
             findBar.Visible = false; findText.Clear(); findCount.Text = ""; lastFind = "";
@@ -2342,7 +2352,9 @@ namespace StickyPro
             r.Exited += code => Ui0(() =>
             {
                 if (r != run) return;
-                Chat.Seen[r.ActiveSessionKey] = Chat.Messages.Count;
+                // "Seen" moves on only when this turn is final: a retry must resend the same message, not an empty
+                // prompt (the agent never got an answer through).
+                int seenUpTo = Chat.Messages.Count;
                 string usedAccount = r.Account ?? "";
                 string usedModel = r.ModelOverride;
                 if (string.IsNullOrEmpty(usedModel) && Chat.Models != null) Chat.Models.TryGetValue(id, out usedModel);
@@ -2365,12 +2377,16 @@ namespace StickyPro
                         return;
                     }
                 }
-                if (netRetry == id && !retried.Contains(id))
+                if (netRetry == id && !retried.Contains(id) && !gotText)
                 {
                     retried.Add(id); netRetry = null;
                     Add("info", "", AgentStore.NameOf(id) + " could not reach its server in time. Trying once more...");
                     var rest = queue.ToList(); queue.Clear(); queue.Enqueue(id); foreach (var q in rest) queue.Enqueue(q);
+                    RunNext();
+                    return;
                 }
+                Chat.Seen[r.ActiveSessionKey] = seenUpTo;
+                AgentStore.Save(Chat);
                 RunNext();
             });
             string err;

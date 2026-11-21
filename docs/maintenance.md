@@ -35,6 +35,10 @@ For Documents edit mode, use `tools/test-office-edit.ps1 -AssemblyPath <exe>` to
 
 For generated files, check content as well as structure. Open the workbook and verify typed cells and IDs with leading zeroes. Inspect Word tables and slide order. Check that text extraction from PDF returns the expected characters as well as the page count. A chat file card with nested Markdown fences needs a longer outer fence and a complete closing fence.
 
+### No Windows at hand (Linux / cloud session)
+
+`tools/linux-smoke/run.sh` (needs `mono-devel` + `xvfb`) compiles every source as C# 5 and runs the saved-work logic checks (busy-file safe open + merge, cron schedule and broken-file copy, Explorer move guards, data-folder move carry-over). It does not replace `test-all.ps1` on Windows.
+
 ## Full UI sweep (every page, every look, stress)
 
 Run before every release and after any UI change:

@@ -523,12 +523,15 @@ namespace StickyPro
             if (active == null || active.View.CoreWebView2 == null) return;
             string vault = MdVault.Current;
             if (string.IsNullOrEmpty(vault)) { status.Text = "Add a Markdown vault first (Markdown notes > Vaults)."; return; }
-            string text = Unjson(await active.View.CoreWebView2.ExecuteScriptAsync("(document.querySelector('article,main')||document.body).innerText"));
-            string title = SafeName(active.Name);
+            // Take the page identity BEFORE awaiting: switching tabs meanwhile must not pair this text with another page.
+            var tab = active; string pageUrl = tab.Url, pageName = tab.Name;
+            string text = Unjson(await tab.View.CoreWebView2.ExecuteScriptAsync("(document.querySelector('article,main')||document.body).innerText"));
+            if (tab.Url != pageUrl) { status.Text = "The page changed while it was being read. Try again."; return; }
+            string title = SafeName(pageName);
             string dir = Path.Combine(vault, "Clippings"); Directory.CreateDirectory(dir);
             string file = Path.Combine(dir, title + ".md");
             for (int k = 2; File.Exists(file); k++) file = Path.Combine(dir, title + " (" + k + ").md");
-            File.WriteAllText(file, "---\nsource: " + active.Url + "\nsaved: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "\n---\n\n# " + active.Name + "\n\n" + (text ?? ""), new System.Text.UTF8Encoding(false));
+            File.WriteAllText(file, "---\nsource: " + pageUrl + "\nsaved: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "\n---\n\n# " + pageName + "\n\n" + (text ?? ""), new System.Text.UTF8Encoding(false));
             MdVault.Index(true);
             App.I.OpenMarkdown(file);
         }

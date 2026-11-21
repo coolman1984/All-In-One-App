@@ -2,6 +2,23 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-21 — Built the missing pieces: "never lose a note" safe open + every open review item
+
+- Asked: after the fixes, find what is still missing and build all of it.
+- Built:
+  - **Never lose a note** (`docs/plans/never-lose-a-note.html`, now implemented in `Data.cs`): each data file is read as Ok / Missing / Busy / Broken, with one shared 5 s wait budget; a busy file is never treated as missing and never overwritten (write-locked; its `.bak` is shown meanwhile). Edits to a locked section stay in memory; exit/backup keep them in `<name>.session-<time>.json`. Every 30 s the app reads it again and merges by id (nothing dropped), with a tray balloon at start and when done. Daily snapshot in `data\snapshots\<date>` (last 10) and a shrink guard snapshot before a save cuts a big file below half.
+  - **Data-folder move + deferred restart** (`Data.cs`, `App.cs`): exit now carries new, edited and deleted files over to the chosen folder.
+  - **Markdown**: closing the tab of a note that failed to save asks before discarding (was silently lost); LF-only notes show their lines and are saved back as LF; "Answer -> note" inserts real line breaks.
+  - **Documents** "read only" in the Send to menu now really opens read only.
+  - **Agents**: switching away from a working chat detaches its run (its late output no longer lands in the new chat; the old chat no longer stays busy; queued text is kept as draft). A network/transient retry now resends the same message instead of an empty prompt, and never retries after an answer arrived.
+  - **Snippets**: triggers that start with a letter expand only at a word start; AltGr characters (@, €) count as typing.
+  - **Floating cards**: "Paste into last app" uses a foreground-window tracker, not WM_ACTIVATE's often-empty previous window.
+  - **Browser** "Save page as note": the page identity is captured before the async read (tab switch no longer mislabels the note).
+  - `tools/test-agent-conversations.ps1`: exits explicitly (0 / 1) instead of hanging at host exit.
+  - New `tools/linux-smoke/run.sh`: C# 5 compile + saved-work logic checks under Mono.
+- Proof: `tools/linux-smoke/run.sh` on this Linux session: build OK (0 errors) and all checks passed — busy primary untouched (load waited 5.1 s, then locked), session copy written, retry merged 3 notes (old 2 + new 1) and saved, daily snapshot made; cron quiet job not re-run on the next tick; broken jobs file copied; move-onto-itself kept the file; folder-into-itself refused; data move carried a later note and a deletion. Not run: Windows PowerShell suites, `build.ps1`, live desktop use (AltGr, Arabic recorder, cards paste, Markdown LF display, Agents chat switch).
+- Open: run `tools/test-all.ps1` + `build.ps1` on Windows, then sync `main`; clean-PC recorder playback test (customer audit item).
+
 ## 2026-11-21 — Deep code review of Phases 1–4: 12 real bugs fixed (source only, not yet Windows-tested)
 
 - Asked: review the code deeply, find every problem, and fix it.

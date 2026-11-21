@@ -67,7 +67,9 @@ namespace StickyPro
             if (foreground != lastWindow) { buf.Clear(); lastWindow = foreground; }
             uint vk = k.vkCode;
             if (vk == 0x10 || vk == 0xA0 || vk == 0xA1 || vk == 0x14) return; // Shift / CapsLock alone
-            if (Native.Down(0x11) || Native.Down(0x12) || Native.Down(0x5B) || Native.Down(0x5C)) { buf.Clear(); return; }
+            // AltGr (right Alt = Ctrl+Alt) types characters such as @ or € on many layouts: keep it as typing.
+            bool altGr = Native.Down(0xA5);
+            if ((!altGr && (Native.Down(0x11) || Native.Down(0x12))) || Native.Down(0x5B) || Native.Down(0x5C)) { buf.Clear(); return; }
             if (vk == 0x08) { if (buf.Length > 0) buf.Length--; return; }
 
             uint pid;
@@ -76,6 +78,7 @@ namespace StickyPro
 
             var state = new byte[256];
             if (Native.Down(0x10)) state[0x10] = 0x80;
+            if (altGr) { state[0x11] = 0x80; state[0xA2] = 0x80; state[0x12] = 0x80; state[0xA5] = 0x80; }
             if ((Native.GetKeyState(0x14) & 1) != 0) state[0x14] = 1;
             var sb = new StringBuilder(8);
             int n = Native.ToUnicodeEx(vk, k.scanCode, state, sb, sb.Capacity, 4 /* keep keyboard state */, Native.GetKeyboardLayout(tid));
@@ -88,7 +91,9 @@ namespace StickyPro
             string s = buf.ToString();
             foreach (var t in triggers)
             {
-                if (s.EndsWith(t.Key, StringComparison.Ordinal))
+                // A trigger that starts with a letter/digit expands only at a word start ("btw" not inside "subtwo").
+                if (s.EndsWith(t.Key, StringComparison.Ordinal) && (t.Key.Length == 0 || !char.IsLetterOrDigit(t.Key[0]) ||
+                    s.Length == t.Key.Length || !char.IsLetterOrDigit(s[s.Length - t.Key.Length - 1])))
                 {
                     buf.Clear();
                     var p = t.Value;

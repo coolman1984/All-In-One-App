@@ -179,6 +179,11 @@ namespace StickyPro
         readonly List<string> back = new List<string>(), fwd = new List<string>();
         readonly System.Windows.Forms.Timer saveTimer = new System.Windows.Forms.Timer { Interval = 900 };
         string current, loadedText;
+        // The Windows edit box shows a bare LF as nothing (the note looks like one long line). LF-only files are
+        // shown with CRLF and saved back with LF, so their line endings never change on disk.
+        bool lfFile;
+        string ToDisk(string shown) { return lfFile ? (shown ?? "").Replace("\r\n", "\n") : shown; }
+        string FromDisk(string raw) { return lfFile && raw != null ? raw.Replace("\r\n", "\n").Replace("\n", "\r\n") : raw; }
         bool loading;
         bool refreshVaultOnShow;
         bool splitPositioned;
@@ -291,6 +296,14 @@ namespace StickyPro
             tabs = new EditorTabs { Dock = DockStyle.Fill };
             tabs.SetAll(Store.Settings.MdTabs.Where(File.Exists));
             tabs.Activated += p => Open(p, true);
+            // Closing the open note's tab only after its edits are saved, or the user explicitly discards them.
+            tabs.CanClose = p =>
+            {
+                if (!string.Equals(current, p, StringComparison.OrdinalIgnoreCase) || Save()) return true;
+                bool discard = MessageBox.Show(FindForm(), "This note could not be saved:\n" + p + "\n\n" + info.Text + "\n\nClose it anyway and lose the unsaved changes?", "Markdown notes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+                if (discard) { loadedText = editor.Text; saveTimer.Stop(); }
+                return discard;
+            };
             tabs.AllClosed += p => { if (string.Equals(current, p, StringComparison.OrdinalIgnoreCase)) { Save(); current = null; ShowWelcome(); } };
             tabs.Changed += () => { Store.Settings.MdTabs = tabs.Paths.ToList(); Store.MarkSettings(); };
             var acts = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(Ui.S(4), Ui.S(1), 0, 0) };
@@ -616,7 +629,7 @@ namespace StickyPro
 
         // ---------- open / navigate ----------
         public string CurrentPath { get { return current; } }
-        public void AppendText(string s) { if (current == null || string.IsNullOrWhiteSpace(s)) return; if (Store.Settings.MdMode == "read") SetMode("split"); editor.AppendText((editor.Text.EndsWith("\n") ? "\n" : "\n\n") + s.Trim() + "\n"); info.Text = "Answer added to the note."; }
+        public void AppendText(string s) { if (current == null || string.IsNullOrWhiteSpace(s)) return; if (Store.Settings.MdMode == "read") SetMode("split"); editor.AppendText((editor.Text.Length == 0 || editor.Text.EndsWith("\n") ? "\r\n" : "\r\n\r\n") + s.Trim().Replace("\r\n", "\n").Replace("\n", "\r\n") + "\r\n"); info.Text = "Answer added to the note."; }
         public string SelectedText { get { return editor.Visible && editor.SelectionLength > 0 ? editor.SelectedText : ""; } }
         public void Open(string path, bool record)
         {
@@ -652,10 +665,15 @@ namespace StickyPro
 
         void ShowNote(string path, string text, DateTime modified, bool record)
         {
+            bool sameNote = string.Equals(current, path, StringComparison.OrdinalIgnoreCase);
             if (record && current != null && !string.Equals(current, path, StringComparison.OrdinalIgnoreCase)) { back.Add(current); fwd.Clear(); }
             current = path;
             Store.Settings.MdLast = path; Store.MarkSettings();
             MetaStore.Touch("md", path);
+            bool bareLf = text != null && text.IndexOf('\n') >= 0 && text.IndexOf("\r\n", StringComparison.Ordinal) < 0;
+            if (bareLf) lfFile = true;
+            else if (!sameNote) lfFile = false;
+            if (lfFile) text = FromDisk(text);
             loading = true; editor.Text = text; loading = false; loadedText = text;
             results.Visible = false; split.Visible = true;
             headingNow = ""; tabs.Show(path);
@@ -811,17 +829,17 @@ namespace StickyPro
             {
                 // Someone else (an agent, a sync tool, another editor) changed the note since it was opened:
                 // keep their version as a sibling note instead of silently overwriting it.
-                string disk = File.Exists(current) ? File.ReadAllText(current, Encoding.UTF8) : null;
+                string disk = File.Exists(current) ? FromDisk(File.ReadAllText(current, Encoding.UTF8)) : null;
                 if (disk != null && disk != loadedText && disk != editor.Text)
                 {
                     kept = Path.Combine(Path.GetDirectoryName(current), Path.GetFileNameWithoutExtension(current) + " (outside change " + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ")" + Path.GetExtension(current));
-                    File.WriteAllText(kept, disk, new UTF8Encoding(false));
+                    File.WriteAllText(kept, ToDisk(disk), new UTF8Encoding(false));
                 }
             }
             catch (Exception ex) { App.Log("Markdown conflict copy: " + ex.Message); }
             try
             {
-                DataFiles.WriteAllTextAtomic(current, editor.Text, new UTF8Encoding(false)); loadedText = editor.Text;
+                DataFiles.WriteAllTextAtomic(current, ToDisk(editor.Text), new UTF8Encoding(false)); loadedText = editor.Text;
                 info.Text = kept != null ? "Saved. The note was changed outside; that version is kept as " + Path.GetFileName(kept) : "Saved " + DateTime.Now.ToString("HH:mm:ss") + "   ·   " + current;
                 if (kept != null) MdVault.Index(true);
                 return true;

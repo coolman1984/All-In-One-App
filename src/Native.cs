@@ -107,6 +107,9 @@ namespace StickyPro
         [StructLayout(LayoutKind.Sequential)]
         public struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr dwExtraInfo; }
 
+        public delegate void WinEventDelegate(IntPtr hook, uint ev, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
+        [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventDelegate proc, uint pid, uint thread, uint flags);
+
         public static bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
     }

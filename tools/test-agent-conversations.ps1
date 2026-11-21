@@ -1,5 +1,8 @@
 # Isolated WinForms controls and local stand-in CLIs. No provider accounts or network.
 $ErrorActionPreference = 'Stop'
+# WinForms hooks SystemEvents on this (non-pumping) host thread, and the host then hung at exit after all checks
+# passed. End the process explicitly, with the right exit code, so test-all never waits forever.
+trap { Write-Host ('AGENT CONVERSATIONS FAILED: ' + $_); [Environment]::Exit(1) }
 Add-Type -AssemblyName System.Windows.Forms
 $root = Split-Path -Parent $PSScriptRoot
 $asm = [Reflection.Assembly]::LoadFile((Join-Path $root 'build-test\StickyNotesPro.test.exe'))
@@ -75,3 +78,4 @@ try {
     $pane.SetChat($chat); Assert ($input.Text.Contains('Existing draft')) 'Switching chats lost the draft'
 } finally { $pane.Dispose() }
 Write-Host 'AGENT CONVERSATIONS OK: search, draft editing, independent branch, partial council failure, fallback chair and verdict'
+[Environment]::Exit(0)

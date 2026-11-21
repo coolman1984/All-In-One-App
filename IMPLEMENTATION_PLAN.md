@@ -265,3 +265,7 @@ A user on a clean 64-bit Windows 10/11 PC MUST be able to copy `AllInOne.exe`, d
 - 12 reliability / saved-work fixes in `ApiTools.cs`, `CronEngine.cs`, `Assistant.cs`, `OfficeCom.cs`, `SqliteVault.cs`, `WorkflowRecorder.cs`, `MarkdownPage.cs`, `DataFiles.cs`, `Chrome.cs`, `LeaderTeam.cs` (details in `HISTORY.md`).
 - New: cron jobs carry `last_check_utc`; triggered routines run their prompt in the Assistant; `DataFiles.WriteAllTextAtomic` for user files.
 - **Pending proof:** `tools/test-all.ps1` + Arabic recorder check on Windows, then `main` sync.
+
+### Missing-pieces build (2026-11-21, source only)
+- Implemented `docs/plans/never-lose-a-note.html` in `Data.cs` (safe open, write lock + 30 s merge retry, daily snapshots, shrink guard) and closed every open review item (Markdown last-tab + LF, data move reconcile, read-only routing, Agents chat-switch + retry prompt, Snippets boundary/AltGr, Cards foreground tracker, Browser clip identity, conversations test exit).
+- Proof: `tools/linux-smoke/run.sh` passed. **Pending:** Windows `test-all.ps1` + `build.ps1`, then `main` sync.

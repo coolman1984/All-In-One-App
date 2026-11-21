@@ -326,6 +326,22 @@ namespace StickyPro
             Activity = Read<List<ActivityRecord>>("activity.json") ?? new List<ActivityRecord>();
             Tagged = Read<List<TaggedFile>>("tagged.json") ?? new List<TaggedFile>();
             TagCats = Read<List<TagCategory>>("tagcats.json") ?? new List<TagCategory>();
+            Tasks = Read<List<TaskItem>>("tasks.json") ?? new List<TaskItem>();
+            Meta = Read<List<ItemMeta>>("meta.json") ?? new List<ItemMeta>();
+            Normalize();
+
+            saveTimer = new System.Windows.Forms.Timer();
+            saveTimer.Interval = 700;
+            saveTimer.Tick += delegate { saveTimer.Stop(); asyncSave = true; try { SaveNow(); } finally { asyncSave = false; } };
+            // A data file that was busy at start stays write-protected; look again every 30 s and merge it back in.
+            retryTimer = new System.Windows.Forms.Timer { Interval = 30000 };
+            retryTimer.Tick += delegate { if (LockedSections().Length == 0) { retryTimer.Stop(); return; } string m = RetryLocked(); if (m != null) App.Log(m); };
+            if (LockedSections().Length > 0) retryTimer.Start();
+        }
+
+        // Repairs missing / invalid values after loading or merging. Safe to run more than once.
+        static void Normalize()
+        {
             Activity.RemoveAll(a => a == null || a.Path == null);
             Tagged.RemoveAll(t => t == null || string.IsNullOrEmpty(t.Path));
             TagCats.RemoveAll(c => c == null || string.IsNullOrEmpty(c.Name));
@@ -341,7 +357,6 @@ namespace StickyPro
             if (History.DriveFreeDay == null) History.DriveFreeDay = new Dictionary<string, long>();
             foreach (var k in History.DriveFreeDay.Keys.Where(k => k.Length < 3).ToList()) History.DriveFreeDay.Remove(k);
             if (Settings.MaxClips < 50) Settings.MaxClips = 1000;
-            Tasks = Read<List<TaskItem>>("tasks.json") ?? new List<TaskItem>();
             Tasks.RemoveAll(t => t == null);
             foreach (var t in Tasks)
             {
@@ -376,7 +391,6 @@ namespace StickyPro
             if (Settings.TermRecent == null) Settings.TermRecent = new List<string>();
             if (string.IsNullOrEmpty(Settings.TermShell)) Settings.TermShell = "pwsh";
             foreach (var w in Settings.TermWorkspaces) foreach (var p in w.Panes) { if (p.Name == null) p.Name = ""; if (p.Color == null) p.Color = ""; }
-            Meta = Read<List<ItemMeta>>("meta.json") ?? new List<ItemMeta>();
             Meta.RemoveAll(m => m == null || string.IsNullOrEmpty(m.Scope) || string.IsNullOrEmpty(m.Id));
             foreach (var m in Meta) { if (m.Color == null) m.Color = ""; if (m.Tags == null) m.Tags = ""; if (m.Note == null) m.Note = ""; if (m.Name == null) m.Name = ""; }
             var s = Settings;
@@ -434,10 +448,6 @@ namespace StickyPro
             Settings.DesignRev = 3;
             if (string.IsNullOrEmpty(Settings.NoteFontName)) Settings.NoteFontName = "Segoe UI";
             if (float.IsNaN(Settings.NoteFontSize) || float.IsInfinity(Settings.NoteFontSize) || Settings.NoteFontSize < 6 || Settings.NoteFontSize > 48) Settings.NoteFontSize = 11f;
-
-            saveTimer = new System.Windows.Forms.Timer();
-            saveTimer.Interval = 700;
-            saveTimer.Tick += delegate { saveTimer.Stop(); asyncSave = true; try { SaveNow(); } finally { asyncSave = false; } };
         }
 
         // Where all data lives. Default: "data" next to the exe. The user can choose any folder (Settings > Data);
@@ -476,6 +486,10 @@ namespace StickyPro
                 if (Pending) return "Current changes could not be saved. The data folder was not changed.";
                 if (!AgentStore.FlushWrites()) return "Agent chats could not be saved. The data folder was not changed.";
                 DataFiles.CopyTree(Dir, newDir);
+                // The app keeps using the old folder until it restarts: remember what was copied, so exit can
+                // carry over every later change (new, edited and deleted files) to the new folder.
+                pendingMoveTo = newDir; pendingMoveAt = DateTime.UtcNow;
+                pendingMoveFiles = new HashSet<string>(Directory.GetFiles(Dir, "*", SearchOption.AllDirectories).Select(f => f.Substring(Dir.TrimEnd('\\').Length + 1)), StringComparer.OrdinalIgnoreCase);
                 if (string.Equals(newDir.TrimEnd('\\'), DefaultDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { if (File.Exists(LocationFile)) File.Delete(LocationFile); }
                 else
                 {
@@ -490,18 +504,96 @@ namespace StickyPro
             catch (Exception ex) { return ex.Message; }
         }
 
-        static T Read<T>(string name) where T : class
+        // ---------- safe open: missing / busy / broken (docs/plans/never-lose-a-note.html) ----------
+        enum ReadState { Ok, Missing, Busy }
+        // One wait budget for ALL files at start (OneDrive sync, antivirus scan), not per file.
+        static int busyBudgetMs = 5000;
+        static readonly HashSet<string> writeLocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static System.Windows.Forms.Timer retryTimer;
+        public static event Action LockedChanged;
+
+        static ReadState TryReadText(string file, out string text)
         {
-            string p = Path.Combine(Dir, name);
-            foreach (string file in new[] { p, p + ".bak" })
+            text = null;
+            int wait = 100;
+            while (true)
             {
                 try
                 {
-                    if (File.Exists(file))
+                    using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    using (var r = new StreamReader(fs, Encoding.UTF8, true)) text = r.ReadToEnd();
+                    return ReadState.Ok;
+                }
+                catch (FileNotFoundException) { return ReadState.Missing; }
+                catch (DirectoryNotFoundException) { return ReadState.Missing; }
+                catch (Exception ex)
+                {
+                    if (!(ex is IOException) && !(ex is UnauthorizedAccessException)) throw;
+                    if (busyBudgetMs <= 0) { App.Log("Data file busy: " + file + " (" + ex.Message + ")"); return ReadState.Busy; }
+                    int d = Math.Min(wait, busyBudgetMs);
+                    System.Threading.Thread.Sleep(d); busyBudgetMs -= d; wait = Math.Min(wait * 2, 1000);
+                }
+            }
+        }
+
+        static string pendingMoveTo; static DateTime pendingMoveAt; static HashSet<string> pendingMoveFiles;
+        // Called on exit, after the last save: copy files changed since the data-folder move to the new folder and
+        // remove the ones deleted since then, so nothing done between the move and the restart is lost.
+        public static void ReconcilePendingMove()
+        {
+            string to = pendingMoveTo;
+            if (string.IsNullOrEmpty(to) || !Directory.Exists(to)) return;
+            string root = Dir.TrimEnd('\\');
+            int copied = 0, removed = 0;
+            try
+            {
+                var now = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var f in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+                {
+                    string rel = f.Substring(root.Length + 1); now.Add(rel);
+                    string dest = Path.Combine(to, rel);
+                    try
                     {
-                        var o = Js().Deserialize<T>(File.ReadAllText(file, Encoding.UTF8));
-                        if (o != null) { if (file != p) recovered.Add(name); return o; }
+                        if (File.Exists(dest) && File.GetLastWriteTimeUtc(f) <= File.GetLastWriteTimeUtc(dest)) continue;
+                        Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                        File.Copy(f, dest, true); copied++;
                     }
+                    catch (Exception ex) { App.Log("Move reconcile " + rel + ": " + ex.Message); }
+                }
+                if (pendingMoveFiles != null)
+                    foreach (var rel in pendingMoveFiles.Where(r => !now.Contains(r)))
+                    {
+                        string dest = Path.Combine(to, rel);
+                        try { if (File.Exists(dest) && File.GetLastWriteTimeUtc(dest) <= pendingMoveAt.AddMinutes(1)) { File.Delete(dest); removed++; } }
+                        catch (Exception ex) { App.Log("Move reconcile delete " + rel + ": " + ex.Message); }
+                    }
+                if (copied + removed > 0) App.Log("Data folder move: carried " + copied + " changed and " + removed + " deleted file(s) over to " + to);
+            }
+            catch (Exception ex) { App.Log("Move reconcile: " + ex.Message); }
+            pendingMoveTo = null;
+        }
+
+        static T Read<T>(string name) where T : class
+        {
+            string p = Path.Combine(Dir, name);
+            bool primaryBusy = false;
+            foreach (string file in new[] { p, p + ".bak" })
+            {
+                string text;
+                ReadState state;
+                try { state = TryReadText(file, out text); }
+                catch (Exception ex) { App.Log("Could not read " + file + ": " + ex.Message); continue; }
+                if (state == ReadState.Missing) continue;
+                if (state == ReadState.Busy)
+                {
+                    // Busy is NOT broken: never fall back to the older .bak and write it over the newer file.
+                    if (file == p) { primaryBusy = true; lock (recovered) writeLocked.Add(name); }
+                    continue;
+                }
+                try
+                {
+                    var o = Js().Deserialize<T>(text);
+                    if (o != null) { if (file != p && !primaryBusy) recovered.Add(name); return o; }
                 }
                 catch (Exception ex)
                 {
@@ -512,9 +604,150 @@ namespace StickyPro
             return null;
         }
 
+        // Reads each write-protected file again. On success its items are merged with this session's (by id, nothing
+        // is dropped), the section is unlocked and saved. Returns a short report, or null when nothing changed.
+        public static string RetryLocked()
+        {
+            var names = LockedSections();
+            if (names.Length == 0) return null;
+            var opened = new List<string>();
+            foreach (string name in names)
+            {
+                string text;
+                busyBudgetMs = 1500;
+                ReadState state;
+                try { state = TryReadText(Path.Combine(Dir, name), out text); } catch (Exception ex) { App.Log("Retry " + name + ": " + ex.Message); continue; }
+                if (state == ReadState.Busy) continue;
+                try
+                {
+                    if (state == ReadState.Ok) MergeFromDisk(name, text);
+                    lock (recovered) writeLocked.Remove(name);
+                    MarkByName(name);
+                    opened.Add(name);
+                }
+                catch (Exception ex)
+                {
+                    // Opened but unreadable = broken: keep a copy, then let the session's version be saved.
+                    App.Log("Retry " + name + ": " + ex.Message);
+                    try { File.Copy(Path.Combine(Dir, name), Path.Combine(Dir, name + ".broken-" + DateTime.Now.ToString("yyyyMMddHHmmss")), true); } catch { }
+                    lock (recovered) writeLocked.Remove(name);
+                    MarkByName(name);
+                    opened.Add(name);
+                }
+            }
+            if (opened.Count == 0) return null;
+            Normalize();
+            RaiseAll();
+            var h = LockedChanged; if (h != null) h();
+            return "Data files opened again and merged: " + string.Join(", ", opened.ToArray());
+        }
+
+        static void MergeFromDisk(string name, string text)
+        {
+            var js = Js();
+            switch (name)
+            {
+                case "notes.json": MergeList(Notes, js.Deserialize<List<Note>>(text)); break;
+                case "prompts.json": MergeList(Prompts, js.Deserialize<List<Prompt>>(text)); break;
+                case "clips.json": MergeList(Clips, js.Deserialize<List<Clip>>(text)); break;
+                case "cards.json": MergeList(Cards, js.Deserialize<List<CardDef>>(text)); break;
+                case "activity.json": MergeList(Activity, js.Deserialize<List<ActivityRecord>>(text)); break;
+                case "tagged.json": MergeList(Tagged, js.Deserialize<List<TaggedFile>>(text)); break;
+                case "tagcats.json": MergeList(TagCats, js.Deserialize<List<TagCategory>>(text)); break;
+                case "tasks.json": MergeList(Tasks, js.Deserialize<List<TaskItem>>(text)); break;
+                case "meta.json": MergeList(Meta, js.Deserialize<List<ItemMeta>>(text)); break;
+                case "settings.json": MergeObject(Settings, js.Deserialize<Settings>(text), settingsDirty, name); break;
+                case "history.json": MergeObject(History, js.Deserialize<SysHistory>(text), historyDirty, name); break;
+            }
+        }
+
+        // Disk items this session does not have (same id) are added; items this session has win.
+        static void MergeList<T>(List<T> live, List<T> disk) where T : class
+        {
+            if (live == null || disk == null) return;
+            var have = new HashSet<string>(live.Where(x => x != null).Select(ItemKey));
+            foreach (var item in disk) if (item != null && !have.Contains(ItemKey(item))) live.Add(item);
+        }
+        static string ItemKey(object o)
+        {
+            var t = o.GetType();
+            var id = t.GetField("Id"); var scope = t.GetField("Scope"); var nm = t.GetField("Name");
+            if (id != null) return (scope != null ? Convert.ToString(scope.GetValue(o)) + "|" : "") + Convert.ToString(id.GetValue(o));
+            if (nm != null) return Convert.ToString(nm.GetValue(o));
+            return Js().Serialize(o);
+        }
+        // Settings-like objects: untouched this session -> take the disk values; changed -> keep the session's
+        // values and keep the disk version as a side file.
+        static void MergeObject<T>(T live, T disk, bool dirty, string name) where T : class
+        {
+            if (live == null || disk == null) return;
+            if (dirty)
+            {
+                File.Copy(Path.Combine(Dir, name), Path.Combine(Dir, Path.GetFileNameWithoutExtension(name) + ".disk-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json"), true);
+                return;
+            }
+            foreach (var f in typeof(T).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)) f.SetValue(live, f.GetValue(disk));
+        }
+        static void MarkByName(string name)
+        {
+            switch (name)
+            {
+                case "tagged.json": case "tagcats.json": taggedDirty = true; break;
+                case "settings.json": if (!settingsDirty) return; settingsDirty = true; break;
+                case "history.json": if (!historyDirty) return; historyDirty = true; break;
+                default: Remark(name); break;
+            }
+            Kick();
+        }
+        static void RaiseAll()
+        {
+            foreach (var h in new[] { NotesChanged, PromptsChanged, ClipsChanged, CardsChanged, ActivityChanged, TaggedChanged, TasksChanged, MetaChanged })
+                if (h != null) try { h(); } catch (Exception ex) { App.Log("Data refresh: " + ex.Message); }
+        }
+
+        public static string[] LockedSections() { lock (recovered) return writeLocked.ToArray(); }
+        static bool IsLocked(string name) { lock (recovered) return writeLocked.Contains(name); }
+
+        // Daily snapshot (first save of each day, last 10 days) + shrink guard (a save that would cut a big file
+        // to less than half takes a snapshot first). Text data files only, no images.
+        static readonly object snapLock = new object();
+        static string snapDay;
+        public static string SnapshotDir { get { return Path.Combine(Dir, "snapshots"); } }
+        static void Snapshot(string folderName, string onlyFile)
+        {
+            try
+            {
+                string dir = Path.Combine(SnapshotDir, folderName);
+                Directory.CreateDirectory(dir);
+                foreach (var f in onlyFile != null ? new[] { Path.Combine(Dir, onlyFile) } : Directory.GetFiles(Dir, "*.json"))
+                    if (File.Exists(f)) File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true);
+                var all = new DirectoryInfo(SnapshotDir).GetDirectories().OrderByDescending(d => d.Name, StringComparer.Ordinal).ToList();
+                foreach (var old in all.Where(d => d.Name.Length == 10).Skip(10).Concat(all.Where(d => d.Name.Length != 10).Skip(10)))
+                    try { old.Delete(true); } catch { }
+            }
+            catch (Exception ex) { App.Log("Snapshot: " + ex.Message); }
+        }
+        static void GuardBeforeWrite(string name, string p, int newLength)
+        {
+            lock (snapLock)
+            {
+                string today = DateTime.Now.ToString("yyyy-MM-dd");
+                if (snapDay != today) { snapDay = today; if (!Directory.Exists(Path.Combine(SnapshotDir, today))) Snapshot(today, null); }
+                try
+                {
+                    var fi = new FileInfo(p);
+                    if (fi.Exists && fi.Length > 4096 && newLength < fi.Length / 2)
+                        Snapshot(DateTime.Now.ToString("yyyy-MM-dd-HHmmss") + "-" + Path.GetFileNameWithoutExtension(name), name);
+                }
+                catch (Exception ex) { App.Log("Shrink guard: " + ex.Message); }
+            }
+        }
+
         static void WriteText(string name, string json)
         {
             string p = Path.Combine(Dir, name);
+            if (IsLocked(name)) throw new IOException(name + " could not be read at start; it is protected from writing until it opens.");
+            GuardBeforeWrite(name, p, json.Length);
             string tmp = p + ".tmp";
             File.WriteAllText(tmp, json, new UTF8Encoding(false));
             lock (recovered)
@@ -653,6 +886,19 @@ namespace StickyPro
 
         static bool Safe(string name, object o)
         {
+            if (IsLocked(name))
+            {
+                if (asyncSave) return false; // keep the change in memory (still dirty); the retry timer merges later
+                // Exit / backup: never touch the unread file, but keep this session's version next to it.
+                try
+                {
+                    string side = Path.Combine(Dir, Path.GetFileNameWithoutExtension(name) + ".session-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                    File.WriteAllText(side, Js().Serialize(o), new UTF8Encoding(false));
+                    App.Log(name + " was still busy: this session's changes were kept in " + side);
+                    return true;
+                }
+                catch (Exception ex) { App.Log("Save failed " + name + ": " + ex.Message); return false; }
+            }
             try { Write(name, asyncSave ? DataSnapshot.Copy(o) : o); return true; }
             catch (Exception ex) { App.Log("Save failed " + name + ": " + ex.Message); return false; }
         }

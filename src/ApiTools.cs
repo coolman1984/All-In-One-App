@@ -1147,7 +1147,7 @@ namespace StickyPro
                     if (string.Equals(fullSrc, fullDst, StringComparison.OrdinalIgnoreCase)) { resultTarget = targetPath; break; }
                     if (Directory.Exists(path))
                     {
-                        if (fullDst.StartsWith(fullSrc + "\\", StringComparison.OrdinalIgnoreCase))
+                        if (fullDst.StartsWith(fullSrc + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || fullDst.StartsWith(fullSrc + "/", StringComparison.OrdinalIgnoreCase))
                             throw new Exception("Cannot move a folder into itself: " + targetPath);
                         // A replaced target goes to the Recycle Bin (not a permanent delete) so it can be restored.
                         if (Directory.Exists(targetPath) && !Leftovers.Recycle(targetPath, true))

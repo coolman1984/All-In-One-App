@@ -36,7 +36,7 @@ namespace StickyPro
             switch (id)
             {
                 case "dashboard": return new DashboardPanel();
-                case "clips": case "prompts": case "notes": return new QuickListPanel(id, () => card.LastExternal, st);
+                case "clips": case "prompts": case "notes": return new QuickListPanel(id, () => ForegroundTracker.Pick(card.LastExternal), st);
                 case "procs": return new ProcessesPanel(st);
                 case "drives": return new DrivesPanel(st);
                 case "startup": return new StartupPanel(st);
@@ -225,6 +225,32 @@ namespace StickyPro
 
     // A floating, resizable, always-on-top card that hosts one or more features as tabs,
     // and can shrink to a small pin chip.
+    // The app the user worked in last (not this one), from the system foreground event. WM_ACTIVATE's "previous
+    // window" is often empty for windows of other programs, so "Paste into last app" sometimes only copied.
+    static class ForegroundTracker
+    {
+        static IntPtr hook, last;
+        static Native.WinEventDelegate proc;   // kept alive while the hook exists
+        static readonly uint myPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        public static void Start()
+        {
+            if (hook != IntPtr.Zero) return;
+            proc = (h, ev, hwnd, idObject, idChild, thread, time) =>
+            {
+                if (hwnd == IntPtr.Zero || idObject != 0) return;
+                uint pid; Native.GetWindowThreadProcessId(hwnd, out pid);
+                if (pid != myPid) last = hwnd;
+            };
+            try { hook = Native.SetWinEventHook(3, 3, IntPtr.Zero, proc, 0, 0, 0); } catch (Exception ex) { App.Log("Foreground tracker: " + ex.Message); }
+            try { var fg = Native.GetForegroundWindow(); uint pid; Native.GetWindowThreadProcessId(fg, out pid); if (pid != myPid) last = fg; } catch { }
+        }
+        public static IntPtr Pick(IntPtr fallback)
+        {
+            if (last != IntPtr.Zero && Native.IsWindow(last)) return last;
+            return fallback;
+        }
+    }
+
     class CardForm : Form
     {
         public readonly CardDef D;
@@ -243,6 +269,7 @@ namespace StickyPro
 
         public CardForm(CardDef d)
         {
+            ForegroundTracker.Start();
             D = d;
             AutoScaleMode = AutoScaleMode.None;
             FormBorderStyle = FormBorderStyle.None;

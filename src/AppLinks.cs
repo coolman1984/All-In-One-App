@@ -49,7 +49,7 @@ namespace StickyPro
             if (path != null && IsFile(path))
             {
                 if (WebFiles.Contains(Ext(path))) m.DropDownItems.Add("Browser (open the file in a tab)", null, delegate { App.I.OpenInBrowser(path); });
-            if (DocumentsPage.Handles(path)) m.DropDownItems.Add("Documents (view it in the app, read only)", null, delegate { App.I.OpenDocument(path); });
+            if (DocumentsPage.Handles(path)) m.DropDownItems.Add("Documents (view it in the app, read only)", null, delegate { App.I.OpenDocument(path, false); });
                 if (MdFiles.Contains(Ext(path))) m.DropDownItems.Add("Markdown notes (read it)", null, delegate { App.I.OpenMarkdown(path); });
                 m.DropDownItems.Add("Agents (attach the file to a message)", null, delegate { App.I.SendToAgents("Please look at this file: " + path); });
             }
