@@ -49,70 +49,70 @@ namespace StickyPro
         // x64 P/Invoke Declarations (winsqlite3.dll, UTF-8 byte arrays only)
         // =====================================================================
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_open_v2(byte[] filename, out IntPtr ppDb, int flags, IntPtr zVfs);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_close_v2(IntPtr db);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_exec(IntPtr db, byte[] sql, IntPtr callback, IntPtr arg, out IntPtr errmsg);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern void sqlite3_free(IntPtr ptr);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_prepare_v2(IntPtr db, byte[] zSql, int nByte, out IntPtr ppStmt, out IntPtr pzTail);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_bind_text(IntPtr stmt, int index, byte[] val, int nBytes, IntPtr destructor);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_bind_int64(IntPtr stmt, int index, long val);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_bind_double(IntPtr stmt, int index, double val);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_bind_null(IntPtr stmt, int index);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_step(IntPtr stmt);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_reset(IntPtr stmt);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_clear_bindings(IntPtr stmt);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_column_count(IntPtr stmt);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern IntPtr sqlite3_column_name(IntPtr stmt, int iCol);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_column_type(IntPtr stmt, int iCol);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern IntPtr sqlite3_column_text(IntPtr stmt, int iCol);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_column_bytes(IntPtr stmt, int iCol);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern long sqlite3_column_int64(IntPtr stmt, int iCol);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern double sqlite3_column_double(IntPtr stmt, int iCol);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern int sqlite3_finalize(IntPtr stmt);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern IntPtr sqlite3_errmsg(IntPtr db);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         static extern long sqlite3_last_insert_rowid(IntPtr db);
 
         // =====================================================================
@@ -228,14 +228,23 @@ namespace StickyPro
             dbHandle = h;
             openPath = target;
 
-            ExecLocked(
-                "PRAGMA journal_mode=WAL;\n" +
-                "PRAGMA synchronous=NORMAL;\n" +
-                "PRAGMA temp_store=MEMORY;\n" +
-                "PRAGMA busy_timeout=5000;\n" +
-                "PRAGMA foreign_keys=ON;");
+            try
+            {
+                ExecLocked(
+                    "PRAGMA journal_mode=WAL;\n" +
+                    "PRAGMA synchronous=NORMAL;\n" +
+                    "PRAGMA temp_store=MEMORY;\n" +
+                    "PRAGMA busy_timeout=5000;\n" +
+                    "PRAGMA foreign_keys=ON;");
 
-            InitSchemaLocked();
+                InitSchemaLocked();
+            }
+            catch
+            {
+                // Do not keep a half-initialized handle: the next call would skip the schema and fail in odd ways.
+                CloseLocked();
+                throw;
+            }
         }
 
         static void InitSchemaLocked()

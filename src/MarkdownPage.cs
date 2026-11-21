@@ -806,7 +806,26 @@ namespace StickyPro
         {
             saveTimer.Stop();
             if (current == null || editor.Text == loadedText) return true;
-            try { File.WriteAllText(current, editor.Text, new UTF8Encoding(false)); loadedText = editor.Text; info.Text = "Saved " + DateTime.Now.ToString("HH:mm:ss") + "   ·   " + current; return true; }
+            string kept = null;
+            try
+            {
+                // Someone else (an agent, a sync tool, another editor) changed the note since it was opened:
+                // keep their version as a sibling note instead of silently overwriting it.
+                string disk = File.Exists(current) ? File.ReadAllText(current, Encoding.UTF8) : null;
+                if (disk != null && disk != loadedText && disk != editor.Text)
+                {
+                    kept = Path.Combine(Path.GetDirectoryName(current), Path.GetFileNameWithoutExtension(current) + " (outside change " + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ")" + Path.GetExtension(current));
+                    File.WriteAllText(kept, disk, new UTF8Encoding(false));
+                }
+            }
+            catch (Exception ex) { App.Log("Markdown conflict copy: " + ex.Message); }
+            try
+            {
+                DataFiles.WriteAllTextAtomic(current, editor.Text, new UTF8Encoding(false)); loadedText = editor.Text;
+                info.Text = kept != null ? "Saved. The note was changed outside; that version is kept as " + Path.GetFileName(kept) : "Saved " + DateTime.Now.ToString("HH:mm:ss") + "   ·   " + current;
+                if (kept != null) MdVault.Index(true);
+                return true;
+            }
             catch (Exception ex) { info.Text = "Could not save: " + ex.Message; return false; }
         }
 
@@ -928,7 +947,7 @@ namespace StickyPro
                 string n = wiki.Replace(t, "[[" + newName);
                 n = md.Replace(n, m => "](" + m.Groups[1].Value + Uri.EscapeDataString(newName) + ".md");
                 n = md2.Replace(n, m => "](" + m.Groups[1].Value + newName + ".md");
-                if (n != t) { try { File.WriteAllText(f, n, new UTF8Encoding(false)); changed++; } catch (Exception ex) { App.Log("Rename links: " + ex.Message); } }
+                if (n != t) { try { DataFiles.WriteAllTextAtomic(f, n, new UTF8Encoding(false)); changed++; } catch (Exception ex) { App.Log("Rename links: " + ex.Message); } }
             }
             return changed;
         }

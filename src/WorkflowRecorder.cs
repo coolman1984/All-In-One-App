@@ -91,6 +91,56 @@ namespace StickyPro
         [DllImport("kernel32.dll")]
         static extern uint GetCurrentThreadId();
 
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+        [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint idThread);
+        [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern int ToUnicodeEx(uint vk, uint scan, byte[] state, StringBuilder buf, int cch, uint flags, IntPtr hkl);
+
+        // Hook events are handled off the hook thread, but strictly in arrival order (one worker), so typed text
+        // and click/key steps are never shuffled the way separate thread-pool items could be.
+        static readonly System.Collections.Concurrent.BlockingCollection<Action> hookWork = new System.Collections.Concurrent.BlockingCollection<Action>();
+        static Thread hookWorker;
+        static readonly object hookWorkerLock = new object();
+        static void QueueHookWork(Action a)
+        {
+            lock (hookWorkerLock)
+            {
+                if (hookWorker == null || !hookWorker.IsAlive)
+                {
+                    hookWorker = new Thread(delegate()
+                    {
+                        foreach (var job in hookWork.GetConsumingEnumerable())
+                        {
+                            try { job(); } catch (Exception ex) { App.Log("WorkflowRecorder step: " + ex.Message); }
+                        }
+                    }) { IsBackground = true, Name = "WorkflowRecorderSteps" };
+                    hookWorker.Start();
+                }
+            }
+            hookWork.Add(a);
+        }
+
+        // The character the key really types in the focused app's keyboard layout (Arabic, French, symbols...).
+        // Flag 4 = do not change the keyboard state (Windows 10 1607+), so dead keys in the target app still work.
+        static string TypedChar(uint vk, uint scan, bool shift)
+        {
+            try
+            {
+                uint pid;
+                IntPtr hkl = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), out pid));
+                var state = new byte[256];
+                if (shift) { state[0x10] = 0x80; state[0xA0] = 0x80; }
+                if ((GetKeyState(0x14) & 1) != 0) state[0x14] = 0x01; // Caps Lock
+                var buf = new StringBuilder(8);
+                int n = ToUnicodeEx(vk, scan, state, buf, buf.Capacity, 4, hkl);
+                if (n == 1 && !char.IsControl(buf[0])) return buf.ToString(0, 1);
+            }
+            catch (Exception) { }
+            return null;
+        }
+
         static Thread hookThread;
         static uint hookThreadId;
         static IntPtr mouseHook = IntPtr.Zero;
@@ -180,6 +230,9 @@ namespace StickyPro
         public static Dictionary<string, object> Stop()
         {
             StopHooks();
+            // Let the last queued clicks/keys reach the recording before it closes (bounded wait).
+            var drained = new ManualResetEvent(false);
+            try { if (hookWorker != null && hookWorker.IsAlive) { QueueHookWork(delegate { drained.Set(); }); drained.WaitOne(3000); } } catch (Exception) { }
 
             string id, title, notes, folder, eventsFile, summaryFile, summaryMd;
             DateTime startUtc, stopUtc = DateTime.UtcNow;
@@ -567,10 +620,7 @@ namespace StickyPro
                         MSLLHOOKSTRUCT ms = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
                         int cx = ms.pt.X, cy = ms.pt.Y;
                         string b = btn;
-                        ThreadPool.QueueUserWorkItem(delegate
-                        {
-                            try { RecordStep("click", cx, cy, b, "", ""); } catch { }
-                        });
+                        QueueHookWork(delegate { RecordStep("click", cx, cy, b, "", ""); });
                     }
                     catch { }
                 }
@@ -595,10 +645,8 @@ namespace StickyPro
                             bool alt = Native.Down(0x12);
                             bool shift = Native.Down(0x10);
                             Point pt = Cursor.Position;
-                            ThreadPool.QueueUserWorkItem(delegate
-                            {
-                                try { HandleHookKey(vk, ctrl, alt, shift, pt.X, pt.Y); } catch { }
-                            });
+                            string ch = ctrl || alt ? null : TypedChar(kb.vkCode, kb.scanCode, shift);
+                            QueueHookWork(delegate { HandleHookKey(vk, ctrl, alt, shift, pt.X, pt.Y, ch); });
                         }
                     }
                     catch { }
@@ -615,7 +663,7 @@ namespace StickyPro
                 || k == Keys.LWin || k == Keys.RWin;
         }
 
-        static void HandleHookKey(Keys vk, bool ctrl, bool alt, bool shift, int x, int y)
+        static void HandleHookKey(Keys vk, bool ctrl, bool alt, bool shift, int x, int y, string typed = null)
         {
             if (!IsRecording) return;
 
@@ -651,6 +699,10 @@ namespace StickyPro
                 else if (vk == Keys.Space)
                 {
                     keyBuffer.Append(' ');
+                }
+                else if (!string.IsNullOrEmpty(typed))
+                {
+                    keyBuffer.Append(typed);
                 }
                 else if (vk >= Keys.A && vk <= Keys.Z)
                 {

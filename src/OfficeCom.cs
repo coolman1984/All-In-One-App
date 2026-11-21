@@ -770,6 +770,11 @@ namespace StickyPro
                     // Give the worker thread a brief moment to run its finally block (e.g. registry restore).
                     thread.Join(2000);
                 }
+                // The timed-out worker may still be filling `doc`: never hand that half-built, still-changing object
+                // to the caller (it would be ingested while being modified). Return a clean error-only copy.
+                var failed = new ExtractedDoc { Path = doc.Path, Kind = doc.Kind, IsDrm = doc.IsDrm, Error = "Extraction timed out after " + (timeoutMs / 1000) + " s." };
+                failed.FileSize = doc.FileSize; failed.ModifiedTicks = doc.ModifiedTicks;
+                return failed;
             }
 
             if (mode == "pdf" && !doc.IsDrm && string.IsNullOrWhiteSpace(doc.FullText) && doc.Tables.Count == 0)

@@ -122,7 +122,7 @@ namespace StickyPro
             {
                 var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(7000)) { try { process.Kill(); } catch (InvalidOperationException) { } throw new IOException("HERDR did not respond."); }
-                if (process.ExitCode != 0) throw new IOException("HERDR could not read this pane. Check the ID and running workspace.");
+                if (process.ExitCode != 0) { string why = (stderr.Wait(1000) ? stderr.Result : "").Trim(); throw new IOException("HERDR could not read this pane. Check the ID and running workspace." + (why.Length > 0 ? " (" + TeamWorker.Tail(why, 300) + ")" : "")); }
                 return Decode(id, stdout.Result);
             }
         }

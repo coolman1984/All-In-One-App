@@ -1141,16 +1141,32 @@ namespace StickyPro
                     string targetPath = dest;
                     if (Directory.Exists(dest))
                         targetPath = Path.Combine(dest, Path.GetFileName(path.TrimEnd('\\', '/')));
+                    string fullSrc = Path.GetFullPath(path).TrimEnd('\\', '/');
+                    string fullDst = Path.GetFullPath(targetPath).TrimEnd('\\', '/');
+                    // Moving onto itself used to delete the source first (the "existing target") = permanent data loss.
+                    if (string.Equals(fullSrc, fullDst, StringComparison.OrdinalIgnoreCase)) { resultTarget = targetPath; break; }
                     if (Directory.Exists(path))
                     {
-                        if (Directory.Exists(targetPath)) Directory.Delete(targetPath, true);
-                        Directory.Move(path, targetPath);
+                        if (fullDst.StartsWith(fullSrc + "\\", StringComparison.OrdinalIgnoreCase))
+                            throw new Exception("Cannot move a folder into itself: " + targetPath);
+                        // A replaced target goes to the Recycle Bin (not a permanent delete) so it can be restored.
+                        if (Directory.Exists(targetPath) && !Leftovers.Recycle(targetPath, true))
+                            throw new Exception("Could not move the existing target out of the way: " + targetPath);
+                        if (string.Equals(Path.GetPathRoot(fullSrc), Path.GetPathRoot(fullDst), StringComparison.OrdinalIgnoreCase))
+                            Directory.Move(path, targetPath);
+                        else
+                        {
+                            // Directory.Move cannot cross drives: copy, then recycle the source.
+                            DataFiles.CopyTree(path, targetPath);
+                            if (!Leftovers.Recycle(path, true)) throw new Exception("Copied to " + targetPath + " but could not remove the source " + path);
+                        }
                     }
                     else if (File.Exists(path))
                     {
                         string parent = Path.GetDirectoryName(targetPath);
                         if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
-                        if (File.Exists(targetPath)) File.Delete(targetPath);
+                        if (File.Exists(targetPath) && !Leftovers.Recycle(targetPath, true))
+                            throw new Exception("Could not move the existing target out of the way: " + targetPath);
                         File.Move(path, targetPath);
                     }
                     else throw new Exception("Source path not found: " + path);
@@ -1165,6 +1181,8 @@ namespace StickyPro
                     bool recycled = Leftovers.Recycle(path, true);
                     if (!recycled)
                     {
+                        // delete_recycle promises a restorable delete: never fall back to a permanent one.
+                        if (act == "delete_recycle") throw new Exception("Could not move to the Recycle Bin: " + path + ". Use action \"delete\" to delete it permanently.");
                         if (Directory.Exists(path)) Directory.Delete(path, true);
                         else if (File.Exists(path)) File.Delete(path);
                     }
@@ -1385,6 +1403,11 @@ namespace StickyPro
             var pids = new List<int>();
             if (targetPid > 0)
             {
+                // The protected-process check above only ran for names: apply it to a pid too.
+                string pidName = "";
+                try { using (var tp = Process.GetProcessById(targetPid)) pidName = tp.ProcessName; } catch (Exception) { }
+                if (pidName.Length > 0 && (string.Equals(pidName, "AllInOne", StringComparison.OrdinalIgnoreCase) || ProcessSampler.IsCritical(pidName) || ProcessSampler.IsCritical(pidName + ".exe")))
+                    throw new Exception("Refusing to terminate protected or critical process: " + pidName + " (" + targetPid + ")");
                 pids.Add(targetPid);
             }
             else if (targetName.Length > 0)

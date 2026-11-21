@@ -132,6 +132,7 @@ namespace StickyPro
             Ui.Theme(this);
             AssistantHarness.Activity += OnActivity;
             WorkflowRecorder.StateChanged += OnRecorderState;
+            CronEngine.JobTriggered += OnCronJob;
             PageChanged(main.Page);
             if (AgentStore.Loaded) Start(); else AgentStore.LoadAll(() => { if (!IsDisposed) Start(); });
         }
@@ -479,6 +480,25 @@ namespace StickyPro
             pane.SendText(text);
         }
 
+        // A scheduled routine fired (timer thread): hand its prompt to the assistant chat, so routines really run
+        // instead of only showing a balloon. Skipped (with a status line) while the assistant is busy.
+        void OnCronJob(CronJob job, string detail)
+        {
+            if (job == null || string.IsNullOrWhiteSpace(job.prompt) || IsDisposed) return;
+            try
+            {
+                BeginInvoke(new Action(delegate
+                {
+                    if (IsDisposed || pane == null) return;
+                    if (pane.Busy) { if (App.I != null) App.I.Status("Routine \"" + job.name + "\" fired while the assistant was busy."); return; }
+                    string head = "[Scheduled routine: " + job.name + (string.IsNullOrEmpty(detail) ? "" : " - " + detail) + "]";
+                    if (!string.IsNullOrWhiteSpace(job.skill)) head += "\nUse skill: " + job.skill.Trim();
+                    pane.SendText(head + "\n\n" + job.prompt.Trim());
+                }));
+            }
+            catch (Exception ex) { App.Log("Assistant cron: " + ex.Message); }
+        }
+
         string Last() { return pane == null ? "" : ChatView.ShownText(pane.LastAnswer ?? "").Trim(); }
 
         protected override void Dispose(bool disposing)
@@ -488,6 +508,7 @@ namespace StickyPro
                 AgentStore.Changed -= OnChanged;
                 AssistantHarness.Activity -= OnActivity;
                 WorkflowRecorder.StateChanged -= OnRecorderState;
+                CronEngine.JobTriggered -= OnCronJob;
                 tips.Dispose();
             }
             base.Dispose(disposing);

@@ -7,6 +7,9 @@ Format: what happened -> cause (proven) -> rule.
 - **Security audits repeatedly flagged open local MCP Named Pipe, Assistant `Full Auto`, and unsanitized local `MdWeb`/`Mail` HTML.** -> The app runs inside a closed, isolated corporate/factory local intranet behind a strict enterprise firewall, and the owner intentionally wants maximum unrestricted automation across local tools. -> **Rule:** Treat unrestricted local MCP, Assistant `Full Auto`, and raw local `MdWeb`/`Mail` rendering as intentional by design. Never flag them as open security issues, never add ACL/confirmation gates or restrictive sanitizers for them, and never ask the owner again whether to close them. Keep focus on reliability, saved-work safety, UX, performance, and new capabilities.
 
 ## Saved work
+- **A "move onto itself" deleted the source.** `explorer_action move` deleted an existing target before moving; when the destination resolved to the source, the source was the target. -> Compare full paths first, refuse folder-into-itself, and recycle (never hard-delete) a replaced target.
+- **A swallowed JSON read error wipes the file on the next save.** Any loader that returns an empty list on a parse error must first copy the bad file aside (`.broken-<time>`), as `Store` and now `CronEngine` do.
+- **Auto-save overwrote outside edits.** Agents and sync tools write notes too. Before saving, compare the disk text with the text that was loaded; if both differ, keep the outside version as a sibling note.
 - **SnipEditor `Copy file` / `Copy path` shared the unredacted raw capture after Blur/edits.** Auto-save creates `filePath` immediately, so checking `!File.Exists(filePath)` skipped `Save(false)`. -> Track a `dirty` flag in `SnipEditor` and flush edits before copying paths/files or closing.
 - Test the last Markdown tab separately from an Office tab. A denied Markdown write returned false, but the last-tab callback still cleared the current path. A meaningful check holds the file against writing, edits it, closes it and compares both the active editor and the file.
 - For a data-folder move, include a change after the copy and before a deferred restart. On the November 20 binary that change reached the old folder while the next-start location pointed to the new one.
@@ -182,6 +185,8 @@ Format: what happened -> cause (proven) -> rule.
 - `Environment.TickCount` turns negative after 24.9 days uptime -> use a Stopwatch for timeouts.
 
 ## Build / tests
+- No Windows? Check C# 5 compliance and compile errors on Linux with Mono: `mcs -langversion:5 -target:winexe` plus the `build.ps1` refs and `-r:System.Xml.Linq.dll` (Windows `csc` adds it by default). It does not replace the PowerShell suites.
+- Low-level hook callbacks: hand events to ONE ordered worker, not separate thread-pool items (they run out of order). Read typed characters with `ToUnicodeEx(..., flags 4, foreground layout)`; mapping `Keys.A..Z` records Arabic as Latin.
 - Verify the decompressed recorder resource against the intended executable. A successful build packed the package manager's forwarding executable. A successful recorder shutdown test exercises process lifecycle, while a portable acceptance test must produce and reopen a recording on a clean machine.
 - **Passing tests describe the artifact that ran.** Record the tested build or source ZIP, verify an extracted source tree, and smoke-test the exact release executable. Keep later workspace changes and provider tests with stand-ins distinct from shipped and live evidence.
 - **The capture test passed against an old executable in the workspace.** Use the current test-build filename and

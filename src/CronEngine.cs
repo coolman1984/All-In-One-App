@@ -23,6 +23,7 @@ namespace StickyPro
         public bool enabled = true;
         public string last_run_utc = "";
         public string last_hash = "";
+        public string last_check_utc = ""; // last scheduled evaluation, even when it stayed [SILENT]
         public bool one_shot;
     }
 
@@ -139,10 +140,14 @@ namespace StickyPro
             {
                 if (!File.Exists(JobsFile)) return new List<CronJob>();
                 var list = Js.Deserialize<List<CronJob>>(File.ReadAllText(JobsFile, Encoding.UTF8));
+                if (list != null) list.RemoveAll(j => j == null);
                 return list ?? new List<CronJob>();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // Keep a copy of the unreadable file: the next save would otherwise replace every saved routine.
+                App.Log("Cron jobs file unreadable: " + ex.Message);
+                try { File.Copy(JobsFile, JobsFile + ".broken-" + DateTime.Now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture), true); } catch (Exception) { }
                 return new List<CronJob>();
             }
         }
@@ -305,7 +310,17 @@ namespace StickyPro
                 var job = jobs[i];
                 if (job == null || !job.enabled) continue;
                 if (!IsJobDue(job, nowUtc)) continue;
-                results.Add(EvaluateJob(job, false));
+                Dictionary<string, object> res;
+                try { res = EvaluateJob(job, false); }
+                catch (Exception ex)
+                {
+                    App.Log("Cron job " + job.id + ": " + ex.Message);
+                    res = new Dictionary<string, object> { { "job_id", job.id }, { "name", job.name }, { "triggered", false }, { "status", "ERROR" }, { "reason", ex.Message } };
+                }
+                results.Add(res);
+                // A silent (or failed) check still counts as this interval's check: without this, a job whose
+                // pre-check stays quiet would be re-evaluated on every 1-minute tick instead of on its schedule.
+                if (!true.Equals(res.ContainsKey("triggered") ? res["triggered"] : null)) MarkChecked(job.id);
             }
             return results;
         }
@@ -697,8 +712,13 @@ namespace StickyPro
                 {
                     foreach (var p in list)
                     {
-                        if (!string.IsNullOrWhiteSpace(p) && Directory.Exists(p))
-                            AttachWatcherLocked(Path.GetFullPath(p.Trim()));
+                        // One offline/denied folder must not stop the others from being watched again.
+                        try
+                        {
+                            if (!string.IsNullOrWhiteSpace(p) && Directory.Exists(p))
+                                AttachWatcherLocked(Path.GetFullPath(p.Trim()));
+                        }
+                        catch (Exception ex) { App.Log("Cron watch restore " + p + ": " + ex.Message); }
                     }
                 }
             }
@@ -716,7 +736,8 @@ namespace StickyPro
             w.Created += OnWatchEvent;
             w.Changed += OnWatchEvent;
             w.Renamed += OnWatchRename;
-            w.Error += delegate { };
+            // Buffer overflow or a dropped network share turns the watcher off silently: switch it back on.
+            w.Error += delegate { try { w.EnableRaisingEvents = false; w.EnableRaisingEvents = true; } catch (Exception) { } };
             w.EnableRaisingEvents = true;
             watchers[fullPath] = w;
         }
@@ -790,11 +811,15 @@ namespace StickyPro
 
             for (int i = 0; i < ready.Count; i++)
             {
-                if (File.Exists(ready[i]))
+                try
                 {
-                    Interlocked.Increment(ref recentWatchedEvents);
-                    SqliteVault.QueueExtract(ready[i]);
+                    if (File.Exists(ready[i]))
+                    {
+                        Interlocked.Increment(ref recentWatchedEvents);
+                        SqliteVault.QueueExtract(ready[i]);
+                    }
                 }
+                catch (Exception ex) { App.Log("Cron watch queue: " + ex.Message); }
             }
         }
 
@@ -815,12 +840,35 @@ namespace StickyPro
             throw new ArgumentException("Invalid schedule \"" + sched + "\". Use every:15m, daily:08:00, or once:YYYY-MM-DDTHH:mm.");
         }
 
+        static void MarkChecked(string id)
+        {
+            try
+            {
+                lock (stateLock)
+                {
+                    var jobs = LoadJobsLocked();
+                    var stored = jobs.FirstOrDefault(j => string.Equals(j.id, id, StringComparison.OrdinalIgnoreCase));
+                    if (stored == null) return;
+                    stored.last_check_utc = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+                    SaveJobsLocked(jobs);
+                }
+            }
+            catch (Exception ex) { App.Log("Cron mark checked: " + ex.Message); }
+        }
+
         static bool IsJobDue(CronJob job, DateTime nowUtc)
         {
             string sched = (job.schedule ?? "").Trim();
             DateTime lastRunUtc = DateTime.MinValue;
             if (!string.IsNullOrWhiteSpace(job.last_run_utc))
                 DateTime.TryParse(job.last_run_utc, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out lastRunUtc);
+
+            // every/daily: the last evaluation (triggered or silent) sets the next due time. once: only a real run ends it.
+            DateTime lastSeenUtc = lastRunUtc;
+            DateTime checkUtc;
+            if (!string.IsNullOrWhiteSpace(job.last_check_utc) &&
+                DateTime.TryParse(job.last_check_utc, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out checkUtc) &&
+                checkUtc > lastSeenUtc) lastSeenUtc = checkUtc;
 
             var mEvery = Regex.Match(sched, @"^every:(\d+)([smhd])$", RegexOptions.IgnoreCase);
             if (mEvery.Success)
@@ -831,7 +879,7 @@ namespace StickyPro
                     : u == 'm' ? TimeSpan.FromMinutes(Math.Max(1, n))
                     : u == 'h' ? TimeSpan.FromHours(Math.Max(1, n))
                     : TimeSpan.FromDays(Math.Max(1, n));
-                return lastRunUtc == DateTime.MinValue || (nowUtc - lastRunUtc) >= interval;
+                return lastSeenUtc == DateTime.MinValue || (nowUtc - lastSeenUtc) >= interval;
             }
 
             var mDaily = Regex.Match(sched, @"^daily:(\d{1,2}):(\d{2})$", RegexOptions.IgnoreCase);
@@ -842,7 +890,7 @@ namespace StickyPro
                 DateTime nowLocal = DateTime.Now;
                 DateTime todayTarget = new DateTime(nowLocal.Year, nowLocal.Month, nowLocal.Day, hh, mm, 0);
                 if (nowLocal < todayTarget) return false;
-                return lastRunUtc == DateTime.MinValue || lastRunUtc.ToLocalTime() < todayTarget;
+                return lastSeenUtc == DateTime.MinValue || lastSeenUtc.ToLocalTime() < todayTarget;
             }
 
             if (sched.StartsWith("once:", StringComparison.OrdinalIgnoreCase))

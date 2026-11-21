@@ -2,6 +2,25 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-21 — Deep code review of Phases 1–4: 12 real bugs fixed (source only, not yet Windows-tested)
+
+- Asked: review the code deeply, find every problem, and fix it.
+- Method: compiled all 120 `src/*.cs` files with Mono `mcs -langversion:5` (C# 5 check, same refs as `build.ps1` + `System.Xml.Linq`), then read the new Phase 1–4 code (vault, cron, recorder, MCP tools) and the saved-work paths.
+- Fixed:
+  - **Data loss — `explorer_action move`** (`ApiTools.cs`): moving a folder into its own parent deleted the source permanently (it was the "existing target"). Now: same path = no-op, folder-into-itself refused, an existing target goes to the Recycle Bin, cross-drive folder move = copy + recycle. `delete_recycle` no longer falls back to a permanent delete.
+  - **`process_kill` by pid** skipped the protected/critical-process check (name only). Now checked for pids too.
+  - **Cron jobs file** (`CronEngine.cs`): an unreadable `jobs.json` read as empty and the next save wiped every routine. Now a `.broken-<time>` copy is kept first.
+  - **Cron ran quiet jobs every minute**: silent pre-checks never moved the schedule. New `last_check_utc` sets the next due time for `every:` / `daily:`.
+  - **Cron routines never ran their prompt**: `JobTriggered` had no listener. The Assistant panel now sends the routine prompt (skipped with a status line while busy).
+  - Cron watch hooks: one bad folder no longer stops the others from being restored; watchers re-arm after an error; debounce queue errors are caught.
+  - **Office extraction timeout race** (`OfficeCom.cs`): the timed-out worker kept filling the same object that was being ingested. Now an error-only copy is returned.
+  - **SQLite vault** (`SqliteVault.cs`): a failed schema init left a half-open handle; now closed and rethrown. P/Invoke uses `StdCall` (winsqlite3's convention; same on x64, correct on x86).
+  - **Recorder** (`WorkflowRecorder.cs`): hook events ran on separate thread-pool items, so typed letters and steps could be shuffled. Now one ordered worker; `Stop` waits (max 3 s) for queued steps. Typed text uses the focused app's keyboard layout (Arabic, symbols, shifted digits) via `ToUnicodeEx` flag 4.
+  - **Markdown notes** (`MarkdownPage.cs`): saves are crash-safe (temp + swap, new `DataFiles.WriteAllTextAtomic`), and a note changed outside the app since opening is kept as `<name> (outside change <time>).md` instead of being overwritten. Chrome bookmarks save uses the same atomic write.
+  - HERDR pane read errors now include the tool's error text.
+- Proof: `mcs -langversion:5` build of all sources succeeds (0 errors; warnings 19 → 18, none new). No Windows run: the PowerShell test suites, `build.ps1` and live desktop checks were **not** run in this Linux session.
+- Open: run `tools/test-all.ps1` (esp. `test-workflow-recorder`, `test-hermes-memory`, `test-sqlite-vault`) and an Arabic-typing recorder check on Windows, then sync `main`.
+
 ## 2026-11-21 — Autonomous Assistant Companion ("الـ Agent العام") — All 4 Phases (100%) complete, self-contained AllInOne.exe built & synced to GitHub main
 
 - Asked to plan and execute all 4 phases in order in root `IMPLEMENTATION_PLAN.md`, embed studio-grade Anti-AI-Slop design skills, add a Visual-First Live Communication Canvas in `Browser`, add 2 new Light+Dark app themes (`Atelier` & `Nordic`) with a full visual screenshot audit, implement the Show-Me-Once workflow recorder and all remaining Zero-Exit PC MCP tools, build and verify self-contained zero-install `AllInOne.exe`, and keep GitHub `origin/main` synced after every verified milestone.

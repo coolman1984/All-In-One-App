@@ -428,7 +428,7 @@ namespace StickyPro
                 string bdir = Path.Combine(Store.Dir, "chrome-backups"); Directory.CreateDirectory(bdir);
                 File.Copy(file, Path.Combine(bdir, Profile + " Bookmarks " + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json"), true);
                 doc.Remove("checksum");
-                File.WriteAllText(file, Js.Serialize(doc), new UTF8Encoding(false));
+                DataFiles.WriteAllTextAtomic(file, Js.Serialize(doc), new UTF8Encoding(false));
                 dirty = false; UpdateDirty();
                 status("Bookmarks saved to Chrome. Backup in data\\chrome-backups.");
             }

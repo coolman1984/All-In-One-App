@@ -42,6 +42,28 @@ namespace StickyPro
 
     static class DataFiles
     {
+        // Crash-safe save of a user file: write a temp file next to it, then swap it in. A crash or full disk
+        // mid-write leaves the old file intact instead of an empty or half-written one. Falls back to a plain
+        // write where the swap is not possible (some network or sync folders).
+        public static void WriteAllTextAtomic(string path, string text, System.Text.Encoding encoding)
+        {
+            string dir = Path.GetDirectoryName(Path.GetFullPath(path));
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            if (!File.Exists(path)) { File.WriteAllText(path, text ?? "", encoding); return; }
+            string tmp = Path.Combine(dir ?? "", "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N").Substring(0, 6) + ".tmp");
+            try
+            {
+                File.WriteAllText(tmp, text ?? "", encoding);
+                File.Replace(tmp, path, null, true);
+            }
+            catch (Exception ex)
+            {
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+                if (ex is UnauthorizedAccessException && (File.GetAttributes(path) & FileAttributes.ReadOnly) != 0) throw;
+                File.WriteAllText(path, text ?? "", encoding);
+            }
+        }
+
         static string Full(string path) { return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar; }
         public static void CheckSeparate(string from, string to)
         {
