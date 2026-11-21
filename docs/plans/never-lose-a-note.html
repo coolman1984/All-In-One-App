@@ -1,0 +1,299 @@
+<title>متضيعش ملاحظة تاني</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Noto+Kufi+Arabic:wght@600;700;800&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: one reading column (blog post) with a sticky section bar; summary cards under the hero. Palette follows the app's own "Flow" look. */
+:root {
+  --canvas: #F5F7FC;
+  --paper: #FFFFFF;
+  --ink: #1B2333;
+  --muted: #5B667A;
+  --line: #E1E6F0;
+  --accent: #2F66F6;
+  --accent-soft: #EAF1FF;
+  --danger: #C2412D;
+  --danger-soft: #FCEDEA;
+  --safe: #1F8A5B;
+  --safe-soft: #E6F5EE;
+  --warn-soft: #FFF6DB;
+  --warn-ink: #7A5A00;
+  --f-display: "Noto Kufi Arabic", "Segoe UI", Tahoma, sans-serif;
+  --f-body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --f-mono: "JetBrains Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0F1420; --paper: #171E2D; --ink: #E7ECF6; --muted: #9AA6BC; --line: #273149;
+    --accent: #6E95FF; --accent-soft: #1C2A4D; --danger: #F08A76; --danger-soft: #3A1E1A;
+    --safe: #5CC898; --safe-soft: #16302A; --warn-soft: #3A3115; --warn-ink: #F2D27A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #0F1420; --paper: #171E2D; --ink: #E7ECF6; --muted: #9AA6BC; --line: #273149;
+  --accent: #6E95FF; --accent-soft: #1C2A4D; --danger: #F08A76; --danger-soft: #3A1E1A;
+  --safe: #5CC898; --safe-soft: #16302A; --warn-soft: #3A3115; --warn-ink: #F2D27A; color-scheme: dark;
+}
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--canvas); color: var(--ink); font-family: var(--f-body); font-size: 17px; line-height: 1.9; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1040px; margin: 0 auto; }
+.col { max-width: 720px; }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; align-items: center; gap: 20px; min-height: 58px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-weight: 700; font-size: 15px; white-space: nowrap; }
+.brand i { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); display: inline-block; position: relative; }
+.brand i::after { content: ""; position: absolute; inset: 7px 6px; border-radius: 3px; background: var(--paper); opacity: .85; }
+.brand span { color: var(--muted); font-weight: 600; font-size: 13px; }
+.bar nav { display: flex; gap: 18px; overflow-x: auto; margin-inline-start: auto; scrollbar-width: none; }
+.bar nav a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; padding-block: 6px; }
+.bar nav a:hover, .bar nav a:focus-visible { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+/* hero */
+.hero { padding-block: 56px 28px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+.pill { display: inline-flex; align-items: center; gap: 8px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 4px 14px; font-weight: 600; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: clamp(32px, 6vw, 56px); line-height: 1.35; margin: 22px 0 18px; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--accent); }
+.lede { font-size: 19px; color: var(--muted); margin: 0; }
+
+/* summary cards */
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding-block: 8px 40px; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
+.card small { display: block; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.card b { display: block; font-family: var(--f-display); font-size: 17px; margin: 6px 0 4px; }
+.card p { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); }
+@media (max-width: 860px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 460px) { .cards { grid-template-columns: 1fr; } }
+
+/* article */
+article { padding-block: 8px 72px; }
+section { padding-block: 26px; border-top: 1px solid var(--line); scroll-margin-top: 80px; }
+h2 { font-family: var(--f-display); font-size: 26px; line-height: 1.5; margin: 0 0 10px; text-wrap: balance; }
+h3 { font-family: var(--f-display); font-size: 18px; margin: 22px 0 6px; }
+p { margin: 0 0 14px; }
+.kicker { font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 4px; display: block; }
+
+/* loss timeline */
+.steps { list-style: none; margin: 18px 0; padding: 0; display: grid; gap: 0; counter-reset: s; }
+.steps li { counter-increment: s; position: relative; padding: 4px 52px 18px 0; min-width: 0; }
+.steps li::before { content: counter(s, arabic-indic); position: absolute; right: 0; top: 2px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--paper); border: 2px solid var(--line); font-weight: 600; font-size: 15px; }
+.steps li::after { content: ""; position: absolute; right: 17px; top: 38px; bottom: 0; width: 2px; background: var(--line); }
+.steps li:last-child::after { display: none; }
+.steps li.bad::before { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+.steps b { display: block; }
+.steps span { color: var(--muted); font-size: 15px; }
+
+/* three-way split */
+.split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0 6px; }
+.split div { border-radius: 12px; padding: 14px 16px; background: var(--paper); border: 1px solid var(--line); min-width: 0; }
+.split b { font-family: var(--f-display); font-size: 15px; display: block; }
+.split p { margin: 6px 0 0; font-size: 14px; line-height: 1.7; color: var(--muted); }
+.split .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 8px; margin-top: 8px; }
+.t-safe { background: var(--safe-soft); color: var(--safe); }
+.t-acc { background: var(--accent-soft); color: var(--accent); }
+.t-bad { background: var(--danger-soft); color: var(--danger); }
+@media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+
+/* traps */
+.trap { border-inline-start: 3px solid var(--danger); padding: 2px 16px 2px 0; margin: 16px 0; }
+.trap b { display: block; }
+.trap p { margin: 2px 0 0; color: var(--muted); font-size: 15.5px; }
+
+/* contract table */
+.tbl { overflow-x: auto; margin: 14px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: right; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--canvas); }
+td.num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+/* mock banner */
+.mock { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--paper); margin: 14px 0; }
+.mock .warn { background: var(--warn-soft); color: var(--warn-ink); padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14.5px; }
+.mock .warn button { margin-inline-start: auto; font: inherit; font-weight: 600; font-size: 13.5px; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 8px; padding: 3px 12px; cursor: pointer; }
+.mock .rows { padding: 12px 14px; display: grid; gap: 8px; font-size: 14px; }
+.mock .row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--line); padding-bottom: 8px; }
+.mock .row:last-child { border-bottom: 0; padding-bottom: 0; }
+.mock .row a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.mock-cap { font-size: 13px; color: var(--muted); }
+
+/* phases */
+.phases { display: grid; gap: 10px; margin: 14px 0; }
+.phase { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 14px; align-items: start; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.phase small { font-weight: 600; color: var(--accent); font-size: 13px; padding-top: 3px; }
+.phase b { display: block; }
+.phase p { margin: 2px 0 0; font-size: 15px; color: var(--muted); }
+
+ul.plain { padding-right: 20px; margin: 8px 0 14px; }
+ul.plain li { margin-bottom: 6px; }
+code { font-family: var(--f-mono); font-size: .82em; background: var(--accent-soft); color: var(--ink); padding: 1px 6px; border-radius: 5px; direction: ltr; unicode-bidi: isolate; }
+.refs { font-size: 14px; color: var(--muted); }
+footer { border-top: 1px solid var(--line); padding-block: 22px 40px; font-size: 13px; color: var(--muted); }
+</style>
+
+<div dir="rtl" lang="ar">
+<header class="bar gutter">
+  <div class="wrap">
+    <div class="brand"><i aria-hidden="true"></i>أول إن ون <span>/ خطة هندسية</span></div>
+    <nav aria-label="أقسام الخطة">
+      <a href="#story">الحكاية</a>
+      <a href="#workflow">الحل</a>
+      <a href="#architecture">من جوه</a>
+      <a href="#traps">الفخاخ</a>
+      <a href="#contract">الوعود والحدود</a>
+      <a href="#surface">اللي هتشوفه</a>
+      <a href="#tests">التأكد</a>
+    </nav>
+  </div>
+</header>
+
+<main class="gutter">
+  <div class="wrap">
+    <div class="hero">
+      <div class="meta"><span class="pill">خطة هندسية · المراجعة ١</span><span>حماية البيانات عند الفتح</span><span>·</span><span>قراية ٧ دقايق</span></div>
+      <h1>متضيعش ملاحظة تاني: <em>فتح آمن</em> لبيانات أول إن ون</h1>
+      <p class="lede col">فتحت جهازك الصبح، والون درايف لسه بيزامن فولدر البيانات. البرنامج اشتغل ولقى ملاحظاتك فاضية. كتبت ملاحظة صغيرة وكملت يومك. بعد حفظتين، كل ملاحظاتك القديمة اتمسحت من غير ولا كلمة تحذير. دي خطتنا اللي تمنع ده نهائي: البرنامج يفرّق بين «مفيش ملف» و«الملف مشغول» و«الملف بايظ»، ومش هيكتب أبداً فوق ملف ماقدرش يقراه، ويحتفظ بنسخة يومية ترجعلها في أي وقت.</p>
+    </div>
+
+    <div class="cards" aria-label="الخلاصة">
+      <div class="card"><small>السلوك الافتراضي</small><b>شغّال لوحده</b><p>مفيش إعداد تفعّله. الحماية دايماً موجودة.</p></div>
+      <div class="card"><small>الوعد الأساسي</small><b>مفيش كتابة على ملف مقريش</b><p>أي ملف فشلنا نقراه يتقفل للكتابة لحد ما يتفتح صح.</p></div>
+      <div class="card"><small>التاريخ</small><b>آخر ١٠ أيام</b><p>نسخة واحدة كل يوم من ملفات البيانات، ترجعلها بضغطة.</p></div>
+      <div class="card"><small>سرعة الفتح</small><b>أقصى انتظار ٥ ثواني</b><p>في أسوأ حالة بس، ولكل الملفات مع بعض مش لكل ملف.</p></div>
+    </div>
+
+    <article class="col">
+      <section id="story">
+        <span class="kicker">الحكاية</span>
+        <h2>إزاي البيانات بتضيع النهارده</h2>
+        <p>البرنامج بيحفظ كل قسم في ملف لوحده: الملاحظات، المهام، البرومبتات، الحافظة، الإعدادات. وكل ملف معاه نسخة احتياطية واحدة. المشكلة إن البرنامج لما يفشل يقرا الملف، مابيعرفش ليه فشل. فبيعامل «الملف مشغول ثانيتين» زي «مفيش ملف أصلاً». والنتيجة:</p>
+        <ol class="steps">
+          <li><b>برنامج تاني ماسك الملف لحظة الفتح</b><span>الون درايف بيزامن، أو مضاد الفيروسات بيفحص. ده بيحصل كتير على أجهزة العملاء.</span></li>
+          <li><b>البرنامج يحاول النسخة الاحتياطية ويفشل برضه</b><span>غالباً ماسك الاتنين مع بعض، أو الاحتياطي مش موجود.</span></li>
+          <li class="bad"><b>يبدأ القسم فاضي من غير ما يقولك</b><span>بيعتبر إن مفيش بيانات، ويكمل عادي.</span></li>
+          <li class="bad"><b>أول تعديل يحفظ القايمة الفاضية فوق ملفك</b><span>بياناتك الحقيقية اتنقلت للنسخة الاحتياطية. لسه ممكن ترجع، بس إنت متعرفش.</span></li>
+          <li class="bad"><b>تاني حفظة تكتب فوق النسخة الاحتياطية</b><span>كده ضاعت خالص. ومفيش سطر في السجل غير «مقدرتش أقرا الملف».</span></li>
+        </ol>
+        <p>وفيه نسخة أهدى من نفس المشكلة: لو الملف الأصلي مشغول والاحتياطي اتقرا صح، البرنامج بيفتح على الاحتياطي (وهو أقدم بحفظة)، وأول حفظ بيكتبه فوق الأصلي. كده آخر تعديلاتك بتضيع في صمت.</p>
+      </section>
+
+      <section id="workflow">
+        <span class="kicker">الحل</span>
+        <h2>البرنامج يسأل «ليه فشلت؟» قبل ما يكمل</h2>
+        <p>عند الفتح، كل ملف ياخد واحدة من تلات حالات، ولكل حالة تصرّف مختلف:</p>
+        <div class="split">
+          <div><b>الملف مش موجود</b><p>أول تشغيل، أو قسم جديد. نبدأ فاضي عادي.</p><span class="tag t-safe">نبدأ فاضي</span></div>
+          <div><b>الملف مشغول</b><p>برنامج تاني ماسكه. نستنى شوية ونجرب تاني. لو فضل مشغول، القسم يشتغل للقراية بس.</p><span class="tag t-acc">نستنى ونحمي</span></div>
+          <div><b>الملف بايظ</b><p>الكلام اللي جواه مش مفهوم. ناخد منه نسخة باسم «مكسور» ونفتح الاحتياطي.</p><span class="tag t-bad">نرجع للاحتياطي</span></div>
+        </div>
+        <h3>وبعد الفتح، تلات حمايات زيادة</h3>
+        <ul class="plain">
+          <li><b>قفل الكتابة:</b> أي قسم ملفه موجود وفيه بيانات وماقدرناش نقراه، البرنامج عمره ما يكتب فوقه. القسم يشتغل، وشريط تنبيه يقولك اللي حصل ومعاه زرار «حاول تاني».</li>
+          <li><b>لقطة يومية:</b> أول حفظ في اليوم ياخد نسخة من ملفات البيانات في فولدر «اللقطات». بنحتفظ بآخر ١٠ أيام.</li>
+          <li><b>حارس الانكماش:</b> لو حفظة جديدة هتصغّر قايمة لأقل من نصها، والمسح ده مش إنت اللي عملته، بناخد لقطة قبل الكتابة.</li>
+        </ul>
+      </section>
+
+      <section id="architecture">
+        <span class="kicker">من جوه</span>
+        <h2>فين بالظبط هنغيّر</h2>
+        <p>التغيير كله في مكانين في ملف البيانات: دالة القراية ودالة الكتابة. باقي البرنامج مش هيحس بحاجة.</p>
+        <h3>١. القراية بتقول النتيجة بالتفصيل</h3>
+        <p>بدل ما ترجع «لقيت بيانات» أو «لأ»، ترجع واحدة من أربع: اتقرا، مش موجود، مشغول، بايظ. والفتح نفسه بيسمح لبرامج تانية تكون ماسكة الملف، فنقرا حتى وهو مفتوح عند الون درايف في أغلب الحالات.</p>
+        <h3>٢. ميزانية انتظار واحدة لكل الملفات</h3>
+        <p>الملف المشغول ناخد له محاولات بفواصل بتكبر (١٠٠، ٢٠٠، ٤٠٠ ملي ثانية…). كل الملفات بتسحب من نفس الرصيد: ٥ ثواني إجمالي. لو الرصيد خلص، اللي لسه مشغول يتقفل للكتابة ويكمل الفتح.</p>
+        <h3>٣. قايمة «ممنوع الكتابة»</h3>
+        <p>جنب قايمة «اترجعنا للاحتياطي» الموجودة النهارده، قايمة جديدة للملفات المقفولة. دالة الكتابة بتبص فيها الأول، ولو الملف فيها بتسيب التعديل في الذاكرة وتعلّم إنه لسه محتاج حفظ، من غير ما تلمس الديسك. «حاول تاني» يقرا الملف من جديد ويدمج اللي اتعمل في الجلسة لو ده آمن.</p>
+        <h3>٤. اللقطات</h3>
+        <p>فولدر «اللقطات» جوه فولدر البيانات. كل لقطة فولدر باسم التاريخ فيه ملفات البيانات النصية بس من غير الصور. نفس أداة النسخ اللي بيستخدمها النسخ الاحتياطي اليدوي، فمفيش كود نسخ جديد.</p>
+      </section>
+
+      <section id="traps">
+        <span class="kicker">الفخاخ</span>
+        <h2>حاجات سهل تتعمل غلط</h2>
+        <div class="trap"><b>«مشغول» مش زي «بايظ»</b><p>لو عاملنا الملف المشغول على إنه بايظ، هنفتح الاحتياطي القديم ونكتبه فوق الجديد. ده بالظبط الخطأ الهادي اللي بنصلّحه.</p></div>
+        <div class="trap"><b>انتظار لكل ملف يبطّأ الفتح جداً</b><p>عندنا ١١ ملف. لو كل واحد استنى ٣ ثواني، الفتح ممكن ياخد أكتر من نص دقيقة. عشان كده الرصيد واحد ومشترك.</p></div>
+        <div class="trap"><b>متقفلش البرنامج كله عشان ملف واحد</b><p>لو ملف الحافظة مشغول، الملاحظات والمهام يفضلوا شغالين عادي. الحماية لكل قسم لوحده.</p></div>
+        <div class="trap"><b>نسخة احتياطية واحدة بتعيش حفظة واحدة</b><p>عشان كده اللقطة اليومية مش رفاهية. هي اللي بتلحق المشاكل اللي بتتكتشف بعد يوم أو اتنين.</p></div>
+        <div class="trap"><b>اللقطات ممكن تاكل مساحة</b><p>سجل النشاط وسجل الحافظة كبار. عشان كده الصور برّه اللقطة، والعدد محدود بـ ١٠.</p></div>
+        <div class="trap"><b>الإعدادات حالة خاصة</b><p>لو ملف الإعدادات اتقفل للكتابة، أي تغيير في الإعدادات الجلسة دي هيتنسي بعد القفل. لازم الشريط يقول ده بوضوح.</p></div>
+      </section>
+
+      <section id="contract">
+        <span class="kicker">الوعود والحدود</span>
+        <h2>الأرقام اللي بنلتزم بيها</h2>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>البند</th><th>القيمة</th><th>ليه</th></tr></thead>
+            <tbody>
+              <tr><td>كتابة على ملف ماتقراش</td><td class="num">أبداً</td><td>ده الوعد الأساسي للخطة كلها.</td></tr>
+              <tr><td>رصيد الانتظار عند الفتح</td><td class="num">٥ ثواني</td><td>كفاية لمزامنة الون درايف العادية، ومش بيحس بيها المستخدم غير في الحالة السيئة.</td></tr>
+              <tr><td>عدد اللقطات</td><td class="num">١٠</td><td>واحدة في اليوم، يعني أسبوع ونص تقريباً.</td></tr>
+              <tr><td>حارس الانكماش</td><td class="num">أقل من النص</td><td>المسح العادي نادراً يشيل نص القايمة مرة واحدة.</td></tr>
+              <tr><td>رسايل السجل</td><td class="num">سطر لكل ملف</td><td>من غير تكرار كل محاولة.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><b>برّه الخطة دي:</b> محادثات الوكلاء ليها حفظ لوحدها وحماية قريبة من دي. هتاخد نفس القواعد في مرحلة تالتة، بعد ما الجزء الأساسي يثبت.</p>
+      </section>
+
+      <section id="surface">
+        <span class="kicker">اللي هتشوفه إنت</span>
+        <h2>شريط واحد ومكان واحد للرجوع</h2>
+        <div class="mock" aria-label="شكل تقريبي">
+          <div class="warn"><span>⚠️ ماقدرناش نفتح ملاحظاتك لأن برنامج تاني ماسكها. مش هنكتب عليها لحد ما تتفتح.</span><button type="button" id="mock-retry">حاول تاني</button></div>
+          <div class="rows">
+            <div class="row"><span>الإعدادات ← النسخ الاحتياطي ← النسخ اليومية</span></div>
+            <div class="row"><span>٢٠ نوفمبر</span><a href="#surface">رجّع</a></div>
+            <div class="row"><span>١٩ نوفمبر</span><a href="#surface">رجّع</a></div>
+            <div class="row"><span>١٨ نوفمبر</span><a href="#surface">رجّع</a></div>
+          </div>
+        </div>
+        <p class="mock-cap">شكل تقريبي للفكرة، مش التصميم النهائي.</p>
+        <p>الرجوع لنسخة يومية بيشتغل زي الاسترجاع الموجود النهارده: البيانات الحالية بتتحفظ جنبها الأول، وبعدين البرنامج يعيد التشغيل.</p>
+      </section>
+
+      <section id="tests">
+        <span class="kicker">التأكد</span>
+        <h2>إزاي نعرف إنها شغالة</h2>
+        <p>اختبار جديد لحماية البيانات، يشتغل على فولدر بيانات مؤقت عشان مايلمسش بياناتك:</p>
+        <ul class="plain">
+          <li><b>ملف مشغول:</b> نمسك ملف الملاحظات طول الفتح، نعدّل ملاحظة، ونتأكد إن الملف الأصلي والاحتياطي متلمسوش وإن الشريط ظهر.</li>
+          <li><b>مشغول ثانيتين بس:</b> نسيبه بعد ثانيتين، ونتأكد إن البيانات اتقرت كاملة من غير شريط.</li>
+          <li><b>ملف بايظ:</b> احتياطي سليم، فيفتح منه، والبايظ يتحفظ باسم «مكسور».</li>
+          <li><b>أول تشغيل:</b> مفيش ملفات، يبدأ فاضي من غير أي تنبيه.</li>
+          <li><b>اللقطات:</b> نحاكي ١٢ يوم ونتأكد إن فاضل ١٠ بالظبط ومفيهمش صور.</li>
+          <li><b>السرعة:</b> كل الملفات مشغولة، والفتح يخلص في حدود ٥ ثواني.</li>
+        </ul>
+        <p>وبعدها كل الاختبارات الحالية لازم تعدّي زي ما هي.</p>
+        <h3>الترتيب</h3>
+        <div class="phases">
+          <div class="phase"><small>المرحلة ١</small><div><b>القراية الذكية وقفل الكتابة والشريط</b><p>صغيرة، وبتقفل الخطر الأكبر لوحدها.</p></div></div>
+          <div class="phase"><small>المرحلة ٢</small><div><b>اللقطات اليومية وحارس الانكماش وصفحة الرجوع</b><p>شبكة أمان للمشاكل اللي بتتكتشف متأخر.</p></div></div>
+          <div class="phase"><small>المرحلة ٣</small><div><b>نفس القواعد لمحادثات الوكلاء</b><p>بعد ما المرحلتين الأولانيين يثبتوا على جهازك.</p></div></div>
+        </div>
+      </section>
+
+      <section>
+        <p class="refs">مراجع في الكود: دالة القراية <code>src/Data.cs:494</code> · دالة الكتابة <code>src/Data.cs:516</code> · الفتح <code>src/Data.cs:313</code> · النسخ الاحتياطي <code>src/Backup.cs</code> · بند المراجعة المفتوح في <code>HISTORY.md</code> بتاريخ ٢٠ نوفمبر.</p>
+      </section>
+    </article>
+  </div>
+</main>
+
+<footer class="gutter"><div class="wrap">خطة أول إن ون · المراجعة ١ · ٢٠ نوفمبر ٢٠٢٦ · محتاجة موافقتك قبل التنفيذ</div></footer>
+</div>
+
+<script>
+  (function () {
+    var b = document.getElementById('mock-retry');
+    if (b) b.addEventListener('click', function () { b.textContent = 'بنحاول…'; setTimeout(function () { b.textContent = 'حاول تاني'; }, 1200); });
+  })();
+</script>
