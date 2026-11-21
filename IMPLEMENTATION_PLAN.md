@@ -184,6 +184,59 @@ Turn **All in One** into an ultra-fast, native Windows desktop workspace where t
 
 ---
 
+## 2.5 Self-Contained Single-EXE Architecture & Packaging (`build.ps1` + `tools/make-dist.ps1`)
+
+### Packaging Goal (Zero-Install Clean-PC Experience)
+A user on a clean 64-bit Windows 10/11 PC MUST be able to copy `AllInOne.exe`, double-click it, and have **every feature work immediately with zero manual installs**.
+
+### Exact 6 Embedded Manifest Resources inside `AllInOne.exe`
+1. `webview2.Microsoft.Web.WebView2.Core.dll` — managed WebView2 Core SDK assembly.
+2. `webview2.Microsoft.Web.WebView2.WinForms.dll` — WinForms WebView2 control assembly.
+3. `webview2.WebView2Loader.dll` — native WebView2 x64 loader (unpacked on first use to `%LocalAppData%\AllInOne\webview2` via `Browser.cs` `AppDomain.AssemblyResolve` hook).
+4. `md.marked.js` — `lib\markdown\marked.umd.js` for 100% offline Markdown rendering (`MdWeb.cs`).
+5. `ChatSlides.pptx` — bundled PowerPoint export template (`ChatFiles.cs`).
+6. `tools.ffmpeg.exe.gz` — real standalone ~212 MB `ffmpeg.exe` gzip-compressed (~83 MB, cached in `build-cache\ffmpeg.exe.gz`, unpacked on first use to `%LocalAppData%\AllInOne\tools`).
+   - **CRITICAL GUARD (`LESSONS.md`):** Both `build.ps1` and `tools/make-dist.ps1` MUST dereference Scoop `.shim` files when locating `ffmpeg.exe` and MUST NEVER pack a 0.13 MB shim executable. Verify `tools.ffmpeg.exe.gz` decompressed size > 50 MB!
+
+### Built-In OS Capabilities Leveraged at 0 KB Extra Cost
+- **`C:\Windows\System32\winsqlite3.dll`** (Windows 10/11 native SQLite 3.53+ with WAL & FTS5) → powers `SqliteVault.cs` (`data\vault.db`).
+- **Windows 11 WebView2 Runtime** (preinstalled on modern Windows) → powers `Browser.cs`, `MdWeb.cs`, `DashboardGen.cs`.
+- **Windows `Windows.Media.Ocr.OcrEngine`** → powers `Snip.cs` OCR and fallback OCR for image-only PDFs.
+- **Windows `UIAutomationClient`** → powers Phase 4 `WorkflowRecorder.cs` and `uia_*` control tools.
+- **Installed Microsoft Office COM** (`Excel.Application`, `Word.Application`, `PowerPoint.Application`) → transparent decryption & live control for **NASCA DRM** corporate documents (`OfficeEdit.cs`, `OfficeCom.cs`).
+
+### Mandatory Phase 4 Post-Build Release Checks
+1. Inspect `Assembly.ReflectionOnlyLoadFrom("AllInOne.exe").GetManifestResourceNames()` — assert all 6 resources exist.
+2. Decompress `tools.ffmpeg.exe.gz` into a temp file and assert length > 50 MB (proving standalone binary, not Scoop shim).
+3. Run `AllInOne.exe --data <temp> --exit` (or clean startup then `--exit`) and verify zero `error.log` entries and clean mutex release.
+4. Run `powershell -ExecutionPolicy Bypass -File tools\make-dist.ps1` and verify `dist\All-in-One-portable.zip` contains the identical self-contained `AllInOne.exe` + `READ ME FIRST.txt`.
+
+---
+
+## 2.6 Completed vs. Remaining Inventory (As of Phases 1–3 Completion, Commit `81534c1`)
+
+### DONE — Phases 1–3 (75% Complete, 8 Test Suites Verified PASS ✓)
+- **Created Source & Harness Modules (6 files):**
+  - `src/AssistantHarness.cs` — Standalone companion identity, open-automation directives, Visual-First Live Canvas rule, 3-Tier Prompt Builder (`Stable → Context → Volatile`), Lean Subagents, `Activity` narration, isolated `data\assistant\chats\` paths, `SharedHarnessHint`, per-CLI MCP arg wiring.
+  - `src/OfficeCom.cs` — Live Excel (`ExcelQuickContext`, `ExcelInfo`, `ExcelRead`, `ExcelWrite`, `ExcelFormula`, `ExcelSheetAdd`, `ExcelFormat`), Word (`WordRead`, `WordWrite`), PowerPoint (`PptRead`, `PptWrite`), plus STA `en-US` background Bulk COM Extractor (`ExtractFile`, `ExtractFromLiveEditor`, direct CSV, Excel `UsedRange.Value2`, PowerPoint shared `POWERPNT` guard, PDF via Word COM with `DisableConvertPdfWarning` + PID timeout + FlateDecode fallback).
+  - `src/SqliteVault.cs` — Native x64 P/Invoke over `System32\winsqlite3.dll`, UTF-8 `SQLITE_TRANSIENT`, WAL + FTS5 (`3.53.4` verified), `vault_docs`, `vault_tables`, `vault_fts`, dynamic per-sheet SQL tables `data_<docId>_<sheetSlug>` for cross-report `SQL JOIN`, `(path, size, modified_ticks)` cache, deduped STA `QueueExtract`, `session_msgs` + `session_fts` (BM25 + 30-day Temporal Decay + MMR Jaccard > 0.75), `step_events` (`ForkAt`), `alert_dedup`.
+  - `src/AgentMemory.cs` — Auto-seeded `data\assistant\memory\` (`SOUL.md`, `USER.md`, `TOOLS.md`, `MEMORY.md`, `GOALS.md`, `HEARTBEAT.md`), today + yesterday `daily\YYYY-MM-DD.md`, per-session Frozen Snapshots, `skill_manage` + Progressive Disclosure, Dynamic Tool Registry + Creator Mode (`data\assistant\tools\*.json` hot-loaded into MCP for `sql`/`powershell`/`cmd`/`python`), `todo_plan`, boundary-safe `CompactChat` (`ProtectLastN=6`).
+  - `src/CronEngine.cs` — Single lightweight 60s `System.Threading.Timer`, `data\assistant\cron\jobs.json`, 0-token local pre-checks (`none`, `folder_changed`, `sql_nonzero`, `overdue_tasks`), `[SILENT]`, `alert_dedup`, idle-only `HEARTBEAT.md`/`GOALS.md` (`HEARTBEAT_OK`), `FileSystemWatcher` `watch_folder` hooks.
+  - `src/DashboardGen.cs` — `data\dashboards\` manager, `dashboard_publish`, `canvas_update` (`live-canvas.html` tab reuse via `BrowserPage.OpenOrReloadFile`), studio Obsidian/Warm-Paper shell.
+- **Modified Core Modules (12 files):** `src/Agents.cs`, `src/ApiTools.cs` (34 new Phase 1–3 MCP tools + dynamic tool hot-loading), `src/App.cs`, `src/Assistant.cs`, `src/Browser.cs`, `src/Chrome.cs`, `src/DocumentsPage.cs` (auto `QueueExtract` on Preview/Open), `src/Explorer.cs`, `src/LeaderTeam.cs`, `src/MainForm.cs` (20-page in-memory `PageContext` + live Excel keys), `src/OfficeEdit.cs`, `src/SystemPages.cs`.
+- **New Test Suites, Skills & Visual Docs:** `tools/test-assistant-harness.ps1`, `tools/test-office-com.ps1`, `tools/test-sqlite-vault.ps1`, `tools/test-hermes-memory.ps1`, `skills/anti-slop-web-design/SKILL.md`, `skills/workflow-to-automation/SKILL.md`, `skills/proactive-companion/SKILL.md`, `docs/architecture-visual.html`, `docs/implementation-plan.html`.
+
+### NOT DONE YET — Phase 4 Remaining Scope (25% Remaining)
+1. **`src/WorkflowRecorder.cs` + `tools/test-workflow-recorder.ps1`:** Implement active-only mouse/keyboard hook + `UIAutomationClient` `ElementFromPoint` (`ProcessName`, `WindowTitle`, `ControlType`, `AutomationId`, `Name`) + app context enrichment → `data\assistant\recordings\<id>\events.jsonl` + ~40 KB smart keyframe JPEGs with click reticle (zero video bloat). Add MCP tools `record_start`, `record_stop`, `record_status`, `record_list` + UI button in `Assistant.cs`.
+2. **2 New Studio App Designs (Light + Dark each):** Implement `atelier` (Light Warm Paper `#F4F0E8` / `#D94822`; Dark Obsidian `#0C0E13` / `#FF6238`) and `nordic` (Light Cool Mist `#F2F5F3` / `#0D8A64`; Dark Carbon Pine `#0D1311` / `#20C997`) across `src/Ui.cs`, `src/Data.cs`, `src/App.cs`, `src/LookPicker.cs`, `src/SettingsForm.cs`, `src/MainForm.cs`, `src/TopBar.cs`, `src/Dashboard.cs`, `src/NexusBoard.cs`, keeping `flow`, `serq`, `soft`, `nexus`, `classic` intact.
+3. **Remaining Zero-Exit PC MCP Tools (`src/ApiTools.cs`):** `explorer_list`, `explorer_action`, `system_processes`, `system_drives`, `process_kill`, `browser_cdp` (plus AXTree snapshot), `chrome_bookmarks`, `tagged_list`, `tagged_add`, `activity_recent`, `snip_ocr`, `app_screenshot`, `uia_inspect`, `uia_action`, `sessions_spawn` (async non-blocking with `maxSpawnDepth=2`), `sessions_status`.
+4. **Full Visual PNG Screenshot Audit (`tools/test-ui-sweep.ps1`):** Run across all 33 screens × looks (including `atelier` & `nordic` Light + Dark), **visually inspect the generated PNG contact sheets**, and fix every contrast/clipping/AI-slop defect.
+5. **Full Test Verification:** Run `tools/test-all.ps1` (with timeout guard on `test-agent-conversations.ps1` per `LESSONS.md`, or also fix its lingering exit handle!), plus `test-assistant-harness.ps1`, `test-office-com.ps1`, `test-sqlite-vault.ps1`, `test-hermes-memory.ps1`, and `test-workflow-recorder.ps1`.
+6. **Self-Contained Final Build & GitHub Sync:** Build `AllInOne.exe` via `build.ps1`, verify all 6 embedded resources + standalone `ffmpeg.exe.gz` (> 50 MB), smoke-test `--data <temp>`, update `IMPLEMENTATION_PLAN.md`, `HISTORY.md`, `LESSONS.md`, `docs/architecture-visual.html`, `docs/implementation-plan.html`, and push to `origin/main`.
+7. **Separate Open Reliability Plan (Unrelated to Phase 4 — Do Not Confuse):** `docs/plans/never-lose-a-note.html` (`Data.cs` transient-lock protection, awaiting separate owner approval).
+
+---
+
 ## 3. File Map (Modular, Low-Bloat Structure)
 
 | File | Type | Phase | Responsibility |

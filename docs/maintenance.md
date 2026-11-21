@@ -8,6 +8,10 @@ This app runs inside a closed, isolated corporate/factory local intranet behind 
 
 | Work area | Implementation | Isolated checks |
 |---|---|---|
+| Autonomous Assistant Companion & Harness | [Assistant.cs](../src/Assistant.cs), [AssistantHarness.cs](../src/AssistantHarness.cs) | [Assistant harness](../tools/test-assistant-harness.ps1) |
+| Live Office COM & Bulk Extractor | [OfficeCom.cs](../src/OfficeCom.cs), [OfficeEdit.cs](../src/OfficeEdit.cs) | [Office COM](../tools/test-office-com.ps1) |
+| SQLite Data Vault & Auto-Extraction | [SqliteVault.cs](../src/SqliteVault.cs), [DocumentsPage.cs](../src/DocumentsPage.cs) | [SQLite vault](../tools/test-sqlite-vault.ps1) |
+| Memory, Skills, Dynamic Tools, Cron & Live Canvas | [AgentMemory.cs](../src/AgentMemory.cs), [CronEngine.cs](../src/CronEngine.cs), [DashboardGen.cs](../src/DashboardGen.cs) | [Hermes memory](../tools/test-hermes-memory.ps1) |
 | Agent chat, drafts and transcript rendering | [Agents.cs](../src/Agents.cs), [ChatMarkdown.cs](../src/ChatMarkdown.cs) | [Agent conversations](../tools/test-agent-conversations.ps1), [saved work](../tools/test-saved-work.ps1) |
 | Generated chat files | [ChatFiles.cs](../src/ChatFiles.cs) and the bundled PowerPoint template | [Saved work](../tools/test-saved-work.ps1) |
 | Account selection and leader teams | [AgentAccounts.cs](../src/AgentAccounts.cs), [LeaderTeam.cs](../src/LeaderTeam.cs) | [Leader teams](../tools/test-leader-team.ps1) |
@@ -65,4 +69,4 @@ Write large or risky changes as a short plan page in `docs/plans/` and publish i
 
 The [customer map](customer-map.html) covers the screen routes, shared tools, dependencies and acceptance checks in Egyptian Arabic. The [November 20 audit](customer-audit.md) gives the evidence behind its findings. Keep the route IDs aligned with the sweep and the page constructors. The repository HTML loads `customer-map-tools.png` beside it. For a single-file handout, embed that PNG as a data URL in the HTML's `sprite` constant and verify the handout with networking disabled.
 
-The [project instructions](../AGENTS.md) make knowledge updates part of every task. [HISTORY.md](../HISTORY.md) is the record of what changed and how far verification went. [LESSONS.md](../LESSONS.md) captures proven causes and rules. [Project skills](../skills/README.md) hold procedures that should be reused. Update the relevant source when evidence changes.
+The [project instructions](../AGENTS.md) make knowledge updates part of every task. The root [implementation plan](../IMPLEMENTATION_PLAN.md) is the single authoritative technical roadmap and handoff spec, paired with the visual blueprints [architecture-visual.html](architecture-visual.html) and [implementation-plan.html](implementation-plan.html). [HISTORY.md](../HISTORY.md) is the record of what changed and how far verification went. [LESSONS.md](../LESSONS.md) captures proven causes and rules. [Project skills](../skills/README.md) hold procedures that should be reused. Update the relevant source when evidence changes.

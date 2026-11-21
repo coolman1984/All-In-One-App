@@ -167,7 +167,10 @@ Urgent / Review / Important (plus your own categories), add files or folders, dr
 move selected, notes, remove from list (files are never deleted).
 
 ## Data
-Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic `.bak` copy of each file.
+Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic `.bak` copy of each file, plus:
+- `data\vault.db` — native Windows SQLite (`winsqlite3.dll`, WAL mode + FTS5) storing auto-extracted Office/PDF tables (including NASCA DRM via COM), `session_fts`, `step_events`, and `alert_dedup`.
+- `data\assistant\` — isolated standalone Assistant Companion storage (`chats\`, `memory\` markdown files & daily logs, `skills\`, `tools\` dynamic MCP registry, `cron\jobs.json`).
+- `data\dashboards\` — interactive HTML dashboards and the `Live Canvas` rendered inside the embedded Browser.
 
 ## Interface and reliability
 - Main-window pages are created on first use and keep their state when you switch away. Unused tools do not allocate controls or start their page services. Closing windows no longer forces full garbage collection or empties the process working set.
@@ -189,7 +192,7 @@ Review checks (leave the running app open): `powershell -NoProfile -ExecutionPol
 
 ## Maintaining this project
 
-See the [maintenance guide](docs/maintenance.md) for code and test entry points and release checks. The [project instructions](AGENTS.md) explain how to keep the [history](HISTORY.md), [lessons](LESSONS.md) and [skills](skills/README.md) updated with every task.
+Read the authoritative [implementation plan](IMPLEMENTATION_PLAN.md) (plus visual guides [architecture-visual.html](docs/architecture-visual.html) and [implementation-plan.html](docs/implementation-plan.html)) before continuing architecture or companion work. See the [maintenance guide](docs/maintenance.md) for code and test entry points and release checks. The [project instructions](AGENTS.md) explain how to keep the [history](HISTORY.md), [lessons](LESSONS.md) and [skills](skills/README.md) updated with every task.
 
 ## Build
 `powershell -ExecutionPolicy Bypass -File build.ps1` (asks the running copy to save and exit, then rebuilds).
