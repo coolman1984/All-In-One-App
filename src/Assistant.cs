@@ -16,7 +16,7 @@ namespace StickyPro
         readonly MainForm main;
         readonly ComboBox chats;
         readonly FlowLayoutPanel modeBar;
-        readonly Button btnSolo, btnCouncil, btnLeader, btnTeam, btnWorkspace;
+        readonly Button btnSolo, btnCouncil, btnLeader, btnTeam, btnWorkspace, btnRec;
         readonly Label statusBar;
         readonly FlowLayoutPanel orders;
         readonly Panel host;
@@ -89,7 +89,7 @@ namespace StickyPro
             fold.Click += delegate { OrdersOpen = !OrdersOpen; fold.Text = OrdersOpen ? "\uE70D" : "\uE76C"; orders.Visible = OrdersOpen; };
             head.Controls.Add(chats); head.Controls.Add(Gap()); head.Controls.Add(fold); head.Controls.Add(fresh); head.Controls.Add(Gap()); head.Controls.Add(close); head.Controls.Add(title);
 
-            // Compact Mode bar: Solo | Council | Leader | Team... | Workspace
+            // Compact Mode bar: Solo | Council | Leader | Team... | Workspace | Rec
             modeBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(0, Ui.S(2), 0, Ui.S(2)), Margin = new Padding(0) };
             btnSolo = ModeBtn("Solo", "Single autonomous companion", delegate { SetMode("solo"); });
             btnCouncil = ModeBtn("Council", "Model council: multiple models discuss and write a verdict", delegate { SetMode("council"); });
@@ -97,11 +97,13 @@ namespace StickyPro
             btnTeam = ModeBtn("Team…", "Configure council / leader team roster and roles", delegate { if (pane != null) { pane.EditCouncil(); UpdateModeBar(); } });
             btnWorkspace = ModeBtn("Workspace", "Open Leader Team workspace", delegate { if (pane != null) pane.OpenLeaderTeam(); });
             btnWorkspace.Visible = false;
+            btnRec = ModeBtn("● Rec", "Show-Me-Once Workflow Recorder: record clicks & actions and compile into an automated skill + tool", delegate { ToggleRecording(); });
             modeBar.Controls.Add(btnSolo);
             modeBar.Controls.Add(btnCouncil);
             modeBar.Controls.Add(btnLeader);
             modeBar.Controls.Add(btnTeam);
             modeBar.Controls.Add(btnWorkspace);
+            modeBar.Controls.Add(btnRec);
 
             // Live Companion Status bar: shows current page awareness and updates live on AssistantHarness.Activity.
             statusBar = new Label
@@ -129,6 +131,7 @@ namespace StickyPro
             Controls.Add(host); Controls.Add(bottom); Controls.Add(orders); Controls.Add(statusBar); Controls.Add(modeBar); Controls.Add(head);
             Ui.Theme(this);
             AssistantHarness.Activity += OnActivity;
+            WorkflowRecorder.StateChanged += OnRecorderState;
             PageChanged(main.Page);
             if (AgentStore.Loaded) Start(); else AgentStore.LoadAll(() => { if (!IsDisposed) Start(); });
         }
@@ -185,6 +188,58 @@ namespace StickyPro
             btnTeam.Enabled = pane != null;
             btnWorkspace.Visible = isLeader;
             btnWorkspace.Enabled = isLeader && pane != null;
+            UpdateRecButton();
+        }
+
+        void UpdateRecButton()
+        {
+            if (IsDisposed || btnRec == null) return;
+            bool rec = WorkflowRecorder.IsRecording;
+            int steps = WorkflowRecorder.CurrentStepCount;
+            btnRec.Text = rec ? ("■ Stop (" + steps + ")") : "● Rec";
+            var fb = btnRec as FluentButton;
+            if (fb != null) fb.Primary = rec;
+            btnRec.BackColor = rec ? Color.FromArgb(217, 72, 34) : Ui.SelBg;
+            btnRec.ForeColor = rec ? Color.White : Ui.Text;
+            btnRec.Invalidate();
+        }
+
+        void OnRecorderState()
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke((Action)OnRecorderState); } catch { }
+                return;
+            }
+            UpdateRecButton();
+            if (WorkflowRecorder.IsRecording && statusBar != null)
+            {
+                statusBar.ForeColor = Color.FromArgb(217, 72, 34);
+                statusBar.Text = "● Recording workflow (" + WorkflowRecorder.CurrentStepCount + " steps)... Click Stop when done.";
+            }
+        }
+
+        public void ToggleRecording()
+        {
+            if (!WorkflowRecorder.IsRecording)
+            {
+                string pageTitle = main != null && !string.IsNullOrEmpty(main.Page) ? main.Page : "desktop";
+                WorkflowRecorder.Start("Workflow on " + pageTitle, "Recorded from Assistant Companion panel");
+                UpdateRecButton();
+            }
+            else
+            {
+                var res = WorkflowRecorder.Stop();
+                UpdateRecButton();
+                string recId = res != null && res.ContainsKey("id") ? Convert.ToString(res["id"], CultureInfo.InvariantCulture) : "";
+                string steps = res != null && res.ContainsKey("stepCount") ? Convert.ToString(res["stepCount"], CultureInfo.InvariantCulture) : "0";
+                if (pane != null && !string.IsNullOrEmpty(recId))
+                {
+                    pane.InsertText("Inspect my recorded workflow `" + recId + "` (" + steps + " steps) using `record_list(id=\"" + recId + "\")`, generalize the steps to native COM/SQL/CDP/UIA primitives following `skills/workflow-to-automation/SKILL.md`, and compile it into a reusable `SKILL.md` (`skill_manage`) and Dynamic Tool (`tool_create`).");
+                    pane.FocusInput();
+                }
+            }
         }
 
         static void StyleModeBtn(Button b, bool active)
@@ -432,6 +487,7 @@ namespace StickyPro
             {
                 AgentStore.Changed -= OnChanged;
                 AssistantHarness.Activity -= OnActivity;
+                WorkflowRecorder.StateChanged -= OnRecorderState;
                 tips.Dispose();
             }
             base.Dispose(disposing);

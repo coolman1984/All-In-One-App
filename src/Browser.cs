@@ -335,6 +335,75 @@ namespace StickyPro
             if (active == null || active.View.CoreWebView2 == null) throw new InvalidOperationException("No browser tab is open.");
             return active.View.CoreWebView2.ExecuteScriptAsync(js);
         }
+
+        public const string AxSnapshotScript = @"(function(){
+            var heads = [];
+            var hNodes = document.querySelectorAll('h1,h2,h3,h4');
+            for (var i = 0; i < hNodes.length && heads.length < 30; i++) {
+                var ht = (hNodes[i].innerText || '').trim();
+                if (ht) heads.push({ tag: hNodes[i].tagName.toLowerCase(), text: ht.slice(0, 140) });
+            }
+            var items = [];
+            var q = document.querySelectorAll('a[href],button,input,select,textarea,[role=button],[role=link],[role=tab],[onclick]');
+            for (var j = 0; j < q.length && items.length < 150; j++) {
+                var el = q[j];
+                var r = el.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) continue;
+                var tag = el.tagName.toLowerCase();
+                var role = el.getAttribute('role') || (tag === 'a' ? 'link' : tag === 'button' ? 'button' : tag);
+                var label = el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('placeholder') || '';
+                var txt = (el.innerText || el.value || label || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+                var sel = el.id ? ('#' + el.id) : (el.name ? (tag + '[name=""' + el.name + '""]') : tag);
+                items.push({
+                    index: items.length + 1,
+                    tag: tag,
+                    role: role,
+                    type: el.type || '',
+                    text: txt,
+                    label: label.slice(0, 100),
+                    id: el.id || '',
+                    name: el.name || '',
+                    href: el.href || '',
+                    selector: sel,
+                    rect: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+                });
+            }
+            var tables = [];
+            var tNodes = document.querySelectorAll('table');
+            for (var k = 0; k < tNodes.length && tables.length < 10; k++) {
+                var tb = tNodes[k];
+                var ths = [];
+                var thEls = tb.querySelectorAll('th');
+                for (var h = 0; h < thEls.length && h < 20; h++) ths.push((thEls[h].innerText || '').trim());
+                tables.push({ index: k + 1, headers: ths, rows: tb.rows ? tb.rows.length : 0 });
+            }
+            return JSON.stringify({
+                title: document.title || '',
+                url: location.href || '',
+                readyState: document.readyState || '',
+                headings: heads,
+                interactiveCount: items.length,
+                interactive: items,
+                tables: tables,
+                textPreview: (document.body ? document.body.innerText : '').slice(0, 4000)
+            });
+        })()";
+
+        public System.Threading.Tasks.Task<string> CallCdp(string method, string paramsJson, int tabIndex)
+        {
+            Tab t = (tabIndex >= 0 && tabIndex < tabs.Count) ? tabs[tabIndex] : active;
+            if (t == null || t.View == null || t.View.CoreWebView2 == null)
+                throw new InvalidOperationException("No initialized browser tab is open.");
+            string m = (method ?? "").Trim();
+            if (string.IsNullOrEmpty(m)
+                || string.Equals(m, "ax_snapshot", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(m, "dom_snapshot", StringComparison.OrdinalIgnoreCase))
+            {
+                return t.View.CoreWebView2.ExecuteScriptAsync(AxSnapshotScript);
+            }
+            string pJson = string.IsNullOrWhiteSpace(paramsJson) ? "{}" : paramsJson.Trim();
+            return t.View.CoreWebView2.CallDevToolsProtocolMethodAsync(m, pJson);
+        }
         public void Go(string text, bool newTab) { if (newTab) AddTab(Url(text), true); else Go(text); }
         public void Go(string text)
         {

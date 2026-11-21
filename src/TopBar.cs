@@ -215,7 +215,7 @@ namespace StickyPro
         void PaintNexus(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Ui.Navy ? Ui.Bg : Ui.Card);
+            g.Clear(Ui.Navy ? Ui.Bg : (Ui.Atelier || Ui.Nordic) ? Ui.Sidebar : Ui.Card);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             if (Ui.Navy)
@@ -249,7 +249,7 @@ namespace StickyPro
                 if (!Ui.Flow) Ui.Shadow(g, searchRect, Ui.S(10));
                 using (var path = Ui.Round(searchRect, Ui.S(Ui.Flow ? 12 : 10)))
                 {
-                    using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Navy ? Ui.Card : Ui.Bg)) g.FillPath(b, path);
+                    using (var b = new SolidBrush(hot ? Ui.HoverBg : (Ui.Navy || Ui.Atelier || Ui.Nordic) ? Ui.Card : Ui.Bg)) g.FillPath(b, path);
                     using (var p = new Pen(hot ? Ui.Accent : Ui.Flow ? Ui.Mix(Ui.Line, Ui.Bg, 0.35) : Ui.Line)) g.DrawPath(p, path);
                 }
                 var ir = new Rectangle(searchRect.X + Ui.S(4), searchRect.Y, Ui.S(32), searchRect.Height);
@@ -294,6 +294,32 @@ namespace StickyPro
 
         static Color FlowChipAccent(string key)
         {
+            if (Ui.Atelier)
+            {
+                switch (key)
+                {
+                    case "cpu": return Ui.Accent;
+                    case "ram": return Ui.SecondAccent;
+                    case "c": return Ui.SecondAccent;
+                    case "d": return Color.FromArgb(200, 125, 18);
+                    case "apps": return Ui.Accent;
+                    case "tasks": return Ui.Accent;
+                    default: return Color.FromArgb(220, 38, 38);
+                }
+            }
+            if (Ui.Nordic)
+            {
+                switch (key)
+                {
+                    case "cpu": return Ui.Accent;
+                    case "ram": return Ui.SecondAccent;
+                    case "c": return Ui.Accent;
+                    case "d": return Ui.SecondAccent;
+                    case "apps": return Color.FromArgb(217, 119, 6);
+                    case "tasks": return Ui.Accent;
+                    default: return Color.FromArgb(225, 29, 72);
+                }
+            }
             switch (key)
             {
                 case "cpu": return Color.FromArgb(47, 102, 246);
@@ -313,7 +339,7 @@ namespace StickyPro
             var chipTint = c.Alert ? c.Tint : Ui.Flow ? FlowChipAccent(c.Key) : Ui.Muted;
             using (var path = Ui.Round(r, Ui.S(Ui.Flow ? 11 : 10)))
             {
-                using (var b = new SolidBrush(hot ? Ui.HoverBg : Ui.Flow ? Ui.Bg : Ui.Card)) g.FillPath(b, path);
+                using (var b = new SolidBrush(hot ? Ui.HoverBg : (Ui.Atelier || Ui.Nordic) ? Ui.Card : Ui.Flow ? Ui.Bg : Ui.Card)) g.FillPath(b, path);
                 using (var p = new Pen(c.Alert ? Color.FromArgb(150, c.Tint) : hot ? Ui.Accent : Ui.Flow ? Ui.Line : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
             }
             int gd = Ui.S(26);

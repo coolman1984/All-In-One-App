@@ -379,12 +379,12 @@ namespace StickyPro
         static readonly TextFormatFlags L = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
         static readonly TextFormatFlags C = TextFormatFlags.NoPrefix | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
         static Color Cpu { get { return Ui.Accent; } }
-        static Color Mem { get { return Color.FromArgb(139, 92, 246); } }
-        static readonly Color FlowBlue = Color.FromArgb(47, 102, 246);
-        static readonly Color FlowSky = Color.FromArgb(112, 161, 255);
-        static readonly Color FlowGreen = Color.FromArgb(34, 197, 139);
+        static Color Mem { get { return Ui.Atelier || Ui.Nordic ? Ui.SecondAccent : Color.FromArgb(139, 92, 246); } }
+        static Color FlowBlue { get { return Ui.Atelier || Ui.Nordic ? Ui.AccentFill : Color.FromArgb(47, 102, 246); } }
+        static Color FlowSky { get { return Ui.Atelier || Ui.Nordic ? Ui.SecondAccent : Color.FromArgb(112, 161, 255); } }
+        static Color FlowGreen { get { return Ui.Nordic ? Ui.AccentFill : Ui.Atelier ? Ui.SecondAccent : Color.FromArgb(34, 197, 139); } }
         static readonly Color FlowAmber = Color.FromArgb(245, 158, 45);
-        static readonly Color FlowPurple = Color.FromArgb(139, 92, 246);
+        static Color FlowPurple { get { return Ui.Atelier ? Color.FromArgb(180, 83, 9) : Ui.Nordic ? Ui.SecondAccent : Color.FromArgb(139, 92, 246); } }
         static readonly Color FlowRed = Color.FromArgb(239, 68, 68);
 
         static Font badge; static string fontKey;
@@ -813,7 +813,11 @@ namespace StickyPro
 
             int slotW = Math.Max(Ui.S(14), plot.Width / buckets);
             int barW = Math.Max(Ui.S(10), Math.Min(Ui.S(26), slotW * 48 / 100));
-            Color capCol = Ui.Dark ? Color.FromArgb(38, 58, 98) : Color.FromArgb(219, 232, 255);
+            Color capCol = Ui.Atelier
+                ? (Ui.Dark ? Color.FromArgb(42, 48, 64) : Color.FromArgb(232, 224, 209))
+                : Ui.Nordic
+                    ? (Ui.Dark ? Color.FromArgb(34, 52, 46) : Color.FromArgb(219, 232, 226))
+                    : (Ui.Dark ? Color.FromArgb(38, 58, 98) : Color.FromArgb(219, 232, 255));
             for (int b = 0; b < buckets; b++)
             {
                 int cx = plot.X + b * slotW + slotW / 2;
@@ -883,12 +887,28 @@ namespace StickyPro
             Link(g, c, "View Full Board", "kanbanall");
 
             string[] titles = { "To Do", "Due Today", "High / Late", "Done" };
-            Color[] colBgs = Ui.Dark
-                ? new[] { Color.FromArgb(24, 33, 53), Color.FromArgb(22, 37, 66), Color.FromArgb(43, 35, 20), Color.FromArgb(18, 43, 34) }
-                : new[] { Color.FromArgb(244, 246, 250), Color.FromArgb(238, 244, 255), Color.FromArgb(255, 248, 230), Color.FromArgb(236, 253, 245) };
-            Color[] titleCols = Ui.Dark
-                ? new[] { Color.FromArgb(203, 213, 225), Color.FromArgb(147, 197, 253), Color.FromArgb(252, 211, 77), Color.FromArgb(110, 231, 183) }
-                : new[] { Color.FromArgb(51, 65, 85), Color.FromArgb(37, 99, 235), Color.FromArgb(180, 83, 9), Color.FromArgb(5, 150, 105) };
+            Color[] colBgs = Ui.Atelier
+                ? (Ui.Dark
+                    ? new[] { Color.FromArgb(25, 29, 40), Color.FromArgb(34, 26, 26), Color.FromArgb(38, 31, 22), Color.FromArgb(20, 36, 36) }
+                    : new[] { Color.FromArgb(239, 234, 224), Color.FromArgb(246, 235, 228), Color.FromArgb(247, 238, 222), Color.FromArgb(231, 240, 238) })
+                : Ui.Nordic
+                    ? (Ui.Dark
+                        ? new[] { Color.FromArgb(27, 39, 35), Color.FromArgb(22, 38, 48), Color.FromArgb(40, 34, 22), Color.FromArgb(20, 44, 36) }
+                        : new[] { Color.FromArgb(231, 236, 233), Color.FromArgb(230, 239, 246), Color.FromArgb(247, 240, 224), Color.FromArgb(226, 242, 235) })
+                    : (Ui.Dark
+                        ? new[] { Color.FromArgb(24, 33, 53), Color.FromArgb(22, 37, 66), Color.FromArgb(43, 35, 20), Color.FromArgb(18, 43, 34) }
+                        : new[] { Color.FromArgb(244, 246, 250), Color.FromArgb(238, 244, 255), Color.FromArgb(255, 248, 230), Color.FromArgb(236, 253, 245) });
+            Color[] titleCols = Ui.Atelier
+                ? (Ui.Dark
+                    ? new[] { Color.FromArgb(214, 211, 203), Color.FromArgb(255, 130, 96), Color.FromArgb(251, 191, 36), Color.FromArgb(45, 212, 191) }
+                    : new[] { Color.FromArgb(74, 71, 64), Color.FromArgb(217, 72, 34), Color.FromArgb(180, 83, 9), Color.FromArgb(31, 94, 91) })
+                : Ui.Nordic
+                    ? (Ui.Dark
+                        ? new[] { Color.FromArgb(200, 216, 210), Color.FromArgb(99, 179, 237), Color.FromArgb(251, 191, 36), Color.FromArgb(32, 201, 151) }
+                        : new[] { Color.FromArgb(52, 74, 66), Color.FromArgb(43, 108, 176), Color.FromArgb(180, 83, 9), Color.FromArgb(13, 138, 100) })
+                    : (Ui.Dark
+                        ? new[] { Color.FromArgb(203, 213, 225), Color.FromArgb(147, 197, 253), Color.FromArgb(252, 211, 77), Color.FromArgb(110, 231, 183) }
+                        : new[] { Color.FromArgb(51, 65, 85), Color.FromArgb(37, 99, 235), Color.FromArgb(180, 83, 9), Color.FromArgb(5, 150, 105) });
 
             for (int i = 0; i < 4; i++)
             {

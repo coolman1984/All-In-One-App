@@ -12,7 +12,7 @@ namespace StickyPro
     class LookPicker : Form
     {
         class Preset { public string Design, Name; public int Theme; public bool Dark; public Rectangle R; }
-        static readonly string[][] Designs = { new[] { "flow", "Flow" }, new[] { "soft", "Soft" }, new[] { "serq", "SerQ" }, new[] { "nexus", "Nexus" }, new[] { "classic", "Classic" } };
+        static readonly string[][] Designs = { new[] { "flow", "Flow" }, new[] { "atelier", "Atelier" }, new[] { "nordic", "Nordic" }, new[] { "soft", "Soft" }, new[] { "serq", "SerQ" }, new[] { "nexus", "Nexus" }, new[] { "classic", "Classic" } };
         readonly List<Preset> presets = new List<Preset>();
         readonly List<KeyValuePair<int, Rectangle>> swatches = new List<KeyValuePair<int, Rectangle>>();
         object hot;
@@ -31,7 +31,7 @@ namespace StickyPro
         {
             FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; StartPosition = FormStartPosition.Manual; TopMost = true;
             DoubleBuffered = true; BackColor = Ui.Card; KeyPreview = true;
-            int tw = Ui.S(150), th = Ui.S(96), gap = Ui.S(12), pad = Ui.S(16), top = Ui.S(44);
+            int tw = Ui.S(136), th = Ui.S(94), gap = Ui.S(10), pad = Ui.S(16), top = Ui.S(44);
             for (int d = 0; d < Designs.Length; d++)
                 for (int dark = 0; dark < 2; dark++)
                 {
@@ -39,7 +39,7 @@ namespace StickyPro
                     presets.Add(new Preset
                     {
                         Design = key, Name = Designs[d][1] + (dark == 1 ? " dark" : " light"), Dark = dark == 1,
-                        Theme = key == "flow" ? Ui.FlowTheme : key == "soft" ? Ui.SoftTheme : key == "serq" ? Ui.SerqTheme : key == "nexus" ? 6 : 0,
+                        Theme = Ui.DefaultThemeFor(key),
                         R = new Rectangle(pad + d * (tw + gap), top + dark * (th + Ui.S(30)), tw, th)
                     });
                 }
@@ -74,13 +74,13 @@ namespace StickyPro
         struct Pal { public Color Bg, Card, Side, SideSel, SideText, Text, Muted, Line, Accent; }
         static Pal Read(string design, int theme, bool dark)
         {
-            bool d0 = Ui.Dark, n0 = Ui.Nexus, v0 = Ui.Navy, s0 = Ui.Soft, f0 = Ui.Flow; int t0 = Ui.ThemeIndex; var a0 = Ui.CustomAccent;
+            bool d0 = Ui.Dark, n0 = Ui.Nexus, v0 = Ui.Navy, s0 = Ui.Soft, f0 = Ui.Flow, at0 = Ui.Atelier, no0 = Ui.Nordic; int t0 = Ui.ThemeIndex; var a0 = Ui.CustomAccent;
             try
             {
-                Ui.Dark = dark; Ui.Flow = design == "flow"; Ui.Nexus = design != "classic"; Ui.Navy = design == "serq" || design == "soft"; Ui.Soft = design == "soft"; Ui.ThemeIndex = theme; Ui.CustomAccent = null;
+                Ui.Dark = dark; Ui.SetDesignFlags(design); Ui.ThemeIndex = theme; Ui.CustomAccent = null;
                 return new Pal { Bg = Ui.Bg, Card = Ui.Card, Side = Ui.Sidebar, SideSel = Ui.SidebarSel, SideText = Ui.SidebarMuted, Text = Ui.Text, Muted = Ui.Muted, Line = Ui.Line, Accent = Ui.AccentFill };
             }
-            finally { Ui.Dark = d0; Ui.Nexus = n0; Ui.Navy = v0; Ui.Soft = s0; Ui.Flow = f0; Ui.ThemeIndex = t0; Ui.CustomAccent = a0; }
+            finally { Ui.Dark = d0; Ui.Nexus = n0; Ui.Navy = v0; Ui.Soft = s0; Ui.Flow = f0; Ui.Atelier = at0; Ui.Nordic = no0; Ui.ThemeIndex = t0; Ui.CustomAccent = a0; }
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -101,13 +101,14 @@ namespace StickyPro
                     {
                         g.SetClip(path);
                         // sidebar, card, accent pill, text lines
+                        bool flowLike = p.Design == "flow" || p.Design == "atelier" || p.Design == "nordic";
                         var side = new Rectangle(r.X + Ui.S(6), r.Y + Ui.S(6), Ui.S(28), r.Height - Ui.S(12));
                         using (var sp = Ui.Round(side, Ui.S(6)))
                         {
                             using (var b = new SolidBrush(c.Side)) g.FillPath(b, sp);
-                            if (p.Design == "flow") using (var pen = new Pen(c.Line)) g.DrawPath(pen, sp);
+                            if (flowLike) using (var pen = new Pen(c.Line)) g.DrawPath(pen, sp);
                         }
-                        if (p.Design == "flow")
+                        if (flowLike)
                         {
                             using (var bp = Ui.Round(new Rectangle(side.X + Ui.S(4), side.Y + Ui.S(7), side.Width - Ui.S(8), Ui.S(12)), Ui.S(4)))
                             using (var b = new SolidBrush(c.SideSel)) g.FillPath(b, bp);
@@ -123,10 +124,12 @@ namespace StickyPro
                         using (var b = new SolidBrush(c.Text)) g.FillRectangle(b, card.X + Ui.S(8), card.Y + Ui.S(9), card.Width / 2, Ui.S(5));
                         using (var b = new SolidBrush(c.Muted)) g.FillRectangle(b, card.X + Ui.S(8), card.Y + Ui.S(20), card.Width * 2 / 3, Ui.S(4));
                         using (var ap = Ui.Round(new Rectangle(card.X + Ui.S(8), card.Bottom - Ui.S(15), Ui.S(34), Ui.S(10)), Ui.S(5))) using (var b = new SolidBrush(c.Accent)) g.FillPath(b, ap);
-                        if (p.Design == "flow")
+                        if (flowLike)
                         {
-                            using (var b = new SolidBrush(Color.FromArgb(34, 197, 139))) g.FillEllipse(b, card.Right - Ui.S(28), card.Bottom - Ui.S(15), Ui.S(9), Ui.S(9));
-                            using (var b = new SolidBrush(Color.FromArgb(245, 158, 45))) g.FillEllipse(b, card.Right - Ui.S(16), card.Bottom - Ui.S(15), Ui.S(9), Ui.S(9));
+                            Color dot1 = p.Design == "atelier" ? Color.FromArgb(31, 94, 91) : p.Design == "nordic" ? Color.FromArgb(43, 108, 176) : Color.FromArgb(34, 197, 139);
+                            Color dot2 = p.Design == "atelier" ? Color.FromArgb(200, 125, 18) : Color.FromArgb(245, 158, 45);
+                            using (var b = new SolidBrush(dot1)) g.FillEllipse(b, card.Right - Ui.S(28), card.Bottom - Ui.S(15), Ui.S(9), Ui.S(9));
+                            using (var b = new SolidBrush(dot2)) g.FillEllipse(b, card.Right - Ui.S(16), card.Bottom - Ui.S(15), Ui.S(9), Ui.S(9));
                         }
                         using (var b = new SolidBrush(c.Card)) g.FillRectangle(b, card.X, card.Bottom + Ui.S(6), card.Width / 2 - Ui.S(3), r.Bottom - card.Bottom - Ui.S(12));
                         using (var b = new SolidBrush(c.Card)) g.FillRectangle(b, card.X + card.Width / 2 + Ui.S(3), card.Bottom + Ui.S(6), card.Width / 2 - Ui.S(3), r.Bottom - card.Bottom - Ui.S(12));

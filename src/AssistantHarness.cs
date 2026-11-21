@@ -150,15 +150,16 @@ namespace StickyPro
             sb.AppendLine("- Autonomously flip pages (open_page, document_open, document_switch, explorer_open, browser_open, markdown_open) so the user can watch what you open and do.");
             sb.AppendLine("- Visual-First Live Communication Canvas: Whenever explaining architecture, logic, multi-step workflows, report comparisons, plans, or technical concepts, proactively draw interactive studio-grade visuals in the embedded Browser using canvas_update or dashboard_publish (custom interactive SVG diagrams, animated data flows, crisp telemetry cards, minimal Egyptian Arabic labels, Obsidian Dark + Warm Drafting Paper OKLCH palette, spring motion — strictly following skills/anti-slop-web-design/SKILL.md, ZERO AI slop, ZERO walls of text), auto-flip to Browser, and keep the chat text reply very short.");
             sb.AppendLine("Available All in One MCP tools (all-in-one):");
-            sb.AppendLine("- Live context & navigation: page_context, open_page, app_status, search_all, notify.");
+            sb.AppendLine("- Live context, screenshot & navigation: page_context, open_page, app_status, app_screenshot, search_all, notify.");
             sb.AppendLine("- Documents (Excel/Word/PowerPoint/PDF): documents_list, document_open (with optional edit true/false), document_switch, document_save.");
             sb.AppendLine("- Live Office COM & bulk extraction (NASCA DRM-safe): excel_info, excel_read, excel_write, excel_formula, excel_sheet_add, excel_format, word_read, word_write, ppt_read, ppt_write, office_extract.");
             sb.AppendLine("- SQLite Vault (persistent cross-report SQL JOINs & FTS): vault_list, vault_extract, vault_schema, vault_query, vault_search.");
-            sb.AppendLine("- Memory, Skills, Creator Mode & Planning: memory_manage, session_search, skill_manage, tool_list, tool_create, tool_delete, todo_plan, chat_steps, chat_compact.");
+            sb.AppendLine("- Memory, Skills, Creator Mode, Subagents & Planning: memory_manage, session_search, skill_manage, tool_list, tool_create, tool_delete, todo_plan, chat_steps, chat_compact, sessions_spawn, sessions_status.");
+            sb.AppendLine("- Show-Me-Once Workflow Recorder & Desktop UIA: record_start, record_stop, record_status, record_list, uia_inspect, uia_action, snip_ocr.");
             sb.AppendLine("- Proactive Cron, Heartbeat & Folder Watchers: cron_manage, heartbeat_status, watch_folder.");
             sb.AppendLine("- Live Communication Canvas & Dashboards: canvas_update, dashboard_publish, dashboard_list.");
-            sb.AppendLine("- Explorer & Terminals: explorer_open, terminal_open, folder_sets, folder_sets_list, folder_set_save, favorites_list, item_organize.");
-            sb.AppendLine("- Browser: browser_open, browser_read, browser_run_js.");
+            sb.AppendLine("- Explorer, System, Processes & Terminals: explorer_open, explorer_list, explorer_action, system_processes, system_drives, process_kill, tagged_list, tagged_add, activity_recent, terminal_open, folder_sets, folder_sets_list, folder_set_save, favorites_list, item_organize.");
+            sb.AppendLine("- Browser & Chrome: browser_open, browser_read, browser_run_js, browser_cdp (including ax_snapshot), chrome_bookmarks.");
             sb.AppendLine("- Markdown notes: markdown_open.");
             sb.AppendLine("- Workspace data & coding agents: notes_search, note_get, note_create, note_update, tasks_search, task_lists, task_create, task_update, prompts_search, prompt_get, prompt_save, prompt_fill, clips_search, clip_get, clip_organize, clipboard_copy, agents_list, agent_chats, agent_chat_get, agent_ask, agent_limits.");
 

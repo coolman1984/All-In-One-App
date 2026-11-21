@@ -649,6 +649,55 @@ namespace StickyPro
             return d;
         }
         public System.Threading.Tasks.Task<string> BrowserScript(string js) { if (browser == null) { ShowPage("browser"); } if (browser == null) throw new InvalidOperationException("The Browser page is not open."); return browser.RunScript(js); }
+        public System.Threading.Tasks.Task<string> BrowserCdp(string method, string paramsJson, int tabIndex) { if (browser == null) { ShowPage("browser"); } if (browser == null) throw new InvalidOperationException("The Browser page is not open."); return browser.CallCdp(method, paramsJson, tabIndex); }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+
+        public Bitmap CaptureAppScreenshot(string target)
+        {
+            string t = (target ?? "app").Trim().ToLowerInvariant();
+            Control ctl = this;
+            if (t == "page" && !string.IsNullOrEmpty(page) && loadedPages.ContainsKey(page))
+                ctl = loadedPages[page];
+
+            int w = Math.Max(320, ctl.Width > 0 ? ctl.Width : Width);
+            int h = Math.Max(200, ctl.Height > 0 ? ctl.Height : Height);
+            var bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            bool captured = false;
+
+            if (ctl == this && IsHandleCreated)
+            {
+                try
+                {
+                    using (var g = Graphics.FromImage(bmp))
+                    {
+                        IntPtr hdc = g.GetHdc();
+                        try { captured = PrintWindow(Handle, hdc, 2); }
+                        finally { g.ReleaseHdc(hdc); }
+                    }
+                }
+                catch { }
+            }
+            if (!captured)
+            {
+                try
+                {
+                    ctl.DrawToBitmap(bmp, new Rectangle(0, 0, w, h));
+                    captured = true;
+                }
+                catch { }
+            }
+            if (!captured)
+            {
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.Clear(Ui.Bg);
+                    TextRenderer.DrawText(g, Ui.AppTitle + " - " + (page ?? "dashboard"), Ui.Title, new Point(24, 24), Ui.Text);
+                }
+            }
+            return bmp;
+        }
         Panel assistantHost; AssistantPanel assistant;
         // Zen mode (F11, Esc leaves): only the page; the menu, top bar, dock and status line step aside.
         bool zen;

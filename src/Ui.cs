@@ -101,11 +101,15 @@ namespace StickyPro
         }
 
         // Colour themes: the accent (and the classic sidebar colour) follow the theme.
-        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo", "SerQ blue", "Soft coral", "Flow blue" };
-        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230), Color.FromArgb(51, 102, 240), Color.FromArgb(232, 88, 44), Color.FromArgb(47, 102, 246) };
-        public const int SerqTheme = 7, SoftTheme = 8, FlowTheme = 9;
+        public static readonly string[] ThemeNames = { "Ocean blue", "Royal purple", "Emerald", "Teal", "Sunset orange", "Rose", "Nexus indigo", "SerQ blue", "Soft coral", "Flow blue", "Atelier vermilion", "Nordic emerald" };
+        static readonly Color[] themeBase = { Color.FromArgb(26, 110, 194), Color.FromArgb(109, 62, 196), Color.FromArgb(22, 128, 84), Color.FromArgb(13, 122, 134), Color.FromArgb(206, 92, 20), Color.FromArgb(190, 38, 94), Color.FromArgb(91, 76, 230), Color.FromArgb(51, 102, 240), Color.FromArgb(232, 88, 44), Color.FromArgb(47, 102, 246), Color.FromArgb(217, 72, 34), Color.FromArgb(13, 138, 100) };
+        public const int SerqTheme = 7, SoftTheme = 8, FlowTheme = 9, AtelierTheme = 10, NordicTheme = 11;
         // Flow design: crisp white sidebar, sky-blue active pill, airy ice-white canvas, elevated white cards with colourful KPI accents.
         public static bool Flow;
+        // Atelier design: editorial warm paper & signal vermilion (light) / carbon obsidian & bright vermilion (dark).
+        public static bool Atelier;
+        // Nordic design: high-craft sage mist & deep pine emerald (light) / carbon pine & telemetry emerald (dark).
+        public static bool Nordic;
         // Soft design: charcoal floating sidebar, quiet grey canvas, white cards, coral accent (uses the SerQ layout).
         public static bool Soft;
         // SerQ design: Nexus layout with a floating navy sidebar, blue-grey canvas and soft card shadows.
@@ -114,10 +118,91 @@ namespace StickyPro
         public static Color ThemeColor(int i) { return themeBase[Math.Max(0, Math.Min(themeBase.Length - 1, i))]; }
         // Nexus design (clean white sidebar, soft grey canvas, white cards) or the classic solid-colour sidebar.
         public static bool Nexus = true;
+
+        public static string NormalizeDesign(string d)
+        {
+            d = (d ?? "").Trim().ToLowerInvariant();
+            if (d.EndsWith("-dark")) d = d.Substring(0, d.Length - 5);
+            else if (d.EndsWith("-light")) d = d.Substring(0, d.Length - 6);
+            return d == "atelier" || d == "nordic" || d == "flow" || d == "soft" || d == "serq" || d == "nexus" || d == "classic" ? d : "flow";
+        }
+
+        public static int DefaultThemeFor(string d)
+        {
+            d = NormalizeDesign(d);
+            return d == "atelier" ? AtelierTheme : d == "nordic" ? NordicTheme : d == "flow" ? FlowTheme : d == "soft" ? SoftTheme : d == "serq" ? SerqTheme : d == "nexus" ? 6 : 0;
+        }
+
+        public static void SetDesignFlags(string d)
+        {
+            d = NormalizeDesign(d);
+            Atelier = d == "atelier";
+            Nordic = d == "nordic";
+            Flow = d == "flow" || Atelier || Nordic;
+            Soft = d == "soft";
+            Navy = d == "serq" || d == "soft";
+            Nexus = d != "classic";
+        }
+
+        public static string Look
+        {
+            get
+            {
+                if (Atelier) return "atelier";
+                if (Nordic) return "nordic";
+                if (Flow) return "flow";
+                if (Soft) return "soft";
+                if (Navy) return "serq";
+                if (Nexus) return "nexus";
+                return "classic";
+            }
+            set
+            {
+                string raw = (value ?? "").Trim().ToLowerInvariant();
+                if (raw.EndsWith("-dark")) { Dark = true; if (Store.Settings != null) Store.Settings.Dark = true; }
+                else if (raw.EndsWith("-light")) { Dark = false; if (Store.Settings != null) Store.Settings.Dark = false; }
+                string d = NormalizeDesign(raw);
+                int th = DefaultThemeFor(d);
+                SetDesignFlags(d);
+                ThemeIndex = th;
+                if (Store.Settings != null)
+                {
+                    Store.Settings.Design = d;
+                    Store.Settings.Theme = th;
+                    Store.Settings.AccentColor = "";
+                }
+                ApplyLook();
+            }
+        }
+
         static Color H(string hex) { return ColorTranslator.FromHtml(hex); }
-        // Chart / KPI palette (Flow / Nexus): royal blue, emerald, sky blue, amber, violet, coral.
+        // Chart / KPI palette (Atelier / Nordic / Flow / Nexus).
         public static Color Series(int i)
         {
+            if (Atelier)
+            {
+                switch (i % 6)
+                {
+                    case 0: return Accent;
+                    case 1: return SecondAccent;
+                    case 2: return Dark ? H("#F59E0B") : H("#C87D12");
+                    case 3: return Dark ? H("#38BDF8") : H("#2563EB");
+                    case 4: return Dark ? H("#A78BFA") : H("#6D28D9");
+                    default: return Dark ? H("#F87171") : H("#DC2626");
+                }
+            }
+            if (Nordic)
+            {
+                switch (i % 6)
+                {
+                    case 0: return Accent;
+                    case 1: return SecondAccent;
+                    case 2: return Dark ? H("#FBBF24") : H("#D97706");
+                    case 3: return Dark ? H("#34D399") : H("#059669");
+                    case 4: return Dark ? H("#A78BFA") : H("#7C3AED");
+                    default: return Dark ? H("#F87171") : H("#E11D48");
+                }
+            }
             if (Flow)
             {
                 switch (i % 6)
@@ -140,7 +225,7 @@ namespace StickyPro
                 default: return H("#F43F5E");
             }
         }
-        // Soft drop shadow under a rounded card (Flow / SerQ look); a no-op in the other designs.
+        // Soft drop shadow under a rounded card (Flow / Atelier / Nordic / SerQ look); a no-op in the other designs.
         public static void Shadow(Graphics g, Rectangle r, int radius)
         {
             if ((!Navy && !Flow) || !Shadows) return;
@@ -170,38 +255,74 @@ namespace StickyPro
             g.SmoothingMode = old;
         }
         public static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
-        static Color TB { get { return CustomAccent ?? ThemeColor(ThemeIndex); } }
+        static bool UseAtelierDefaultAccent { get { return Atelier && !CustomAccent.HasValue && (ThemeIndex == AtelierTheme || ThemeIndex == FlowTheme || ThemeIndex == 0); } }
+        static bool UseNordicDefaultAccent { get { return Nordic && !CustomAccent.HasValue && (ThemeIndex == NordicTheme || ThemeIndex == FlowTheme || ThemeIndex == 0); } }
+        static Color TB
+        {
+            get
+            {
+                if (CustomAccent.HasValue) return CustomAccent.Value;
+                if (UseAtelierDefaultAccent) return Dark ? H("#FF6238") : H("#D94822");
+                if (UseNordicDefaultAccent) return Dark ? H("#20C997") : H("#0D8A64");
+                return ThemeColor(ThemeIndex);
+            }
+        }
         public static Font NoteFont = new Font("Segoe UI", 11f);
         static string iconFamily;
         static readonly Dictionary<float, Font> iconFonts = new Dictionary<float, Font>();
 
         // ---------- Theme ----------
         public static bool Dark;
-        public static Color Accent { get { return Flow ? (Dark ? Mix(TB, Color.White, 0.35) : TB) : Dark ? Mix(TB, Color.White, 0.45) : Mix(TB, Color.Black, 0.08); } }
-        public static Color AccentFill { get { return Flow ? TB : Mix(TB, Color.Black, 0.08); } }
-        public static Color Bg { get { return Flow ? (Dark ? H("#0B1120") : H("#F5F7FC")) : Soft ? (Dark ? H("#121214") : H("#ECECEF")) : Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
-        public static Color Card { get { return Flow ? (Dark ? H("#131B2E") : H("#FFFFFF")) : Soft ? (Dark ? H("#1C1C20") : H("#FFFFFF")) : Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
-        public static Color Field { get { return Flow ? (Dark ? H("#182238") : H("#FFFFFF")) : Soft ? (Dark ? H("#212126") : H("#FFFFFF")) : Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
-        public static Color Nav { get { return Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
-        // Flow / Nexus: crisp white sidebar; SerQ / Soft: dark floating sidebar; Classic: solid colour sidebar.
-        public static Color Sidebar { get { return Flow ? (Dark ? H("#0F172A") : H("#FFFFFF")) : Soft ? (Dark ? H("#0B0B0D") : H("#26262A")) : Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
-        public static Color SidebarSel { get { return Flow ? (Dark ? Mix(TB, H("#0F172A"), 0.72) : Mix(TB, Color.White, 0.88)) : Soft ? (Dark ? H("#26262C") : H("#3A3A40")) : Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
-        public static Color SidebarHover { get { return Flow ? (Dark ? H("#162038") : H("#F4F7FE")) : Soft ? (Dark ? H("#18181B") : H("#303035")) : Navy ? (Dark ? H("#1A2550") : H("#233270")) : Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
-        public static Color SidebarText { get { return Flow ? (Dark ? H("#CBD5E1") : H("#475569")) : Soft ? (Dark ? H("#ECECEF") : H("#F3F3F5")) : Navy ? (Dark ? H("#E3E8F7") : H("#E8EDFB")) : Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
-        public static Color SidebarMuted { get { return Flow ? (Dark ? H("#64748B") : H("#94A3B8")) : Soft ? (Dark ? H("#85858F") : H("#9B9BA3")) : Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
+        public static Color Accent
+        {
+            get
+            {
+                if (UseAtelierDefaultAccent) return Dark ? H("#FF6238") : H("#D94822");
+                if (UseNordicDefaultAccent) return Dark ? H("#20C997") : H("#0D8A64");
+                return Flow ? (Dark ? Mix(TB, Color.White, 0.35) : TB) : Dark ? Mix(TB, Color.White, 0.45) : Mix(TB, Color.Black, 0.08);
+            }
+        }
+        public static Color AccentFill
+        {
+            get
+            {
+                if (UseAtelierDefaultAccent) return Dark ? H("#FF6238") : H("#D94822");
+                if (UseNordicDefaultAccent) return Dark ? H("#20C997") : H("#0D8A64");
+                return Flow ? TB : Mix(TB, Color.Black, 0.08);
+            }
+        }
+        public static Color SecondAccent
+        {
+            get
+            {
+                if (Atelier) return Dark ? H("#2DD4BF") : H("#1F5E5B");
+                if (Nordic) return Dark ? H("#63B3ED") : H("#2B6CB0");
+                return H("#70A1FF");
+            }
+        }
+        public static Color Bg { get { return Atelier ? (Dark ? H("#0C0E13") : H("#F4F0E8")) : Nordic ? (Dark ? H("#0D1311") : H("#F2F5F3")) : Flow ? (Dark ? H("#0B1120") : H("#F5F7FC")) : Soft ? (Dark ? H("#121214") : H("#ECECEF")) : Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
+        public static Color Card { get { return Atelier ? (Dark ? H("#13161F") : H("#FCFAF5")) : Nordic ? (Dark ? H("#141D1A") : H("#FFFFFF")) : Flow ? (Dark ? H("#131B2E") : H("#FFFFFF")) : Soft ? (Dark ? H("#1C1C20") : H("#FFFFFF")) : Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
+        public static Color Field { get { return Atelier ? (Dark ? H("#13161F") : H("#FCFAF5")) : Nordic ? (Dark ? H("#141D1A") : H("#FFFFFF")) : Flow ? (Dark ? H("#182238") : H("#FFFFFF")) : Soft ? (Dark ? H("#212126") : H("#FFFFFF")) : Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
+        public static Color Nav { get { return Atelier ? (Dark ? H("#191D28") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
+        // Atelier / Nordic: elevated header/sidebar tone; Flow / Nexus: crisp white sidebar; SerQ / Soft: dark floating sidebar; Classic: solid colour sidebar.
+        public static Color Sidebar { get { return Atelier ? (Dark ? H("#191D28") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#0F172A") : H("#FFFFFF")) : Soft ? (Dark ? H("#0B0B0D") : H("#26262A")) : Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
+        public static Color SidebarSel { get { return Atelier ? (Dark ? Mix(TB, H("#191D28"), 0.76) : Mix(TB, H("#FCFAF5"), 0.85)) : Nordic ? (Dark ? Mix(TB, H("#1B2723"), 0.76) : Mix(TB, H("#FFFFFF"), 0.86)) : Flow ? (Dark ? Mix(TB, H("#0F172A"), 0.72) : Mix(TB, Color.White, 0.88)) : Soft ? (Dark ? H("#26262C") : H("#3A3A40")) : Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
+        public static Color SidebarHover { get { return Atelier ? (Dark ? H("#212636") : H("#E7E0D3")) : Nordic ? (Dark ? H("#21302B") : H("#DCE5E0")) : Flow ? (Dark ? H("#162038") : H("#F4F7FE")) : Soft ? (Dark ? H("#18181B") : H("#303035")) : Navy ? (Dark ? H("#1A2550") : H("#233270")) : Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
+        public static Color SidebarText { get { return Atelier ? (Dark ? H("#F1EFE9") : H("#16181D")) : Nordic ? (Dark ? H("#ECF3F0") : H("#14211C")) : Flow ? (Dark ? H("#CBD5E1") : H("#475569")) : Soft ? (Dark ? H("#ECECEF") : H("#F3F3F5")) : Navy ? (Dark ? H("#E3E8F7") : H("#E8EDFB")) : Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
+        public static Color SidebarMuted { get { return Atelier ? (Dark ? H("#9499A6") : H("#5C5A54")) : Nordic ? (Dark ? H("#8DA39B") : H("#52635C")) : Flow ? (Dark ? H("#64748B") : H("#94A3B8")) : Soft ? (Dark ? H("#85858F") : H("#9B9BA3")) : Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
         public static Color Header { get { return Nexus ? Text : Dark ? Mix(TB, Color.White, 0.5) : TB; } }
-        public static Color Line { get { return Flow ? (Dark ? H("#222E47") : H("#E8EDF5")) : Soft ? (Dark ? H("#2B2B31") : H("#E3E3E7")) : Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
-        public static Color Text { get { return Flow ? (Dark ? H("#F1F5F9") : H("#0F172A")) : Soft ? (Dark ? H("#EEEEF1") : H("#17171A")) : Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
-        public static Color Muted { get { return Flow ? (Dark ? H("#94A3B8") : H("#64748B")) : Soft ? (Dark ? H("#9A9AA4") : H("#6C6C75")) : Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
-        public static Color SelBg { get { return Flow ? (Dark ? Mix(TB, Card, 0.72) : Mix(TB, Color.White, 0.88)) : Nexus ? (Dark ? Mix(TB, Card, 0.80) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
-        public static Color HoverBg { get { return Flow ? (Dark ? H("#1B2540") : H("#F3F6FC")) : Soft ? (Dark ? H("#25252A") : H("#F2F2F4")) : Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
-        public static Color PressBg { get { return Flow ? (Dark ? H("#233050") : H("#E6EEFA")) : Soft ? (Dark ? H("#2E2E34") : H("#E7E7EA")) : Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
+        public static Color Line { get { return Atelier ? (Dark ? H("#242938") : H("#DDD6C7")) : Nordic ? (Dark ? H("#253530") : H("#CFD9D3")) : Flow ? (Dark ? H("#222E47") : H("#E8EDF5")) : Soft ? (Dark ? H("#2B2B31") : H("#E3E3E7")) : Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
+        public static Color Text { get { return Atelier ? (Dark ? H("#F1EFE9") : H("#16181D")) : Nordic ? (Dark ? H("#ECF3F0") : H("#14211C")) : Flow ? (Dark ? H("#F1F5F9") : H("#0F172A")) : Soft ? (Dark ? H("#EEEEF1") : H("#17171A")) : Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
+        public static Color Muted { get { return Atelier ? (Dark ? H("#9499A6") : H("#5C5A54")) : Nordic ? (Dark ? H("#8DA39B") : H("#52635C")) : Flow ? (Dark ? H("#94A3B8") : H("#64748B")) : Soft ? (Dark ? H("#9A9AA4") : H("#6C6C75")) : Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
+        public static Color SelBg { get { return Atelier ? (Dark ? Mix(TB, Card, 0.74) : Mix(TB, Card, 0.86)) : Nordic ? (Dark ? Mix(TB, Card, 0.74) : Mix(TB, Card, 0.86)) : Flow ? (Dark ? Mix(TB, Card, 0.72) : Mix(TB, Color.White, 0.88)) : Nexus ? (Dark ? Mix(TB, Card, 0.80) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
+        public static Color HoverBg { get { return Atelier ? (Dark ? H("#1C202E") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#1B2540") : H("#F3F6FC")) : Soft ? (Dark ? H("#25252A") : H("#F2F2F4")) : Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
+        public static Color PressBg { get { return Atelier ? (Dark ? H("#242938") : H("#E4DDD0")) : Nordic ? (Dark ? H("#253530") : H("#DAE3DE")) : Flow ? (Dark ? H("#233050") : H("#E6EEFA")) : Soft ? (Dark ? H("#2E2E34") : H("#E7E7EA")) : Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
         public static Color AccentHover { get { return Mix(TB, Color.Black, 0.16); } }
         public static Color AccentPressed { get { return Mix(TB, Color.Black, 0.28); } }
-        public static Color Success { get { return Flow ? (Dark ? H("#34D399") : H("#16A36A")) : Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
+        public static Color Success { get { return Nordic ? (Dark ? H("#20C997") : H("#0D8A64")) : Flow ? (Dark ? H("#34D399") : H("#16A36A")) : Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
         public static Color Danger { get { return Flow ? (Dark ? H("#F87171") : H("#EF4444")) : Dark ? Color.FromArgb(255, 143, 143) : Color.FromArgb(196, 43, 48); } }
         public static Color Warning { get { return Flow ? (Dark ? H("#FBBF24") : H("#D97706")) : Dark ? Color.FromArgb(249, 202, 101) : Color.FromArgb(151, 98, 0); } }
-        public static Color Track { get { return Flow ? (Dark ? H("#1E293B") : H("#EDF2FA")) : Soft ? (Dark ? H("#2A2A30") : H("#E8E8EC")) : Navy ? (Dark ? H("#232B42") : H("#EDF1F8")) : Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
+        public static Color Track { get { return Atelier ? (Dark ? H("#191D28") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#1E293B") : H("#EDF2FA")) : Soft ? (Dark ? H("#2A2A30") : H("#E8E8EC")) : Navy ? (Dark ? H("#232B42") : H("#EDF1F8")) : Nexus ? (Dark ? H("#2A2E38") : H("#EEF0F4")) : Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(225, 225, 225); } }
         public static Color Canvas { get { return Dark ? Color.FromArgb(28, 28, 28) : Color.FromArgb(225, 225, 225); } }
         public static Color Overlay { get { return Color.FromArgb(36, 36, 36); } }
         public static Color OverlayField { get { return Color.FromArgb(60, 60, 60); } }
@@ -1436,6 +1557,20 @@ namespace StickyPro
             g.Clear(Ui.Sidebar);
             if (Width < Ui.S(100)) { using (var b = new SolidBrush(Ui.Navy ? Ui.SidebarSel : Ui.Line)) g.FillRectangle(b, Ui.S(14), Height / 2, Width - Ui.S(28), 1); return; }
             TextRenderer.DrawText(g, Text, Ui.Small, new Rectangle(Ui.S(22), Ui.S(10), Width - Ui.S(30), Height - Ui.S(10)), Ui.SidebarMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    public static class Theme
+    {
+        public static string Look
+        {
+            get { return Ui.Look; }
+            set { Ui.Look = value; }
+        }
+        public static bool Dark
+        {
+            get { return Ui.Dark; }
+            set { Ui.Dark = value; if (Store.Settings != null) Store.Settings.Dark = value; }
         }
     }
 }

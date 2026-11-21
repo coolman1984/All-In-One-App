@@ -47,7 +47,7 @@ namespace StickyPro
             Store.Load();
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Flow = Store.Settings.Design == "flow"; Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
+            Ui.SetDesignFlags(Store.Settings.Design);
             Ui.ApplyLook();
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
@@ -526,12 +526,12 @@ namespace StickyPro
 
         public void ToggleDark() { Store.Settings.Dark = !Store.Settings.Dark; Store.MarkSettings(); ApplyTheme(); }
         public void SetTheme(int i) { Store.Settings.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, i)); Store.Settings.AccentColor = ""; Store.MarkSettings(); Ui.ApplyLook(); ApplyTheme(); }
-        public void SetDesign(string d) { Store.Settings.Design = d == "classic" || d == "nexus" || d == "soft" || d == "serq" || d == "flow" ? d : "flow"; Store.MarkSettings(); ApplyTheme(); }
+        public void SetDesign(string d) { Store.Settings.Design = Ui.NormalizeDesign(d); Store.Settings.Theme = Ui.DefaultThemeFor(Store.Settings.Design); Store.MarkSettings(); ApplyTheme(); }
         // One click from the look picker: design, colour and light/dark together, one rebuild.
         public void SetLook(string design, int theme, bool dark)
         {
             var s = Store.Settings;
-            s.Design = design == "classic" || design == "nexus" || design == "soft" || design == "serq" || design == "flow" ? design : "flow";
+            s.Design = Ui.NormalizeDesign(design);
             if (theme >= 0) { s.Theme = Math.Max(0, Math.Min(Ui.ThemeNames.Length - 1, theme)); s.AccentColor = ""; }
             s.Dark = dark;
             Store.MarkSettings(); Ui.ApplyLook(); ApplyTheme();
@@ -546,7 +546,7 @@ namespace StickyPro
             }
             Ui.Dark = Store.Settings.Dark;
             Ui.ThemeIndex = Store.Settings.Theme;
-            Ui.Flow = Store.Settings.Design == "flow"; Ui.Nexus = Store.Settings.Design != "classic"; Ui.Navy = Store.Settings.Design == "serq" || Store.Settings.Design == "soft"; Ui.Soft = Store.Settings.Design == "soft";
+            Ui.SetDesignFlags(Store.Settings.Design);
             Ui.ThemeMenu(tray.ContextMenuStrip);
             if (Overlay.On) Overlay.ApplySettings();   // dock and menu bar repaint in the new theme
             string page = null;
@@ -995,12 +995,14 @@ namespace StickyPro
         public DocumentsPage DocumentsView { get { return main != null && !main.IsDisposed ? main.DocumentsView : null; } }
         public ExplorerPage ExplorerView { get { return main != null && !main.IsDisposed ? main.ExplorerView : null; } }
         public BrowserPage BrowserView { get { return main != null && !main.IsDisposed ? main.BrowserView : null; } }
+        public MainForm MainView { get { return main != null && !main.IsDisposed ? main : null; } }
         public void OpenDocument(string path) { OpenDocument(path, null); }
         public void OpenDocument(string path, bool? edit) { ShowMain("documents"); main.OpenDocument(path, edit); }
         public void ToggleZen() { if (main != null && !main.IsDisposed) main.SetZen(!main.Zen); }
         public void ToggleAssistant() { ShowMain(main != null && !main.IsDisposed ? main.Page : null); main.SetAssistant(!Store.Settings.AssistantOpen); }
         public Dictionary<string, object> PageContext() { return main != null && !main.IsDisposed ? main.PageContext() : new Dictionary<string, object> { { "page", "" } }; }
         public System.Threading.Tasks.Task<string> BrowserScript(string js) { ShowMain("browser"); return main.BrowserScript(js); }
+        public System.Threading.Tasks.Task<string> BrowserCdp(string method, string paramsJson, int tabIndex) { ShowMain("browser"); return main.BrowserCdp(method, paramsJson, tabIndex); }
         public void OpenAgentChat(AgentChat c) { ShowMain("agents"); main.OpenAgentChat(c); }
 
         void ShowQuick(string mode)
@@ -1159,6 +1161,7 @@ namespace StickyPro
             Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerMode;
             Snippets.Stop();
             ActivityMonitor.Stop();
+            try { WorkflowRecorder.Stop(); } catch { }
             try { CronEngine.Stop(); } catch { }
             try { SqliteVault.Close(); } catch { }
             if (Recorder.Active) Recorder.Stop(true);

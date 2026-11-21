@@ -367,6 +367,39 @@ $stream.Dispose()
             return languages;
         }
 
+        // Synchronous OCR helper for MCP tools (snip_ocr) and background workers.
+        public static string RecognizeSync(Image img, string lang, out string error)
+        {
+            error = null;
+            if (img == null) { error = "Image is null."; return ""; }
+            string tmp = Path.Combine(Path.GetTempPath(), "snp_ocr_" + Guid.NewGuid().ToString("N") + ".png");
+            try
+            {
+                double s = Math.Max(1, Math.Min(3, 1600.0 / Math.Max(img.Width, img.Height)));
+                using (var big = new Bitmap(Math.Max(1, (int)(img.Width * s)), Math.Max(1, (int)(img.Height * s))))
+                {
+                    using (var g = Graphics.FromImage(big))
+                    {
+                        g.Clear(Color.White);
+                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        g.DrawImage(img, 0, 0, big.Width, big.Height);
+                    }
+                    big.Save(tmp, ImageFormat.Png);
+                }
+                string text = RunPs("-img \"" + tmp + "\"" + (string.IsNullOrEmpty(lang) ? "" : " -lang " + lang), 60000, out error);
+                return (text ?? "").Trim();
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return "";
+            }
+            finally
+            {
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+            }
+        }
+
         // Runs on a background thread; calls done(text, error) on the UI thread of ui.
         public static void Run(Image img, string lang, Control ui, Action<string, string> done)
         {

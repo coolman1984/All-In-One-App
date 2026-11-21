@@ -498,6 +498,20 @@ namespace StickyPro
             foreach (int i in lv.SelectedIndices) if (i >= 0 && i < rows.Count) l.Add(rows[i].Path);
             return l;
         }
+        public void ReloadPane() { Load(false); }
+        public void SelectPath(string targetPath)
+        {
+            if (string.IsNullOrEmpty(targetPath)) return;
+            string dir = Directory.Exists(targetPath) ? Path.GetDirectoryName(targetPath.TrimEnd('\\')) : Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrEmpty(dir) && !string.Equals(Current.TrimEnd('\\'), dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+            {
+                RequestLocation(dir, true, targetPath, null);
+                return;
+            }
+            int si = rows.FindIndex(r => string.Equals(r.Path.TrimEnd('\\'), targetPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
+            if (si >= 0) SelectIndex(si);
+            else Load(false, targetPath);
+        }
         Entry FirstSel() { foreach (int i in lv.SelectedIndices) if (i >= 0 && i < rows.Count) return rows[i]; return null; }
 
         void OpenSelected()
@@ -804,6 +818,25 @@ namespace StickyPro
         public void OpenPath(string path) { if (!started) { started = true; Arrange(); } if (active != null) active.Navigate(path); }
         public string CurrentFolder { get { return active != null ? active.Current : ""; } }
         public List<string> SelectedPaths() { return active != null && !active.IsDisposed ? active.SelectedPaths() : new List<string>(); }
+        public FolderPane GetPane(string paneSpec)
+        {
+            if (!started) { started = true; Arrange(); }
+            if (panes == null || panes.Count == 0) return null;
+            string s = (paneSpec ?? "").Trim().ToLowerInvariant();
+            if (s == "left" || s == "0" || s == "1st") return panes[0];
+            if ((s == "right" || s == "1" || s == "2nd") && panes.Count > 1) return panes[1];
+            int idx;
+            if (int.TryParse(s, out idx) && idx >= 0 && idx < panes.Count) return panes[idx];
+            return active ?? panes[0];
+        }
+        public void RefreshAllPanes()
+        {
+            if (panes == null) return;
+            foreach (var p in panes)
+            {
+                if (p != null && !p.IsDisposed && p.HasLocation) p.ReloadPane();
+            }
+        }
         public List<string> PaneFolders()
         {
             if (panes == null || panes.Count == 0) return new List<string>();

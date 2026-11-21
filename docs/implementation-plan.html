@@ -340,11 +340,11 @@
         <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="0" transform="rotate(-90 100 100)" onclick="pickPhase(0)"/>
         <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-122" transform="rotate(-90 100 100)" onclick="pickPhase(1)"/>
         <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-245" transform="rotate(-90 100 100)" onclick="pickPhase(2)"/>
-        <circle class="arc run"  cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-367" transform="rotate(-90 100 100)" onclick="pickPhase(3)"/>
+        <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-367" transform="rotate(-90 100 100)" onclick="pickPhase(3)"/>
       </svg>
       <div class="chrono-center">
-        <div class="chrono-pct">75%</div>
-        <div class="chrono-lbl">3/4 مراحل مكتملة<br>المرحلة 4 شغالة الآن</div>
+        <div class="chrono-pct">100%</div>
+        <div class="chrono-lbl">4/4 مراحل مكتملة ✓<br>AllInOne.exe جاهز</div>
       </div>
     </div>
   </section>
@@ -576,7 +576,7 @@ const PHASES = [
     proof: "نجاح 8 Suites: test-sqlite-vault (SQL JOIN + FTS5 3.53.4 + Arabic UTF-8) + test-hermes-memory + Phases 1–2"
   },
   {
-    num: "PHASE 04", st: "run", stLbl: "شغالة الآن",
+    num: "PHASE 04", st: "done", stLbl: "مكتملة ✓",
     name: "مسجّل المهام + ثيمين استوديو + سيطرة كاملة", en: "WORKFLOW RECORDER · ATELIER & NORDIC · ZERO-INSTALL EXE",
     items: [
       { t: "مسجّل Show-Me-Once (بدون فيديو)", d: "UIA Events + لقطات ~40 KB → ترقية لكود COM/SQL/CDP + SKILL.md." },
@@ -586,7 +586,7 @@ const PHASES = [
     ],
     newFiles: ["src/WorkflowRecorder.cs", "tools/test-workflow-recorder.ps1"],
     edFiles: ["src/Ui.cs", "src/LookPicker.cs", "src/SettingsForm.cs", "src/ApiTools.cs", "src/Browser.cs", "src/Explorer.cs"],
-    proof: "test-all.ps1 + test-ui-sweep.ps1 (فحص PNG حقيقي) + build.ps1 + AllInOne.exe Clean Smoke Test"
+    proof: "نجاح 10 Suites + test-ui-sweep (0 أخطاء عبر 33 شاشة × 7 تصاميم) + AllInOne.exe (85.34 MB · ffmpeg 211.93 MB) ✓"
   }
 ];
 
@@ -711,7 +711,7 @@ document.addEventListener("pointermove", e => {
   document.documentElement.style.setProperty("--my", e.clientY + "px");
 });
 
-pickPhase(2);
+pickPhase(3);
 pickTable(0);
 </script>
 </body>

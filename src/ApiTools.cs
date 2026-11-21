@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -8,6 +10,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Script.Serialization;
+using System.Windows.Forms;
 
 namespace StickyPro
 {
@@ -165,6 +168,47 @@ namespace StickyPro
                 new[] { "html|string|Full HTML5 document or visual fragment (follow skills/anti-slop-web-design/SKILL.md)", "title|string|Canvas title (default Live Canvas)", "open|boolean|Open/reload in Browser automatically (default true)" }, "html"));
             l.Add(T("dashboard_list", "List published dashboards", "List saved HTML dashboards and Live Canvas files in data\\dashboards\\.", true, new string[0]));
 
+            // ---- Phase 4A: Show-Me-Once Workflow Recorder ----
+            l.Add(T("record_start", "Start workflow recording", "Start low-overhead semantic UIA + smart keyframe JPEG recording into data\\assistant\\recordings\\<id>\\.", false,
+                new[] { "title|string|Workflow title (default Workflow Demonstration)", "notes|string|Optional context or goal notes" }));
+            l.Add(T("record_stop", "Stop workflow recording", "Stop active workflow recording, unhook cleanly, generate summary.md automation blueprint, and return captured steps.", false, new string[0]));
+            l.Add(T("record_status", "Workflow recorder status", "Return whether WorkflowRecorder is currently recording, active id, title, stepCount, and folder.", true, new string[0]));
+            l.Add(T("record_list", "List or inspect workflow recordings", "List saved recordings under data\\assistant\\recordings\\ or pass id (or 'latest') to read full events.jsonl and summary.md.", true,
+                new[] { "limit|integer|Max recordings to list (default 20)", "id|string|Optional recording id (or 'latest') to read full events and summary.md" }));
+
+            // ---- Phase 4C: Zero-Exit PC & Desktop Automation Tools ----
+            l.Add(T("explorer_list", "List files in folder or Explorer pane", "List files and folders in a directory or active Explorer pane (left/right) with size, modified time, attributes, and selection state.", true,
+                new[] { "path|string|Optional directory path (defaults to active or specified Explorer pane)", "pane|string|Optional pane selector: active, left, right, 0..3", "filter|string|Optional name or wildcard filter (e.g. *.xlsx)", "recursive|boolean|Include subdirectories (default false)", "limit|integer|Max entries (default 200)" }));
+            l.Add(T("explorer_action", "Perform file or Explorer action", "Execute rename, copy, move, mkdir, delete_recycle (Recycle Bin), select, or navigate and refresh Explorer panes.", false,
+                new[] { "action|string|rename, copy, move, mkdir, delete_recycle, select, or navigate", "path|string|Source file or folder path", "dest|string|Destination path or new name (for rename, copy, move)", "pane|string|Optional Explorer pane: active, left, right" }, "action", "path"));
+            l.Add(T("system_processes", "List running Windows processes", "List running processes with PID, name, window title, working set MB, CPU %, and executable path.", true,
+                new[] { "filter|string|Optional process name, title, or PID filter", "sortBy|string|ram (default), cpu, name, or pid", "limit|integer|Max processes (default 50)" }));
+            l.Add(T("system_drives", "List logical drives", "List logical drives with volume label, format, total GB, free GB, and usage percentage.", true, new string[0]));
+            l.Add(T("process_kill", "Terminate a process", "Terminate a process by PID or name (refuses to terminate AllInOne or critical system processes).", false,
+                new[] { "pid|integer|Process ID to terminate", "name|string|Process name to terminate (if pid not given)", "force|boolean|Force termination (default true)" }));
+            l.Add(T("browser_cdp", "Call Browser Chrome DevTools Protocol or AX snapshot", "Call WebView2 CallDevToolsProtocolMethodAsync(method, paramsJson) on the active or specified Browser tab, or pass method='ax_snapshot' / 'dom_snapshot' for a low-token semantic interactive element snapshot.", false,
+                new[] { "method|string|CDP method (e.g. Page.captureScreenshot, Runtime.evaluate) or 'ax_snapshot' / 'dom_snapshot'", "paramsJson|string|Optional JSON object string of CDP parameters (default '{}')", "tabIndex|integer|Optional 0-based tab index (default -1 = active tab)" }, "method"));
+            l.Add(T("chrome_bookmarks", "Search Chrome and Edge bookmarks", "Read and search bookmarks across local Chrome and Edge profiles.", true,
+                new[] { "query|string|Optional search query matching title, URL, or folder", "limit|integer|Max bookmarks (default 50)" }));
+            l.Add(T("tagged_list", "List tagged files", "List tagged files and folders from All in One Tagged Files with category and note.", true,
+                new[] { "tag|string|Optional category/tag filter (e.g. Urgent, Review, Important)", "query|string|Optional path or note search query", "limit|integer|Max items (default 100)" }));
+            l.Add(T("tagged_add", "Tag a file or folder", "Add or update a tagged file or folder entry and refresh the Tagged Files page.", false,
+                new[] { "path|string|Full file or folder path", "tag|string|Tag category (default Urgent)", "note|string|Optional note" }, "path"));
+            l.Add(T("activity_recent", "Recent file and app activity", "Return recent file open/close activity records logged by All in One.", true,
+                new[] { "limit|integer|Max activity records (default 50)", "kind|string|Optional process or event filter (e.g. Excel, Word, PowerPoint, Opened, Closed)", "query|string|Optional file name or path filter" }));
+            l.Add(T("snip_ocr", "Run Windows OCR on image or screen region", "Extract text from an image file or screen rectangle ('x,y,w,h' or 'full') using Windows built-in OCR.", true,
+                new[] { "path|string|Optional image file path to OCR", "region|string|Optional screen rectangle 'x,y,w,h' or 'full' when path is not provided", "lang|string|Optional BCP-47 language tag (defaults to user profile / settings)" }));
+            l.Add(T("app_screenshot", "Capture app, page, or screen screenshot", "Capture a PNG screenshot of the All in One window (target='app'), active page ('page'), or desktop ('screen') into data\\assistant\\screenshots\\.", false,
+                new[] { "target|string|app (default), page, or screen", "path|string|Optional custom output PNG file path" }));
+            l.Add(T("uia_inspect", "Inspect desktop window and UI controls", "Inspect any internal or external Windows application window or control tree (Win32 / UI Automation) by hwnd, process, title, or screen (x,y).", true,
+                new[] { "hwnd|string|Optional window handle (integer or 0x hex)", "process|string|Optional process name filter (e.g. EXCEL, saplogon, notepad)", "title|string|Optional window title substring filter", "x|integer|Optional screen X coordinate", "y|integer|Optional screen Y coordinate", "depth|integer|Control tree depth (default 2, max 5)" }));
+            l.Add(T("uia_action", "Perform UI automation action on window or control", "Execute focus, click, double_click, right_click, set_text, send_keys, or close on an internal or external window/control.", false,
+                new[] { "action|string|focus, click, double_click, right_click, set_text, send_keys, or close", "hwnd|string|Target window handle (integer or 0x hex)", "controlHwnd|string|Optional child control handle", "x|integer|Optional screen X coordinate", "y|integer|Optional screen Y coordinate", "text|string|Text for action=set_text", "keys|string|SendKeys sequence for action=send_keys" }, "action"));
+            l.Add(T("sessions_spawn", "Spawn async Lean Subagent worker", "Spawn a non-blocking background subagent session using SystemPromptLean (Lean Subagents, maxSpawnDepth=2), tracking status in data\\assistant\\subagents\\ and logging to vault.db.", false,
+                new[] { "prompt|string|Task assignment for the subagent", "role|string|Subagent role title (default 'Lean Subagent Worker')", "cli|string|Agent CLI id (claude, codex, agy, cline, opencode, or local)", "model|string|Optional model override", "parentSessionId|string|Optional parent session/job id", "depth|integer|Current spawn depth (default 1, max 2)", "folder|string|Optional working directory" }, "prompt"));
+            l.Add(T("sessions_status", "Check spawned subagent status", "Get status, elapsed time, and output of a spawned subagent job (or list recent jobs if jobId is omitted).", true,
+                new[] { "jobId|string|Optional subagent jobId", "limit|integer|Max recent jobs when jobId is omitted (default 20)" }));
+
             builtInSchema = l;
             builtInNames = new HashSet<string>(l.Select(t => (string)t["name"]), StringComparer.OrdinalIgnoreCase);
             return l;
@@ -236,6 +280,27 @@ namespace StickyPro
                 case "dashboard_publish": return J(DashboardGen.Publish(S(a, "slug"), S(a, "title"), S(a, "html"), B(a, "open") != false));
                 case "canvas_update": return J(DashboardGen.UpdateCanvas(S(a, "html"), Has(a, "title") ? S(a, "title") : "Live Canvas", B(a, "open") != false));
                 case "dashboard_list": return J(DashboardGen.ListDashboards());
+                // Phase 4: WorkflowRecorder, Zero-Exit PC Control, UIA & Async Subagents
+                case "record_start": return J(WorkflowRecorder.Start(S(a, "title"), S(a, "notes")));
+                case "record_stop": return J(WorkflowRecorder.Stop());
+                case "record_status": return J(WorkflowRecorder.Status());
+                case "record_list": return RecordListTool(a);
+                case "explorer_list": return ExplorerListTool(a);
+                case "explorer_action": return ExplorerActionTool(a);
+                case "system_processes": return SystemProcessesTool(a);
+                case "system_drives": return SystemDrivesTool();
+                case "process_kill": return ProcessKillTool(a);
+                case "browser_cdp": return BrowserCdpTool(a);
+                case "chrome_bookmarks": return ChromeBookmarksTool(a);
+                case "tagged_list": return TaggedListTool(a);
+                case "tagged_add": return TaggedAddTool(a);
+                case "activity_recent": return ActivityRecentTool(a);
+                case "snip_ocr": return SnipOcrTool(a);
+                case "app_screenshot": return AppScreenshotTool(a);
+                case "uia_inspect": return UiaInspectTool(a);
+                case "uia_action": return UiaActionTool(a);
+                case "sessions_spawn": return SessionsSpawnTool(a);
+                case "sessions_status": return J(SubagentRunner.Status(S(a, "jobId"), I(a, "limit", 20)));
                 case "agent_chats": case "agent_chat_get": case "search_all": EnsureChats(); break;
             }
             if (AgentMemory.HasDynamicTool(tool))
@@ -267,6 +332,7 @@ namespace StickyPro
 
         static string UI(Func<string> f)
         {
+            if (App.I == null || App.I.Sync == null || !App.I.Sync.IsHandleCreated) return f();
             var sync = App.I.Sync;
             if (!sync.InvokeRequired) return f();
             return (string)sync.Invoke(f);
@@ -927,6 +993,888 @@ namespace StickyPro
             if (act == "remove" || act == "unwatch" || act == "delete")
                 return J(CronEngine.UnwatchFolder(S(a, "path")));
             return J(CronEngine.WatchFolder(S(a, "path")));
+        }
+
+        // ---------- Phase 4 Tool Handlers ----------
+        static string RecordListTool(Dictionary<string, object> a)
+        {
+            string id = S(a, "id").Trim();
+            if (id.Length > 0) return J(WorkflowRecorder.Get(id));
+            return J(WorkflowRecorder.List(I(a, "limit", 20)));
+        }
+
+        static string ExplorerListTool(Dictionary<string, object> a)
+        {
+            string path = S(a, "path").Trim();
+            string paneSpec = S(a, "pane").Trim();
+            string filter = S(a, "filter").Trim();
+            bool recursive = B(a, "recursive") == true;
+            int limit = Math.Max(1, Math.Min(2000, I(a, "limit", 200)));
+
+            var selectedSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (App.I != null)
+            {
+                UI(() =>
+                {
+                    var ev = App.I.ExplorerView;
+                    if (ev != null)
+                    {
+                        var pane = ev.GetPane(paneSpec);
+                        if (pane != null)
+                        {
+                            if (path.Length == 0) path = pane.Current ?? "";
+                            foreach (var sp in pane.SelectedPaths()) selectedSet.Add(sp);
+                        }
+                    }
+                    return "";
+                });
+            }
+            if (path.Length == 0 && Store.Settings != null && Store.Settings.ExplorerPaths != null && Store.Settings.ExplorerPaths.Count > 0)
+            {
+                int pIdx = (paneSpec == "right" || paneSpec == "1") && Store.Settings.ExplorerPaths.Count > 1 ? 1 : 0;
+                path = Store.Settings.ExplorerPaths[pIdx] ?? "";
+            }
+            if (path.Length == 0) path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!Directory.Exists(path))
+                throw new Exception("Directory not found: " + path);
+
+            string searchPattern = "*";
+            string subFilter = "";
+            if (filter.Length > 0)
+            {
+                if (filter.IndexOf('*') >= 0 || filter.IndexOf('?') >= 0) searchPattern = filter;
+                else subFilter = filter;
+            }
+
+            var entries = new List<Dictionary<string, object>>();
+            var dirInfo = new DirectoryInfo(path);
+            SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+            foreach (var fsi in dirInfo.EnumerateFileSystemInfos(searchPattern, opt))
+            {
+                if (subFilter.Length > 0 && fsi.Name.IndexOf(subFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                bool isDir = (fsi.Attributes & FileAttributes.Directory) != 0;
+                long sz = 0;
+                if (!isDir)
+                {
+                    try { sz = ((FileInfo)fsi).Length; } catch { }
+                }
+                entries.Add(new Dictionary<string, object>
+                {
+                    { "name", fsi.Name },
+                    { "path", fsi.FullName },
+                    { "is_dir", isDir },
+                    { "size", sz },
+                    { "modified", fsi.LastWriteTime.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture) },
+                    { "extension", isDir ? "" : (fsi.Extension ?? "") },
+                    { "attributes", fsi.Attributes.ToString() },
+                    { "selected", selectedSet.Contains(fsi.FullName) }
+                });
+                if (entries.Count >= limit) break;
+            }
+
+            return J(new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "folder", path },
+                { "pane", paneSpec.Length > 0 ? paneSpec : "active" },
+                { "count", entries.Count },
+                { "selected_paths", selectedSet.ToList() },
+                { "entries", entries }
+            });
+        }
+
+        static string ExplorerActionTool(Dictionary<string, object> a)
+        {
+            string act = S(a, "action").Trim().ToLowerInvariant();
+            string path = S(a, "path").Trim();
+            string dest = S(a, "dest").Trim();
+            string paneSpec = S(a, "pane").Trim();
+
+            if (act.Length == 0) throw new Exception("action is required for explorer_action.");
+            if (path.Length == 0) throw new Exception("path is required for explorer_action.");
+
+            string resultTarget = path;
+
+            switch (act)
+            {
+                case "mkdir":
+                {
+                    Directory.CreateDirectory(path);
+                    resultTarget = path;
+                    break;
+                }
+                case "rename":
+                {
+                    if (dest.Length == 0) throw new Exception("dest is required for explorer_action(rename).");
+                    string targetPath = Path.IsPathRooted(dest) ? dest : Path.Combine(Path.GetDirectoryName(path.TrimEnd('\\', '/')) ?? "", dest);
+                    if (Directory.Exists(path)) Directory.Move(path, targetPath);
+                    else if (File.Exists(path)) File.Move(path, targetPath);
+                    else throw new Exception("Path not found: " + path);
+                    resultTarget = targetPath;
+                    break;
+                }
+                case "copy":
+                {
+                    if (dest.Length == 0) throw new Exception("dest is required for explorer_action(copy).");
+                    string targetPath = dest;
+                    if (Directory.Exists(dest))
+                        targetPath = Path.Combine(dest, Path.GetFileName(path.TrimEnd('\\', '/')));
+                    if (Directory.Exists(path))
+                    {
+                        DataFiles.CopyTree(path, targetPath);
+                    }
+                    else if (File.Exists(path))
+                    {
+                        string parent = Path.GetDirectoryName(targetPath);
+                        if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                        File.Copy(path, targetPath, true);
+                    }
+                    else throw new Exception("Source path not found: " + path);
+                    resultTarget = targetPath;
+                    break;
+                }
+                case "move":
+                {
+                    if (dest.Length == 0) throw new Exception("dest is required for explorer_action(move).");
+                    string targetPath = dest;
+                    if (Directory.Exists(dest))
+                        targetPath = Path.Combine(dest, Path.GetFileName(path.TrimEnd('\\', '/')));
+                    if (Directory.Exists(path))
+                    {
+                        if (Directory.Exists(targetPath)) Directory.Delete(targetPath, true);
+                        Directory.Move(path, targetPath);
+                    }
+                    else if (File.Exists(path))
+                    {
+                        string parent = Path.GetDirectoryName(targetPath);
+                        if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                        if (File.Exists(targetPath)) File.Delete(targetPath);
+                        File.Move(path, targetPath);
+                    }
+                    else throw new Exception("Source path not found: " + path);
+                    resultTarget = targetPath;
+                    break;
+                }
+                case "delete_recycle":
+                case "delete":
+                {
+                    if (!File.Exists(path) && !Directory.Exists(path))
+                        throw new Exception("Path not found for delete_recycle: " + path);
+                    bool recycled = Leftovers.Recycle(path, true);
+                    if (!recycled)
+                    {
+                        if (Directory.Exists(path)) Directory.Delete(path, true);
+                        else if (File.Exists(path)) File.Delete(path);
+                    }
+                    resultTarget = path;
+                    break;
+                }
+                case "navigate":
+                {
+                    if (!Directory.Exists(path)) throw new Exception("Directory not found: " + path);
+                    if (App.I != null)
+                    {
+                        UI(() =>
+                        {
+                            App.I.ShowMain("explorer");
+                            var ev = App.I.ExplorerView;
+                            if (ev != null)
+                            {
+                                var pane = ev.GetPane(paneSpec);
+                                if (pane != null) pane.Navigate(path);
+                            }
+                            return "";
+                        });
+                    }
+                    break;
+                }
+                case "select":
+                {
+                    if (App.I != null)
+                    {
+                        UI(() =>
+                        {
+                            App.I.ShowMain("explorer");
+                            var ev = App.I.ExplorerView;
+                            if (ev != null)
+                            {
+                                var pane = ev.GetPane(paneSpec);
+                                if (pane != null) pane.SelectPath(path);
+                            }
+                            return "";
+                        });
+                    }
+                    break;
+                }
+                default:
+                    throw new Exception("Unknown explorer_action: " + act + ". Use mkdir, rename, copy, move, delete_recycle, navigate, or select.");
+            }
+
+            if (App.I != null && act != "navigate" && act != "select")
+            {
+                UI(() =>
+                {
+                    var ev = App.I.ExplorerView;
+                    if (ev != null) ev.RefreshAllPanes();
+                    return "";
+                });
+            }
+
+            AssistantHarness.Report("Explorer " + act + ": " + Path.GetFileName(resultTarget.TrimEnd('\\', '/')));
+            return J(new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "action", act },
+                { "path", path },
+                { "target", resultTarget }
+            });
+        }
+
+        static string SystemProcessesTool(Dictionary<string, object> a)
+        {
+            string filter = S(a, "filter").Trim();
+            string sortBy = S(a, "sortBy").Trim().ToLowerInvariant();
+            int limit = Math.Max(1, Math.Min(500, I(a, "limit", 50)));
+
+            var sampledByPid = new Dictionary<int, ProcInfo>();
+            try
+            {
+                var snap = ProcessSampler.Last;
+                if (snap != null)
+                {
+                    foreach (var sp in snap) sampledByPid[sp.Pid] = sp;
+                }
+            }
+            catch { }
+
+            var list = new List<Dictionary<string, object>>();
+            Process[] procs = Process.GetProcesses();
+            foreach (var p in procs)
+            {
+                try
+                {
+                    int pid = p.Id;
+                    string name = p.ProcessName ?? "";
+                    string title = "";
+                    try { title = p.MainWindowTitle ?? ""; } catch { }
+                    long ws = 0;
+                    try { ws = p.WorkingSet64; } catch { }
+                    double cpu = 0;
+                    string exePath = "";
+
+                    ProcInfo pi;
+                    if (sampledByPid.TryGetValue(pid, out pi))
+                    {
+                        cpu = Math.Round(pi.Cpu, 1);
+                        if (pi.Mem > 0) ws = pi.Mem;
+                        exePath = pi.Path ?? "";
+                    }
+
+                    if (filter.Length > 0)
+                    {
+                        bool match = name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0
+                            || title.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0
+                            || pid.ToString(CultureInfo.InvariantCulture) == filter;
+                        if (!match) continue;
+                    }
+
+                    list.Add(new Dictionary<string, object>
+                    {
+                        { "pid", pid },
+                        { "name", name },
+                        { "windowTitle", title },
+                        { "workingSetMB", Math.Round(ws / (1024.0 * 1024.0), 2) },
+                        { "cpuPercent", cpu },
+                        { "path", exePath }
+                    });
+                }
+                catch { }
+                finally { p.Dispose(); }
+            }
+
+            IEnumerable<Dictionary<string, object>> sorted;
+            if (sortBy == "cpu")
+                sorted = list.OrderByDescending(x => Convert.ToDouble(x["cpuPercent"], CultureInfo.InvariantCulture)).ThenByDescending(x => Convert.ToDouble(x["workingSetMB"], CultureInfo.InvariantCulture));
+            else if (sortBy == "name")
+                sorted = list.OrderBy(x => Convert.ToString(x["name"], CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase);
+            else if (sortBy == "pid")
+                sorted = list.OrderBy(x => Convert.ToInt32(x["pid"], CultureInfo.InvariantCulture));
+            else
+                sorted = list.OrderByDescending(x => Convert.ToDouble(x["workingSetMB"], CultureInfo.InvariantCulture));
+
+            var results = sorted.Take(limit).ToList();
+            return J(new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "count", results.Count },
+                { "totalRunning", list.Count },
+                { "processes", results }
+            });
+        }
+
+        static string SystemDrivesTool()
+        {
+            var list = new List<Dictionary<string, object>>();
+            foreach (var d in DriveInfo.GetDrives())
+            {
+                try
+                {
+                    bool ready = d.DriveType != DriveType.Network && d.IsReady;
+                    long total = ready ? d.TotalSize : 0;
+                    long free = ready ? d.AvailableFreeSpace : 0;
+                    long used = Math.Max(0, total - free);
+                    double totalGb = Math.Round(total / (1024.0 * 1024.0 * 1024.0), 2);
+                    double freeGb = Math.Round(free / (1024.0 * 1024.0 * 1024.0), 2);
+                    double usedGb = Math.Round(used / (1024.0 * 1024.0 * 1024.0), 2);
+                    double pct = total > 0 ? Math.Round((used * 100.0) / total, 1) : 0.0;
+                    string label = "";
+                    string fmt = "";
+                    if (ready)
+                    {
+                        try { label = d.VolumeLabel ?? ""; } catch { }
+                        try { fmt = d.DriveFormat ?? ""; } catch { }
+                    }
+                    list.Add(new Dictionary<string, object>
+                    {
+                        { "name", d.Name },
+                        { "letter", d.Name.Substring(0, 1).ToUpperInvariant() },
+                        { "driveType", d.DriveType.ToString() },
+                        { "isReady", ready },
+                        { "volumeLabel", label },
+                        { "format", fmt },
+                        { "totalGB", totalGb },
+                        { "freeGB", freeGb },
+                        { "usedGB", usedGb },
+                        { "usagePercent", pct }
+                    });
+                }
+                catch { }
+            }
+            return J(new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "count", list.Count },
+                { "drives", list }
+            });
+        }
+
+        static string ProcessKillTool(Dictionary<string, object> a)
+        {
+            int targetPid = I(a, "pid", 0);
+            string targetName = S(a, "name").Trim();
+            int selfPid = Process.GetCurrentProcess().Id;
+
+            if (targetPid == selfPid)
+                throw new Exception("Refusing to terminate the current All in One process.");
+
+            if (targetName.Length > 0)
+            {
+                string clean = targetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? targetName.Substring(0, targetName.Length - 4)
+                    : targetName;
+                if (string.Equals(clean, "AllInOne", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(clean, "StickyNotesPro", StringComparison.OrdinalIgnoreCase)
+                    || ProcessSampler.IsCritical(clean) || ProcessSampler.IsCritical(clean + ".exe"))
+                {
+                    throw new Exception("Refusing to terminate protected or critical process: " + targetName);
+                }
+            }
+
+            var pids = new List<int>();
+            if (targetPid > 0)
+            {
+                pids.Add(targetPid);
+            }
+            else if (targetName.Length > 0)
+            {
+                string clean = targetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? targetName.Substring(0, targetName.Length - 4)
+                    : targetName;
+                foreach (var p in Process.GetProcessesByName(clean))
+                {
+                    try { if (p.Id != selfPid) pids.Add(p.Id); }
+                    finally { p.Dispose(); }
+                }
+            }
+            else
+            {
+                throw new Exception("Specify pid or name for process_kill.");
+            }
+
+            int[] res = ProcessSampler.Kill(pids);
+            return J(new Dictionary<string, object>
+            {
+                { "ok", res[0] > 0 },
+                { "killedCount", res[0] },
+                { "failedCount", res[1] },
+                { "targetPids", pids }
+            });
+        }
+
+        static string BrowserCdpTool(Dictionary<string, object> a)
+        {
+            string method = Has(a, "method") ? S(a, "method").Trim() : "ax_snapshot";
+            string paramsJson = Has(a, "paramsJson") ? S(a, "paramsJson").Trim() : "{}";
+            int tabIndex = I(a, "tabIndex", -1);
+
+            if (App.I == null || App.I.Sync == null || !App.I.Sync.IsHandleCreated)
+            {
+                return J(new Dictionary<string, object>
+                {
+                    { "ok", false },
+                    { "method", method },
+                    { "error", "Browser UI is not active in headless mode." }
+                });
+            }
+
+            var done = new ManualResetEvent(false);
+            string rawResult = null, error = null;
+            App.I.Sync.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    rawResult = await App.I.BrowserCdp(method, paramsJson, tabIndex);
+                }
+                catch (Exception ex) { error = ex.Message; }
+                done.Set();
+            }));
+            if (!done.WaitOne(30000)) throw new Exception("browser_cdp timed out after 30 s.");
+            if (error != null)
+            {
+                return J(new Dictionary<string, object>
+                {
+                    { "ok", false },
+                    { "method", method },
+                    { "error", error }
+                });
+            }
+
+            object parsed = rawResult;
+            if (!string.IsNullOrEmpty(rawResult))
+            {
+                try
+                {
+                    if (rawResult.StartsWith("\"") && (string.Equals(method, "ax_snapshot", StringComparison.OrdinalIgnoreCase) || string.Equals(method, "dom_snapshot", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        string inner = Js.Deserialize<string>(rawResult);
+                        parsed = Js.DeserializeObject(inner);
+                    }
+                    else if (rawResult.StartsWith("{") || rawResult.StartsWith("["))
+                    {
+                        parsed = Js.DeserializeObject(rawResult);
+                    }
+                }
+                catch { }
+            }
+
+            return J(new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "method", method },
+                { "result", parsed }
+            });
+        }
+
+        static string ChromeBookmarksTool(Dictionary<string, object> a)
+        {
+            string query = S(a, "query").Trim();
+            int limit = Math.Max(1, Math.Min(500, I(a, "limit", 50)));
+            var results = new List<Dictionary<string, object>>();
+
+            var rootsToScan = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("Chrome", ChromeInfo.UserData),
+                new KeyValuePair<string, string>("Edge", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Microsoft\Edge\User Data"))
+            };
+
+            foreach (var browserRoot in rootsToScan)
+            {
+                string userData = browserRoot.Value;
+                if (string.IsNullOrEmpty(userData) || !Directory.Exists(userData)) continue;
+                var bmFiles = new List<string>();
+                string defBm = Path.Combine(userData, "Default", "Bookmarks");
+                if (File.Exists(defBm)) bmFiles.Add(defBm);
+                try
+                {
+                    foreach (var dir in Directory.GetDirectories(userData, "Profile *"))
+                    {
+                        string f = Path.Combine(dir, "Bookmarks");
+                        if (File.Exists(f)) bmFiles.Add(f);
+                    }
+                }
+                catch { }
+
+                foreach (var bmFile in bmFiles)
+                {
+                    if (results.Count >= limit) break;
+                    string profileName = Path.GetFileName(Path.GetDirectoryName(bmFile));
+                    try
+                    {
+                        var doc = Js.DeserializeObject(File.ReadAllText(bmFile, Encoding.UTF8)) as Dictionary<string, object>;
+                        if (doc == null || !doc.ContainsKey("roots")) continue;
+                        var roots = doc["roots"] as Dictionary<string, object>;
+                        if (roots == null) continue;
+                        foreach (var key in new[] { "bookmark_bar", "other", "synced" })
+                        {
+                            if (!roots.ContainsKey(key)) continue;
+                            var node = roots[key] as Dictionary<string, object>;
+                            if (node != null)
+                                CollectBookmarksRecursive(node, "", browserRoot.Key, profileName, query, limit, results);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            return J(new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "count", results.Count },
+                { "query", query },
+                { "bookmarks", results }
+            });
+        }
+
+        static void CollectBookmarksRecursive(Dictionary<string, object> node, string folderPath, string browser, string profile, string query, int limit, List<Dictionary<string, object>> results)
+        {
+            if (node == null || results.Count >= limit) return;
+            string type = node.ContainsKey("type") && node["type"] != null ? Convert.ToString(node["type"], CultureInfo.InvariantCulture) : "";
+            string name = node.ContainsKey("name") && node["name"] != null ? Convert.ToString(node["name"], CultureInfo.InvariantCulture) : "";
+            string url = node.ContainsKey("url") && node["url"] != null ? Convert.ToString(node["url"], CultureInfo.InvariantCulture) : "";
+
+            if (type == "url" && url.Length > 0)
+            {
+                if (Match(name + " " + url + " " + folderPath, query))
+                {
+                    results.Add(new Dictionary<string, object>
+                    {
+                        { "title", name },
+                        { "url", url },
+                        { "folder", folderPath },
+                        { "browser", browser },
+                        { "profile", profile }
+                    });
+                }
+                return;
+            }
+
+            string nextFolder = string.IsNullOrEmpty(folderPath) ? name : (string.IsNullOrEmpty(name) ? folderPath : folderPath + "/" + name);
+            if (!node.ContainsKey("children") || node["children"] == null) return;
+            var children = node["children"] as IEnumerable;
+            if (children == null) return;
+            foreach (var c in children)
+            {
+                if (results.Count >= limit) break;
+                var childDict = c as Dictionary<string, object>;
+                if (childDict != null)
+                    CollectBookmarksRecursive(childDict, nextFolder, browser, profile, query, limit, results);
+            }
+        }
+
+        static string TaggedListTool(Dictionary<string, object> a)
+        {
+            string tag = S(a, "tag").Trim();
+            string query = S(a, "query").Trim();
+            int limit = Math.Max(1, Math.Min(500, I(a, "limit", 100)));
+
+            return UI(() =>
+            {
+                var q = Store.Tagged.Where(t =>
+                    (tag.Length == 0 || string.Equals(t.Category, tag, StringComparison.OrdinalIgnoreCase))
+                    && Match((t.Path ?? "") + " " + (t.Category ?? "") + " " + (t.Note ?? ""), query))
+                    .OrderByDescending(t => t.Added)
+                    .Take(limit)
+                    .Select(t => new Dictionary<string, object>
+                    {
+                        { "id", t.Id },
+                        { "path", t.Path },
+                        { "name", Path.GetFileName((t.Path ?? "").TrimEnd('\\', '/')) },
+                        { "category", t.Category },
+                        { "isFolder", t.IsFolder },
+                        { "note", t.Note ?? "" },
+                        { "added", Iso(t.Added) }
+                    }).ToList();
+
+                return J(new Dictionary<string, object>
+                {
+                    { "ok", true },
+                    { "count", q.Count },
+                    { "categories", Store.TagCats.Select(c => c.Name).ToList() },
+                    { "items", q }
+                });
+            });
+        }
+
+        static string TaggedAddTool(Dictionary<string, object> a)
+        {
+            string path = S(a, "path").Trim();
+            if (path.Length == 0) throw new Exception("path is required for tagged_add.");
+            string fullPath = Path.GetFullPath(path);
+            string tag = S(a, "tag").Trim();
+            string note = Has(a, "note") ? S(a, "note") : null;
+
+            return UI(() =>
+            {
+                if (Store.TagCats.Count == 0)
+                {
+                    Store.TagCats.Add(new TagCategory { Name = "Urgent", Color = "Red" });
+                    Store.TagCats.Add(new TagCategory { Name = "Review", Color = "Yellow" });
+                    Store.TagCats.Add(new TagCategory { Name = "Important", Color = "Green" });
+                }
+                if (tag.Length == 0) tag = Store.TagCats[0].Name;
+                var cat = Store.TagCats.FirstOrDefault(c => string.Equals(c.Name, tag, StringComparison.OrdinalIgnoreCase));
+                if (cat == null)
+                {
+                    cat = new TagCategory { Name = tag, Color = "Blue" };
+                    Store.TagCats.Add(cat);
+                }
+                else
+                {
+                    tag = cat.Name;
+                }
+
+                bool isFolder = Directory.Exists(fullPath);
+                var existing = Store.Tagged.FirstOrDefault(t => string.Equals(t.Path, fullPath, StringComparison.OrdinalIgnoreCase));
+                bool created = false;
+                if (existing != null)
+                {
+                    existing.Category = tag;
+                    existing.IsFolder = isFolder;
+                    if (note != null) existing.Note = note;
+                    existing.Added = Store.Now();
+                }
+                else
+                {
+                    existing = new TaggedFile
+                    {
+                        Id = Store.NewId(),
+                        Path = fullPath,
+                        IsFolder = isFolder,
+                        Category = tag,
+                        Note = note ?? "",
+                        Added = Store.Now()
+                    };
+                    Store.Tagged.Insert(0, existing);
+                    created = true;
+                }
+
+                Store.MarkTagged();
+                Store.RaiseTagged();
+                AssistantHarness.Report("Tagged " + Path.GetFileName(fullPath.TrimEnd('\\', '/')) + " as " + tag);
+
+                return J(new Dictionary<string, object>
+                {
+                    { "ok", true },
+                    { "created", created },
+                    { "id", existing.Id },
+                    { "path", existing.Path },
+                    { "category", existing.Category },
+                    { "note", existing.Note },
+                    { "isFolder", existing.IsFolder }
+                });
+            });
+        }
+
+        static string ActivityRecentTool(Dictionary<string, object> a)
+        {
+            int limit = Math.Max(1, Math.Min(500, I(a, "limit", 50)));
+            string kind = S(a, "kind").Trim();
+            string query = S(a, "query").Trim();
+
+            return UI(() =>
+            {
+                var items = Store.Activity.Where(r =>
+                    (kind.Length == 0 || string.Equals(r.Process, kind, StringComparison.OrdinalIgnoreCase) || string.Equals(r.Event, kind, StringComparison.OrdinalIgnoreCase))
+                    && Match((r.Path ?? "") + " " + (r.Process ?? "") + " " + (r.Event ?? ""), query))
+                    .OrderByDescending(r => r.Time)
+                    .Take(limit)
+                    .Select(r => new Dictionary<string, object>
+                    {
+                        { "id", r.Id },
+                        { "process", r.Process },
+                        { "path", r.Path },
+                        { "name", ActivityMonitor.SafeName(r.Path) },
+                        { "event", r.Event },
+                        { "time", Iso(r.Time) },
+                        { "size", r.Size },
+                        { "favorite", r.Fav }
+                    }).ToList();
+
+                return J(new Dictionary<string, object>
+                {
+                    { "ok", true },
+                    { "count", items.Count },
+                    { "activityOn", Store.Settings != null && Store.Settings.ActivityOn },
+                    { "items", items }
+                });
+            });
+        }
+
+        static string SnipOcrTool(Dictionary<string, object> a)
+        {
+            string path = S(a, "path").Trim();
+            string region = S(a, "region").Trim();
+            string lang = Has(a, "lang") ? S(a, "lang").Trim() : (Store.Settings != null ? Store.Settings.OcrLang : "");
+
+            Bitmap bmp = null;
+            try
+            {
+                if (path.Length > 0)
+                {
+                    if (!File.Exists(path)) throw new Exception("Image file not found for snip_ocr: " + path);
+                    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (var src = Image.FromStream(fs))
+                    {
+                        bmp = new Bitmap(src);
+                    }
+                }
+                else
+                {
+                    Rectangle rect = Shot.Virtual;
+                    if (region.Length > 0 && !string.Equals(region, "full", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parts = region.Split(',');
+                        int rx, ry, rw, rh;
+                        if (parts.Length == 4
+                            && int.TryParse(parts[0].Trim(), out rx)
+                            && int.TryParse(parts[1].Trim(), out ry)
+                            && int.TryParse(parts[2].Trim(), out rw)
+                            && int.TryParse(parts[3].Trim(), out rh)
+                            && rw > 2 && rh > 2)
+                        {
+                            rect = new Rectangle(rx, ry, rw, rh);
+                        }
+                        else throw new Exception("Invalid region format. Use 'x,y,w,h' or 'full'.");
+                    }
+                    bmp = Shot.Capture(rect);
+                }
+
+                string err;
+                string text = Ocr.RecognizeSync(bmp, lang, out err);
+                var lines = string.IsNullOrEmpty(text)
+                    ? new string[0]
+                    : text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+                return J(new Dictionary<string, object>
+                {
+                    { "ok", err == null },
+                    { "path", path },
+                    { "region", region },
+                    { "language", lang },
+                    { "text", text },
+                    { "lineCount", lines.Length },
+                    { "error", err ?? "" }
+                });
+            }
+            finally
+            {
+                if (bmp != null) bmp.Dispose();
+            }
+        }
+
+        static string AppScreenshotTool(Dictionary<string, object> a)
+        {
+            string target = Has(a, "target") ? S(a, "target").Trim().ToLowerInvariant() : "app";
+            string customPath = S(a, "path").Trim();
+            string shotsDir = Path.Combine(AssistantHarness.StorageDir, "screenshots");
+            Directory.CreateDirectory(shotsDir);
+            string outPath = customPath.Length > 0
+                ? Path.GetFullPath(customPath)
+                : Path.Combine(shotsDir, "shot-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 4) + ".png");
+
+            string parentDir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(parentDir)) Directory.CreateDirectory(parentDir);
+
+            int width = 0, height = 0;
+            UI(() =>
+            {
+                Bitmap bmp = null;
+                try
+                {
+                    MainForm mf = App.I != null ? App.I.MainView : null;
+                    if (mf == null)
+                        mf = Application.OpenForms.OfType<MainForm>().FirstOrDefault(f => !f.IsDisposed);
+
+                    if ((target == "app" || target == "page") && mf != null)
+                    {
+                        bmp = mf.CaptureAppScreenshot(target);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            bmp = Shot.Capture(Shot.Virtual);
+                        }
+                        catch
+                        {
+                            bmp = new Bitmap(800, 500, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                            using (var g = Graphics.FromImage(bmp))
+                            {
+                                g.Clear(Ui.Bg);
+                                TextRenderer.DrawText(g, Ui.AppTitle + " Screenshot (" + target + ")", Ui.Title, new Point(24, 24), Ui.Text);
+                            }
+                        }
+                    }
+
+                    width = bmp.Width;
+                    height = bmp.Height;
+                    bmp.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+                }
+                finally
+                {
+                    if (bmp != null) bmp.Dispose();
+                }
+                return "";
+            });
+
+            long bytes = File.Exists(outPath) ? new FileInfo(outPath).Length : 0;
+            AssistantHarness.Report("Captured " + target + " screenshot (" + width + "x" + height + ")");
+            return J(new Dictionary<string, object>
+            {
+                { "ok", File.Exists(outPath) && bytes > 0 },
+                { "target", target },
+                { "path", outPath },
+                { "width", width },
+                { "height", height },
+                { "bytes", bytes }
+            });
+        }
+
+        static string UiaInspectTool(Dictionary<string, object> a)
+        {
+            string hwnd = S(a, "hwnd");
+            string proc = S(a, "process");
+            string title = S(a, "title");
+            int? x = Has(a, "x") ? (int?)I(a, "x", 0) : null;
+            int? y = Has(a, "y") ? (int?)I(a, "y", 0) : null;
+            int depth = I(a, "depth", 2);
+            return J(UiaEngine.Inspect(hwnd, proc, title, x, y, depth));
+        }
+
+        static string UiaActionTool(Dictionary<string, object> a)
+        {
+            string action = S(a, "action");
+            string hwnd = S(a, "hwnd");
+            string ctrlHwnd = S(a, "controlHwnd");
+            int? x = Has(a, "x") ? (int?)I(a, "x", 0) : null;
+            int? y = Has(a, "y") ? (int?)I(a, "y", 0) : null;
+            string text = Has(a, "text") ? S(a, "text") : null;
+            string keys = Has(a, "keys") ? S(a, "keys") : null;
+            return J(UiaEngine.PerformAction(action, hwnd, ctrlHwnd, x, y, text, keys));
+        }
+
+        static string SessionsSpawnTool(Dictionary<string, object> a)
+        {
+            return J(SubagentRunner.Spawn(
+                S(a, "prompt"),
+                S(a, "role"),
+                S(a, "cli"),
+                S(a, "model"),
+                S(a, "parentSessionId"),
+                I(a, "depth", 1),
+                S(a, "folder")));
         }
 
         static long L64(Dictionary<string, object> a, string k, long def)

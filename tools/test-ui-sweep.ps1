@@ -8,7 +8,7 @@ param(
     [string]$Out = '',
     [string]$AssemblyPath = '',
     [switch]$SkipStress,
-    [string[]]$Looks = @('soft-light', 'soft-dark', 'serq-light', 'nexus-dark', 'classic-light'),
+    [string[]]$Looks = @('flow-light', 'atelier-light', 'atelier-dark', 'nordic-light', 'nordic-dark', 'soft-light', 'soft-dark', 'serq-light', 'nexus-dark', 'classic-light'),
     [string[]]$Sizes = @('1100x700', '1500x900', '1920x1080'),
     [switch]$Quick                            # one look, one size
 )
@@ -187,9 +187,11 @@ $sheets = @()
 foreach ($look in $Looks) {
     $design, $mode = $look.Split('-')
     $dark = $mode -eq 'dark'; $script:dark = $dark
-    $st.Design = $design; $st.Dark = $dark; $st.Theme = $(if ($design -eq 'soft') { 8 } elseif ($design -eq 'serq') { 7 } elseif ($design -eq 'nexus') { 6 } else { 0 }); $st.AccentColor = ''
-    $ui.GetField('Dark').SetValue($null, $dark); $ui.GetField('Nexus').SetValue($null, $design -ne 'classic')
-    $ui.GetField('Navy').SetValue($null, $design -eq 'serq' -or $design -eq 'soft'); $ui.GetField('Soft').SetValue($null, $design -eq 'soft'); $ui.GetField('ThemeIndex').SetValue($null, $st.Theme)
+    $defTheme = [int]$ui.GetMethod('DefaultThemeFor').Invoke($null, @($design))
+    $st.Design = $design; $st.Dark = $dark; $st.Theme = $defTheme; $st.AccentColor = ''
+    $ui.GetField('Dark').SetValue($null, $dark)
+    $ui.GetMethod('SetDesignFlags').Invoke($null, @($design)) | Out-Null
+    $ui.GetField('ThemeIndex').SetValue($null, $st.Theme)
     $ui.GetMethod('ApplyLook').Invoke($null, $null)
     foreach ($size in $Sizes) {
         $w, $h = $size.Split('x') | ForEach-Object { [int]$_ }

@@ -20,6 +20,7 @@ namespace StickyPro
         readonly ComboBox ovCorner;
         readonly NumericUpDown ovSize;
         static readonly string[] ovCorners = { "off", "topleft", "topright", "bottomleft", "bottomright" };
+        static readonly string[] designKeys = { "flow", "atelier", "nordic", "serq", "nexus", "classic", "soft" };
         readonly Button accentBtn;
         readonly Control accentSwatch;
         string accentHex = Store.Settings.AccentColor;
@@ -60,8 +61,9 @@ namespace StickyPro
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
             Row(t, "Light or dark mode", theme);
             design = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-            design.Items.AddRange(new object[] { "Flow (white sidebar, colourful dashboard)", "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)", "Soft (charcoal sidebar, coral accent)" });
-            design.SelectedIndex = Store.Settings.Design == "soft" ? 4 : Store.Settings.Design == "classic" ? 3 : Store.Settings.Design == "nexus" ? 2 : Store.Settings.Design == "serq" ? 1 : 0;
+            design.Items.AddRange(new object[] { "Flow (white sidebar, colourful dashboard)", "Atelier (warm drafting paper & signal vermilion / carbon obsidian)", "Nordic (sage mist & emerald / carbon pine)", "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)", "Soft (charcoal sidebar, coral accent)" });
+            int di = Array.IndexOf(designKeys, Store.Settings.Design);
+            design.SelectedIndex = di >= 0 ? di : 0;
             Row(t, "Design", design);
             colorTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = Ui.S(22) };
             colorTheme.Items.AddRange(Ui.ThemeNames);
@@ -341,9 +343,11 @@ namespace StickyPro
                 seen[identity] = a[1];
             }
             var s = Store.Settings;
+            string oldDesign = s.Design;
+            int oldTheme = s.Theme;
             s.Dark = theme.SelectedIndex == 1;
-            s.Theme = colorTheme.SelectedIndex;
-            s.Design = design.SelectedIndex == 4 ? "soft" : design.SelectedIndex == 3 ? "classic" : design.SelectedIndex == 2 ? "nexus" : design.SelectedIndex == 1 ? "serq" : "flow";
+            s.Design = design.SelectedIndex >= 0 && design.SelectedIndex < designKeys.Length ? designKeys[design.SelectedIndex] : "flow";
+            s.Theme = colorTheme.SelectedIndex != oldTheme ? colorTheme.SelectedIndex : s.Design != oldDesign ? Ui.DefaultThemeFor(s.Design) : colorTheme.SelectedIndex;
             s.UiFont = uiFont.SelectedIndex > 0 ? (string)uiFont.SelectedItem : "";
             s.UiFontSize = (float)uiSize.Value;
             s.HeadingFont = headFont.SelectedIndex > 0 ? (string)headFont.SelectedItem : "";

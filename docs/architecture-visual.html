@@ -507,7 +507,7 @@
           <!-- Node 2: Office COM (Left) -->
           <g class="bnode" data-id="2" onclick="pickNode(2)">
             <rect class="frame" x="25" y="262" width="240" height="84" rx="14"/>
-            <circle cx="243" cy="284" r="5" fill="var(--amber)"/>
+            <circle cx="243" cy="284" r="5" fill="var(--emerald)"/>
             <text class="n-title" x="145" y="294" text-anchor="middle">أوفيس + NASCA COM</text>
             <text class="n-sub" x="145" y="317" text-anchor="middle">LIVE EDIT + BULK EXTRACT</text>
             <text class="n-sub" x="145" y="333" text-anchor="middle" style="opacity:.7">EXCEL · WORD · PPT · PDF</text>
@@ -516,7 +516,7 @@
           <!-- Node 3: Memory & Active Loop (Center) -->
           <g class="bnode" data-id="3" onclick="pickNode(3)">
             <rect class="frame" x="275" y="262" width="230" height="84" rx="14"/>
-            <circle cx="483" cy="284" r="5" fill="var(--cobalt)"/>
+            <circle cx="483" cy="284" r="5" fill="var(--emerald)"/>
             <text class="n-title" x="390" y="294" text-anchor="middle">الذاكرة والنبض النشط</text>
             <text class="n-sub" x="390" y="317" text-anchor="middle">FROZEN · DAILY · SKILLS</text>
             <text class="n-sub" x="390" y="333" text-anchor="middle" style="opacity:.7">GOALS · CRON · HEARTBEAT_OK</text>
@@ -525,7 +525,7 @@
           <!-- Node 4: Live Canvas + Recorder (Right) -->
           <g class="bnode" data-id="4" onclick="pickNode(4)">
             <rect class="frame" x="515" y="262" width="240" height="84" rx="14"/>
-            <circle cx="733" cy="284" r="5" fill="var(--cobalt)"/>
+            <circle cx="733" cy="284" r="5" fill="var(--emerald)"/>
             <text class="n-title" x="635" y="294" text-anchor="middle">Canvas + مسجّل المهام</text>
             <text class="n-sub" x="635" y="317" text-anchor="middle">LIVE DASHBOARD · UIA REC</text>
             <text class="n-sub" x="635" y="333" text-anchor="middle" style="opacity:.7">ANTI-SLOP · SHOW-ME-ONCE</text>
@@ -534,7 +534,7 @@
           <!-- Node 5: SQLite Vault -->
           <g class="bnode" data-id="5" onclick="pickNode(5)">
             <rect class="frame" x="175" y="394" width="430" height="74" rx="14"/>
-            <circle cx="581" cy="416" r="5" fill="var(--cobalt)"/>
+            <circle cx="581" cy="416" r="5" fill="var(--emerald)"/>
             <text class="n-title" x="390" y="424" text-anchor="middle">المخزن الدائم — I:\ALL In One\data\vault.db</text>
             <text class="n-sub" x="390" y="447" text-anchor="middle">WINSQLITE3.DLL (WAL) · SQL JOIN · FTS5 + DECAY</text>
           </g>
@@ -622,14 +622,14 @@
           <li>Cron + Heartbeat + Live Canvas</li>
         </ul>
       </div>
-      <div class="phase-card run">
-        <span class="status-chip st-run">جاري التنفيذ الآن</span>
+      <div class="phase-card done">
+        <span class="status-chip st-done">مكتملة ومُختبرة ✓</span>
         <h3>المرحلة 04 — السيطرة الكاملة</h3>
         <ul class="phase-list">
           <li>مسجّل المهام (Show-Me-Once)</li>
-          <li>Explorer / CDP / UIA / OCR</li>
-          <li>اختبارات شاملة + UI Sweep</li>
-          <li>بناء AllInOne.exe + التوثيق</li>
+          <li>Atelier & Nordic + Explorer/CDP/UIA</li>
+          <li>اختبارات شاملة + UI Sweep (0 أخطاء)</li>
+          <li>بناء AllInOne.exe (85.34 MB) + GitHub ✓</li>
         </ul>
       </div>
     </div>
@@ -673,7 +673,7 @@ const MODULES = [
   },
   {
     title: "أوفيس + محرك NASCA COM", en: "LIVE COM + BULK EXTRACTOR",
-    st: "run", stLbl: "المرحلة 2 جارية",
+    st: "done", stLbl: "المرحلة 2 ✓",
     goal: "تعديل Excel/Word/PPT لايف + سحب بيانات أي ملف عند Preview.",
     logic: "أوفيس يفك تشفير NASCA في الرام → سحب UsedRange في خبطة وإغلاق فوري.",
     ram: "خيط STA مؤقت (0 MB بعد الإغلاق)", ramPct: 22,
@@ -682,7 +682,7 @@ const MODULES = [
   },
   {
     title: "الذاكرة الدائمة والنبض النشط", en: "HERMES + OPENCLAW + PROACTIVE",
-    st: "next", stLbl: "المرحلة 3",
+    st: "done", stLbl: "المرحلة 3 ✓",
     goal: "ما ينساش، يطوّر مهاراته، ويراقب شغلك صامت ويقترح قبل ما تطلب.",
     logic: "Frozen Snapshot للكاش + يوميات + GOALS.md + فحص بـ 0 توكنز (HEARTBEAT_OK).",
     ram: "ملفات KB + Timer واحد بالـ Tray", ramPct: 10,
@@ -691,7 +691,7 @@ const MODULES = [
   },
   {
     title: "Live Canvas + مسجّل المهام", en: "ANTI-SLOP UI + SHOW-ME-ONCE",
-    st: "next", stLbl: "المرحلة 3–4",
+    st: "done", stLbl: "المرحلة 3–4 ✓",
     goal: "داشبوردات استوديو في Browser + تسجيل مهمتك مرة لتحويلها لكود 100%.",
     logic: "أحداث UIA + لقطات خفيفة (~40 KB) → ترقية لكود COM/SQL/CDP بدل كليكات عمياء.",
     ram: "صفر حمل وقت الخمول (WebView2 جاهز)", ramPct: 14,
@@ -700,7 +700,7 @@ const MODULES = [
   },
   {
     title: "المخزن الدائم vault.db", en: "WINSQLITE3.DLL · WAL + FTS5",
-    st: "next", stLbl: "المرحلة 3",
+    st: "done", stLbl: "المرحلة 3 ✓",
     goal: "حفظ دائم لكل التقارير والجلسات على I:\\ALL In One\\data\\vault.db.",
     logic: "كل شيت = جدول SQL حقيقي لعمل JOIN بين ملفات مقفولة + بحث FTS5 بترجيح الأحدث.",
     ram: "0 KB إضافة للبرنامج (< 5 ms)", ramPct: 5,
