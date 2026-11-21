@@ -276,6 +276,7 @@ namespace StickyPro
         {
             if (!TeamActive || LeaderWorking || (finish && TeamWorkers.Any(w => w.Run != null))) return;
             LeaderWorking = true; TeamStatus = finish ? "Writing final answer" : "Leader reviewing";
+            if (AssistantHarness.IsAssistant(Chat)) AssistantHarness.Report(finish ? "Leader writing final answer..." : "Leader reviewing team...");
             string instruction = finish ? "Give your final answer. Identify unfinished or failed assignments." :
                 "Assign specific work using the numbered roster below. Reply with one JSON object: " +
                 "{\"tasks\":[{\"worker\":1,\"task\":\"specific assignment\"}]}. To recommend stopping a running worker use its number and task /stop. " +
@@ -349,6 +350,7 @@ namespace StickyPro
             worker.Assignment = assignment.Trim(); worker.Status = "Running"; worker.Cancelled = false;
             worker.Append("info", "Assignment: " + worker.Assignment);
             TeamStatus = "Workers active";
+            if (AssistantHarness.IsAssistant(Chat)) AssistantHarness.Report("Dispatched " + worker.Member.Label + "...");
             Add("info", "", "Assigned to " + worker.Member.Label + ": " + worker.Assignment);
             string prompt = "User request:\n" + teamQuestion + "\n\nYour assignment:\n" + worker.Assignment;
             if (previous.Length > 0) prompt += "\n\nPrevious output from this worker:\n" + TeamWorker.Tail(previous, 6000);

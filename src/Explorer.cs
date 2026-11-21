@@ -491,7 +491,13 @@ namespace StickyPro
 
         void SelectIndex(int i) { lv.SelectedIndices.Clear(); lv.SelectedIndices.Add(i); try { lv.Items[i].Focused = true; lv.EnsureVisible(i); } catch { } }
 
-        public List<string> SelectedPaths() { var l = new List<string>(); foreach (int i in lv.SelectedIndices) if (i >= 0 && i < rows.Count) l.Add(rows[i].Path); return l; }
+        public List<string> SelectedPaths()
+        {
+            var l = new List<string>();
+            if (lv == null || lv.IsDisposed || !lv.IsHandleCreated) return l;
+            foreach (int i in lv.SelectedIndices) if (i >= 0 && i < rows.Count) l.Add(rows[i].Path);
+            return l;
+        }
         Entry FirstSel() { foreach (int i in lv.SelectedIndices) if (i >= 0 && i < rows.Count) return rows[i]; return null; }
 
         void OpenSelected()
@@ -797,6 +803,13 @@ namespace StickyPro
 
         public void OpenPath(string path) { if (!started) { started = true; Arrange(); } if (active != null) active.Navigate(path); }
         public string CurrentFolder { get { return active != null ? active.Current : ""; } }
+        public List<string> SelectedPaths() { return active != null && !active.IsDisposed ? active.SelectedPaths() : new List<string>(); }
+        public List<string> PaneFolders()
+        {
+            if (panes == null || panes.Count == 0) return new List<string>();
+            int count = grid != null && grid.Controls.Count > 0 ? Math.Min(panes.Count, grid.Controls.Count) : panes.Count;
+            return panes.Take(count).Select(p => p.Current ?? "").Where(p => p.Length > 0).ToList();
+        }
 
         // Folder sets: the folders shown in the panes, and opening a set (one pane per folder, up to 4).
         List<string> OpenFolders() { if (!started) { started = true; Arrange(); } return panes.Take(grid.Controls.Count).Select(p => p.Current).Where(p => p.Length > 0).ToList(); }

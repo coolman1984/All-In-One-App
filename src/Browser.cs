@@ -316,6 +316,20 @@ namespace StickyPro
 
         public string ActiveUrl { get { return active != null ? active.Url : ""; } }
         public string ActiveTitle { get { return active != null ? active.Name : ""; } }
+        public List<Dictionary<string, string>> OpenTabsInfo()
+        {
+            var list = new List<Dictionary<string, string>>();
+            foreach (var t in tabs)
+            {
+                list.Add(new Dictionary<string, string>
+                {
+                    { "title", t.Name ?? "" },
+                    { "url", t.Url ?? "" },
+                    { "active", t == active ? "true" : "false" }
+                });
+            }
+            return list;
+        }
         public System.Threading.Tasks.Task<string> RunScript(string js)
         {
             if (active == null || active.View.CoreWebView2 == null) throw new InvalidOperationException("No browser tab is open.");
@@ -475,6 +489,37 @@ namespace StickyPro
                 AddTab(new Uri(path).AbsoluteUri, true);
             }
             catch (Exception ex) { status.Text = "Could not open the file: " + ex.Message; }
+        }
+
+        // Open a local HTML file (Live Canvas / dashboard) reusing its existing tab if already open, otherwise opening cleanly.
+        public void OpenOrReloadFile(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path)) return;
+                string uri = new Uri(Path.GetFullPath(path)).AbsoluteUri;
+                string baseUri = StripUriQuery(uri);
+                for (int i = 0; i < tabs.Count; i++)
+                {
+                    var t = tabs[i];
+                    if (string.Equals(StripUriQuery(t.Url), baseUri, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Activate(t);
+                        t.Url = uri;
+                        if (t.View.CoreWebView2 != null) t.View.CoreWebView2.Navigate(uri);
+                        return;
+                    }
+                }
+                AddTab(uri, true);
+            }
+            catch (Exception ex) { status.Text = "Could not open the file: " + ex.Message; }
+        }
+
+        static string StripUriQuery(string uri)
+        {
+            if (string.IsNullOrEmpty(uri)) return "";
+            int q = uri.IndexOfAny(new[] { '?', '#' });
+            return q >= 0 ? uri.Substring(0, q) : uri;
         }
 
         static string Site(string url) { try { var u = new Uri(url); return u.Scheme.StartsWith("http") ? u.Host.ToLowerInvariant() : ""; } catch { return ""; } }

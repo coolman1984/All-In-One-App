@@ -183,6 +183,10 @@ Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic
 
 Review checks (leave the running app open): `powershell -NoProfile -ExecutionPolicy Bypass -File tools\test-all.ps1` compiles the test build and runs the isolated suites listed in [tools/test-all.ps1](tools/test-all.ps1). Tests use temporary fixtures under `build-test`, hidden controls, and an owned recorder helper; they do not start the app or load production data. `tools\measure-ui.ps1` measures hidden main-window construction; `tools\measure-process.ps1 -ProcessId <id>` samples a running app without changing it. Benchmark scope and review findings are recorded in [the review](tasks/review-2026-11-15.md).
 
+## Operating environment and open automation
+- This app is built for a closed, isolated corporate/factory local intranet behind a strict enterprise firewall.
+- Full local automation freedom is intentional: the local MCP Named Pipe, Assistant `Full Auto` mode, and local Markdown/email web views stay open without confirmation gates, ACL lock-downs, or restrictive HTML stripping.
+
 ## Maintaining this project
 
 See the [maintenance guide](docs/maintenance.md) for code and test entry points and release checks. The [project instructions](AGENTS.md) explain how to keep the [history](HISTORY.md), [lessons](LESSONS.md) and [skills](skills/README.md) updated with every task.

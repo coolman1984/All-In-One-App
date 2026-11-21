@@ -2,6 +2,14 @@
 
 Use [All in One maintenance](all-in-one-maintenance/SKILL.md) for app development, regression checks, local releases and knowledge updates. The repository instructions point Codex and Claude to it when they work here.
 
+## Companion, Automation & Design Craft Skills
+
+| Skill | Use it for |
+|---|---|
+| [anti-slop-web-design](anti-slop-web-design/SKILL.md) | Studio-grade HTML/dashboard/Live Canvas UI craft: OKLCH palettes, spring-physics motion, SVG visual storytelling, and strict anti-AI-slop rules |
+| [workflow-to-automation](workflow-to-automation/SKILL.md) | Turning recorded user demonstrations (`WorkflowRecorder` / `microsoft/skill-recorder` pattern) into native COM/SQL/CDP/UIA code, `SKILL.md`, and verified Dynamic Tools |
+| [proactive-companion](proactive-companion/SKILL.md) | Always-on Active Companion ("الـ Agent العام"): standing `GOALS.md`, `HEARTBEAT.md` + `HEARTBEAT_OK`, 0-token pre-checks, alert deduplication, and continuous memory |
+
 ## Office work
 
 The six office skills cover everyday document and data work.

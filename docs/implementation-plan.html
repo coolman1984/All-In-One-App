@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All in One — خطة التنفيذ التفاعلية (Implementation Plan)</title>
+<style>
+  :root {
+    --spring: cubic-bezier(0.22, 1, 0.36, 1);
+    --ui: "Segoe UI Variable Display", "Segoe UI", Tahoma, sans-serif;
+    --mono: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  }
+
+  /* Nocturne Jade & Champagne Brass (Dark) */
+  [data-theme="dark"] {
+    --bg: #070b0a;
+    --bg-2: #0d1412;
+    --card: rgba(16, 24, 21, 0.86);
+    --card-solid: #101815;
+    --card-hi: #16221e;
+    --ink: #f3f1ea;
+    --ink-2: #b5c2bc;
+    --muted: #6f8079;
+    --line: rgba(243, 241, 234, 0.08);
+    --line-hi: rgba(216, 178, 110, 0.32);
+    --brass: #d8b26e;
+    --brass-s: rgba(216, 178, 110, 0.14);
+    --brass-g: rgba(216, 178, 110, 0.34);
+    --jade: #2bd498;
+    --jade-s: rgba(43, 212, 152, 0.13);
+    --jade-g: rgba(43, 212, 152, 0.32);
+    --amber: #f4a938;
+    --amber-s: rgba(244, 169, 56, 0.14);
+    --sky: #5eb5ff;
+    --sky-s: rgba(94, 181, 255, 0.13);
+    --spot: rgba(43, 212, 152, 0.08);
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.52);
+  }
+
+  /* Alabaster Porcelain & Forest Ink (Light) */
+  [data-theme="light"] {
+    --bg: #f6f4ee;
+    --bg-2: #ece8de;
+    --card: rgba(255, 255, 255, 0.90);
+    --card-solid: #ffffff;
+    --card-hi: #f2efe7;
+    --ink: #111b17;
+    --ink-2: #3d4e47;
+    --muted: #6c7b74;
+    --line: rgba(17, 27, 23, 0.09);
+    --line-hi: rgba(158, 113, 36, 0.36);
+    --brass: #9e7124;
+    --brass-s: rgba(158, 113, 36, 0.11);
+    --brass-g: rgba(158, 113, 36, 0.22);
+    --jade: #0b875d;
+    --jade-s: rgba(11, 135, 93, 0.11);
+    --jade-g: rgba(11, 135, 93, 0.22);
+    --amber: #b97006;
+    --amber-s: rgba(185, 112, 6, 0.12);
+    --sky: #1b65b8;
+    --sky-s: rgba(27, 101, 184, 0.10);
+    --spot: rgba(158, 113, 36, 0.06);
+    --shadow: 0 18px 40px rgba(17, 27, 23, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--ui);
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.4s var(--spring), color 0.35s var(--spring);
+  }
+
+  /* Ambient Cursor Spotlight */
+  .aurora {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(650px circle at var(--mx, 60%) var(--my, 18%), var(--spot), transparent 60%),
+      radial-gradient(900px circle at 12% 85%, rgba(216, 178, 110, 0.05), transparent 55%);
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: 22px 20px 64px; }
+
+  /* Editorial Hero Band */
+  .hero {
+    display: grid; grid-template-columns: 1.35fr 0.65fr; gap: 18px; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 22px;
+    padding: 24px 28px; box-shadow: var(--shadow); backdrop-filter: blur(14px);
+    position: relative; overflow: hidden;
+    animation: enter 0.55s var(--spring) both;
+  }
+  @media (max-width: 860px) { .hero { grid-template-columns: 1fr; text-align: center; } }
+  .hero::after {
+    content: ""; position: absolute; inset-inline: 28px; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--brass), var(--jade), transparent);
+  }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--brass); background: var(--brass-s); border: 1px solid var(--line-hi);
+    padding: 4px 11px; border-radius: 999px; direction: ltr;
+  }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--jade); animation: ping 2s infinite; }
+  @keyframes ping {
+    0% { box-shadow: 0 0 0 0 var(--jade-g); }
+    70% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+
+  .hero h1 {
+    margin: 12px 0 8px; font-size: clamp(22px, 3vw, 31px); font-weight: 800;
+    letter-spacing: -0.02em; line-height: 1.25;
+  }
+  .hero h1 span { color: var(--brass); }
+  .hero-sub { margin: 0 0 16px; color: var(--ink-2); font-size: 14px; max-width: 56ch; }
+
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  @media (max-width: 860px) { .hero-actions { justify-content: center; } }
+
+  .btn {
+    cursor: pointer; border: 1px solid var(--line); background: var(--card-hi); color: var(--ink);
+    padding: 8px 14px; border-radius: 11px; font: inherit; font-size: 12.5px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: transform 0.18s var(--spring), border-color 0.2s, box-shadow 0.2s;
+  }
+  .btn:hover { border-color: var(--brass); transform: translateY(-1px); }
+  .btn:active { transform: scale(0.98); }
+  .btn.brass {
+    background: var(--brass); color: #0b0e0d; border-color: var(--brass);
+    box-shadow: 0 10px 26px var(--brass-g);
+  }
+  .btn.brass:hover { filter: brightness(1.06); }
+
+  /* Radial Mission Chronometer */
+  .chrono-box { display: grid; place-items: center; position: relative; }
+  .chrono-svg { width: 205px; height: 205px; overflow: visible; }
+  .arc { fill: none; stroke-width: 9; stroke-linecap: round; cursor: pointer; transition: stroke-width 0.25s var(--spring), filter 0.25s; }
+  .arc:hover { stroke-width: 12; }
+  .arc.done { stroke: var(--jade); filter: drop-shadow(0 0 8px var(--jade-g)); }
+  .arc.run  { stroke: var(--brass); stroke-dasharray: 72 16; animation: spinDash 4s linear infinite; filter: drop-shadow(0 0 10px var(--brass-g)); }
+  .arc.plan { stroke: var(--line); }
+  @keyframes spinDash { to { stroke-dashoffset: -88; } }
+  .chrono-center {
+    position: absolute; text-align: center; pointer-events: none;
+  }
+  .chrono-pct { font-family: var(--mono); font-size: 32px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .chrono-lbl { font-size: 11.5px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+
+  /* Nav Ribbon */
+  .ribbon {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 10px; margin: 20px 0 16px;
+    animation: enter 0.55s var(--spring) 0.07s both;
+  }
+  .tabs {
+    display: inline-flex; flex-wrap: wrap; gap: 5px; padding: 5px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .tab {
+    cursor: pointer; border: 0; background: transparent; color: var(--muted);
+    padding: 8px 16px; border-radius: 10px; font: inherit; font-size: 13px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: color 0.2s, background 0.25s var(--spring), box-shadow 0.25s;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.active {
+    background: var(--brass); color: #0c0f0e;
+    box-shadow: 0 6px 20px var(--brass-g);
+  }
+  .tab b { font-family: var(--mono); font-size: 11px; opacity: 0.7; }
+
+  .rule-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rpill {
+    font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 4px 10px;
+    border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--ink-2); direction: ltr;
+  }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; animation: enter 0.36s var(--spring) both; }
+  @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  /* ======== TAB 1: 4-PHASE MISSION TIMELINE ======== */
+  .phase-layout { display: grid; grid-template-columns: 330px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .phase-layout { grid-template-columns: 1fr; } }
+
+  .spine {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 12px; box-shadow: var(--shadow); display: grid; gap: 8px;
+  }
+  .p-item {
+    cursor: pointer; border: 1px solid var(--line); background: var(--bg-2);
+    border-radius: 14px; padding: 13px 14px; position: relative;
+    transition: transform 0.2s var(--spring), border-color 0.2s, background 0.2s;
+  }
+  .p-item:hover { transform: translateX(-3px); border-color: var(--line-hi); }
+  .p-item.sel {
+    background: var(--card-hi); border-color: var(--brass);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.25);
+  }
+  .p-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .p-num { font-family: var(--mono); font-size: 11px; font-weight: 800; color: var(--muted); }
+  .p-badge { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+  .pb-done { background: var(--jade-s); color: var(--jade); }
+  .pb-run  { background: var(--amber-s); color: var(--amber); }
+  .pb-plan { background: var(--sky-s); color: var(--sky); }
+  .p-name { font-size: 14.5px; font-weight: 800; margin: 5px 0 2px; }
+  .p-mini { font-size: 12px; color: var(--muted); }
+
+  .p-detail {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 22px 24px; box-shadow: var(--shadow);
+  }
+  .pd-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .pd-head h2 { margin: 0; font-size: 20px; font-weight: 800; }
+  .pd-en { font-family: var(--mono); font-size: 12px; color: var(--brass); direction: ltr; }
+
+  .chk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 16px 0; }
+  .chk {
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 11px 13px; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .chk-ic {
+    width: 22px; height: 22px; border-radius: 7px; flex-shrink: 0; margin-top: 1px;
+    display: grid; place-items: center; font-size: 12px; font-weight: 900;
+  }
+  .ic-done { background: var(--jade-s); color: var(--jade); border: 1px solid var(--jade); }
+  .ic-run  { background: var(--amber-s); color: var(--amber); border: 1px solid var(--amber); }
+  .ic-plan { background: var(--sky-s); color: var(--sky); border: 1px solid var(--sky); }
+  .chk b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .chk span { font-size: 12px; color: var(--muted); }
+
+  .meta-split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  @media (max-width: 680px) { .meta-split { grid-template-columns: 1fr; } }
+  .mbox { background: var(--bg-2); border: 1px solid var(--line); border-radius: 13px; padding: 13px 15px; }
+  .mbox-t { font-size: 11px; font-weight: 800; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.04em; }
+  .ftags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ftag {
+    font-family: var(--mono); font-size: 11.5px; padding: 3px 8px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--card-solid); direction: ltr;
+  }
+  .ftag.new { border-color: var(--jade); color: var(--jade); }
+  .ftag.ed  { border-color: var(--brass); color: var(--brass); }
+
+  /* ======== TAB 2: SQLITE VAULT ERD ======== */
+  .erd-wrap { display: grid; grid-template-columns: 1.45fr 0.85fr; gap: 16px; }
+  @media (max-width: 900px) { .erd-wrap { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 18px 20px; box-shadow: var(--shadow);
+  }
+  .erd-svg { width: 100%; height: auto; display: block; }
+  .tbox { cursor: pointer; }
+  .tbox rect { fill: var(--bg-2); stroke: var(--line); stroke-width: 1.6; transition: all 0.22s var(--spring); }
+  .tbox:hover rect { stroke: var(--brass); }
+  .tbox.sel rect { stroke: var(--jade); stroke-width: 2.4; fill: var(--card-hi); filter: drop-shadow(0 8px 18px var(--jade-g)); }
+  .tbox .th { fill: var(--ink); font-family: var(--mono); font-size: 12.5px; font-weight: 800; }
+  .tbox .ts { fill: var(--muted); font-size: 11px; }
+  .elink { fill: none; stroke: var(--line); stroke-width: 2; transition: all 0.25s; }
+  .elink.lit { stroke: var(--jade); stroke-width: 2.6; stroke-dasharray: 6 6; animation: flow 1.1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -24; } }
+
+  .col-list { display: grid; gap: 6px; margin-top: 10px; }
+  .col-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; direction: ltr;
+  }
+  .col-row .ty { color: var(--brass); font-size: 10.5px; }
+
+  /* ======== TAB 3: 3-TIER PROMPT STACK ======== */
+  .stack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 840px) { .stack-grid { grid-template-columns: 1fr; } }
+  .tier {
+    border: 1.5px solid var(--line); border-radius: 16px; padding: 15px 18px; margin-bottom: 12px;
+    background: var(--bg-2); position: relative; transition: all 0.35s var(--spring);
+  }
+  .tier.t1 { border-color: var(--jade); }
+  .tier.t2 { border-color: var(--sky); }
+  .tier.t3 { border-color: var(--brass); }
+  .tier-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .tier-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+  .tpill {
+    padding: 6px 11px; border-radius: 9px; font-size: 12px; font-weight: 700;
+    background: var(--card-solid); border: 1px solid var(--line);
+    transition: all 0.35s var(--spring);
+  }
+  .tpill.stripped { opacity: 0.22; text-decoration: line-through; transform: scale(0.92); }
+  .mode-sw { display: inline-flex; gap: 6px; margin-bottom: 14px; }
+
+  /* ======== TAB 4: AGENT HANDOFF PACK ======== */
+  .handoff-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .hcard {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px;
+  }
+  .hcard h3 { margin: 0; font-size: 15px; font-weight: 800; }
+  .prompt-box {
+    font-family: var(--mono); font-size: 12px; line-height: 1.55; direction: ltr; text-align: left;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; color: var(--ink-2); white-space: pre-wrap; margin-top: 10px;
+  }
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--jade); color: #07120d; font-weight: 800; font-size: 13px;
+    padding: 10px 20px; border-radius: 999px; opacity: 0; pointer-events: none;
+    transition: all 0.3s var(--spring); z-index: 99; box-shadow: 0 12px 30px var(--jade-g);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+<div class="wrap">
+  <!-- HERO + RADIAL CHRONOMETER -->
+  <section class="hero">
+    <div>
+      <span class="eyebrow"><span class="pulse"></span> IMPLEMENTATION_PLAN.MD · LIVE HANDOFF EDITION</span>
+      <h1>خطة التنفيذ الهندسية — <span>الـ Agent العام</span></h1>
+      <p class="hero-sub">خارطة الطريق الكاملة لبناء نظام تشغيل ذكي مستقل بأقصى سرعة (0 KB SQLite · 0 Daemons · NASCA COM · ملف EXE واحد).</p>
+      <div class="hero-actions">
+        <button class="btn brass" id="copyHandoffTop">نسخ أمر التسليم لـ Claude / Codex</button>
+        <button class="btn" id="themeBtn">ورق فاتح</button>
+        <a class="btn" href="architecture-visual.html" style="text-decoration:none">فتح الخريطة المعمارية ↗</a>
+      </div>
+    </div>
+
+    <div class="chrono-box">
+      <svg class="chrono-svg" viewBox="0 0 200 200">
+        <!-- 4 Phase Arcs (radius 78, circumference ~490, each ~108 with 14 gap) -->
+        <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="0" transform="rotate(-90 100 100)" onclick="pickPhase(0)"/>
+        <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-122" transform="rotate(-90 100 100)" onclick="pickPhase(1)"/>
+        <circle class="arc done" cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-245" transform="rotate(-90 100 100)" onclick="pickPhase(2)"/>
+        <circle class="arc run"  cx="100" cy="100" r="78" stroke-dasharray="106 384" stroke-dashoffset="-367" transform="rotate(-90 100 100)" onclick="pickPhase(3)"/>
+      </svg>
+      <div class="chrono-center">
+        <div class="chrono-pct">75%</div>
+        <div class="chrono-lbl">3/4 مراحل مكتملة<br>المرحلة 4 شغالة الآن</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NAVIGATION RIBBON -->
+  <div class="ribbon">
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-p="phases"><b>01</b> المراحل الأربع</button>
+      <button class="tab" data-p="erd"><b>02</b> خريطة vault.db</button>
+      <button class="tab" data-p="stack"><b>03</b> طبقات الـ Harness</button>
+      <button class="tab" data-p="handoff"><b>04</b> حزمة تسليم الـ Agents</button>
+    </div>
+    <div class="rule-strip">
+      <span class="rpill">C# 5 / .NET 4.8</span>
+      <span class="rpill">OPEN AUTOMATION</span>
+      <span class="rpill">ZERO-INSTALL EXE</span>
+      <span class="rpill">AUTO GITHUB SYNC</span>
+    </div>
+  </div>
+
+  <!-- TAB 1: 4 PHASES -->
+  <section class="panel active" id="p-phases">
+    <div class="phase-layout">
+      <div class="spine" id="spine"></div>
+      <div class="p-detail" id="pDetail"></div>
+    </div>
+  </section>
+
+  <!-- TAB 2: SQLITE VAULT ERD -->
+  <section class="panel" id="p-erd">
+    <div class="erd-wrap">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:13px;font-weight:800">اضغط على أي جدول لاستعراض أعمدته وعلاقات الـ SQL JOIN</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--jade);direction:ltr">I:\ALL In One\data\vault.db (WAL)</span>
+        </div>
+        <svg class="erd-svg" viewBox="0 0 700 395" xmlns="http://www.w3.org/2000/svg">
+          <path id="e-doc-tbl" class="elink" d="M 220 75 C 260 75, 265 75, 290 75"/>
+          <path id="e-tbl-dyn" class="elink" d="M 480 75 C 510 75, 515 75, 535 75"/>
+          <path id="e-doc-fts" class="elink" d="M 120 120 C 120 155, 120 160, 120 185"/>
+          <path id="e-msg-fts" class="elink" d="M 385 230 C 425 230, 445 230, 480 230"/>
+          <path id="e-msg-stp" class="elink" d="M 340 278 C 340 300, 340 305, 340 322"/>
+
+          <g class="tbox sel" data-t="0" onclick="pickTable(0)">
+            <rect x="20" y="30" width="200" height="90" rx="12"/>
+            <text class="th" x="120" y="64" text-anchor="middle">vault_docs</text>
+            <text class="ts" x="120" y="90" text-anchor="middle">فهرس الملفات + كاش التاريخ</text>
+          </g>
+          <g class="tbox" data-t="1" onclick="pickTable(1)">
+            <rect x="290" y="30" width="190" height="90" rx="12"/>
+            <text class="th" x="385" y="64" text-anchor="middle">vault_tables</text>
+            <text class="ts" x="385" y="90" text-anchor="middle">خريطة كل شيت وأعمدته</text>
+          </g>
+          <g class="tbox" data-t="2" onclick="pickTable(2)">
+            <rect x="535" y="30" width="150" height="90" rx="12"/>
+            <text class="th" x="610" y="64" text-anchor="middle">data_*_sheet</text>
+            <text class="ts" x="610" y="90" text-anchor="middle">جداول SQL JOIN حقيقية</text>
+          </g>
+          <g class="tbox" data-t="3" onclick="pickTable(3)">
+            <rect x="20" y="185" width="200" height="92" rx="12"/>
+            <text class="th" x="120" y="220" text-anchor="middle">vault_fts (FTS5)</text>
+            <text class="ts" x="120" y="246" text-anchor="middle">بحث نصي فوري في الوثائق</text>
+          </g>
+          <g class="tbox" data-t="4" onclick="pickTable(4)">
+            <rect x="255" y="185" width="175" height="92" rx="12"/>
+            <text class="th" x="342" y="220" text-anchor="middle">session_msgs</text>
+            <text class="ts" x="342" y="246" text-anchor="middle">كل جلسات الـ Agent</text>
+          </g>
+          <g class="tbox" data-t="5" onclick="pickTable(5)">
+            <rect x="480" y="185" width="205" height="92" rx="12"/>
+            <text class="th" x="582" y="220" text-anchor="middle">session_fts + Decay</text>
+            <text class="ts" x="582" y="246" text-anchor="middle">BM25 + الأحدث + MMR</text>
+          </g>
+          <g class="tbox" data-t="6" onclick="pickTable(6)">
+            <rect x="20" y="322" width="320" height="58" rx="12"/>
+            <text class="th" x="180" y="348" text-anchor="middle">step_events (Session → Turn → Step)</text>
+            <text class="ts" x="180" y="368" text-anchor="middle">Fork + Rollback + Recovery</text>
+          </g>
+          <g class="tbox" data-t="7" onclick="pickTable(7)">
+            <rect x="370" y="322" width="315" height="58" rx="12"/>
+            <text class="th" x="527" y="348" text-anchor="middle">alert_dedup (0-Nag Hash Log)</text>
+            <text class="ts" x="527" y="368" text-anchor="middle">منع تكرار تنبيهات الـ Heartbeat</text>
+          </g>
+        </svg>
+      </div>
+      <div class="card" id="erdInfo"></div>
+    </div>
+  </section>
+
+  <!-- TAB 3: 3-TIER PROMPT STACK -->
+  <section class="panel" id="p-stack">
+    <div class="stack-grid">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <h3 style="margin:0">بناء الـ Prompt على 3 طبقات</h3>
+          <div class="mode-sw">
+            <button class="btn brass" id="mFull">الـ Agent العام الكامل</button>
+            <button class="btn" id="mLean">Lean Subagent (-50% توكنز)</button>
+          </div>
+        </div>
+        <div class="tier t1">
+          <div class="tier-h"><b>Tier 1 — طبقة ثابتة (Stable · Prompt Cache)</b><span class="p-badge pb-done">95% Cache Hit</span></div>
+          <div class="tier-pills">
+            <span class="tpill" data-lean="drop">SOUL.md (الشخصية + Canvas)</span>
+            <span class="tpill">AGENTS.md (قواعد الشبكة المفتوحة)</span>
+            <span class="tpill">TOOLS.md (مسارات جهازك)</span>
+            <span class="tpill">خريطة أدوات MCP</span>
+          </div>
+        </div>
+        <div class="tier t2">
+          <div class="tier-h"><b>Tier 2 — سياق المشروع (Context)</b><span class="p-badge pb-plan">Auto-Detected</span></div>
+          <div class="tier-pills">
+            <span class="tpill">CLAUDE.md / AGENTS.md للفولدر</span>
+            <span class="tpill">حالة Git والفرع</span>
+          </div>
+        </div>
+        <div class="tier t3">
+          <div class="tier-h"><b>Tier 3 — لقطة متغيرة (Volatile · Frozen)</b><span class="p-badge pb-run">Frozen Snapshot</span></div>
+          <div class="tier-pills">
+            <span class="tpill" data-lean="drop">USER.md + MEMORY.md</span>
+            <span class="tpill" data-lean="drop">GOALS.md + يوميات اليوم وأمس</span>
+            <span class="tpill">فهرس المهارات (أسماء فقط)</span>
+            <span class="tpill">Live 20-Page Context + todo_plan</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 10px">ليه التصميم ده أسرع وأذكى؟</h3>
+        <div class="chk-grid" style="grid-template-columns:1fr;margin:0">
+          <div class="chk"><div class="chk-ic ic-done">1</div><div><b>تجميد الذاكرة أول الجلسة (Frozen Snapshot)</b><span>أي حفظ جديد يروح للهارد فوراً بدون ما يكسر كاش الموديل في الجلسة الحالية.</span></div></div>
+          <div class="chk"><div class="chk-ic ic-done">2</div><div><b>الكشف التدريجي للمهارات (Progressive Disclosure)</b><span>الموديل يشوف سطر واحد لكل Skill ويفتح الملف الكامل وقت اللزوم بس.</span></div></div>
+          <div class="chk"><div class="chk-ic ic-run">3</div><div><b>وكلاء فرعيين خفاف (Lean Subagents)</b><span>الـ Worker بياخد القواعد والأدوات فقط (اضغط الزر عاليمين وشوف اللي بيختفي).</span></div></div>
+          <div class="chk"><div class="chk-ic ic-plan">4</div><div><b>قناة التواصل البصرية (Browser Canvas)</b><span>مبنية جوه SOUL.md — يشرحلك بالرسم والتدفق بدل جدران الكلام.</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 4: HANDOFF PACK -->
+  <section class="panel" id="p-handoff">
+    <div class="handoff-grid" style="margin-bottom:14px">
+      <div class="hcard">
+        <span class="p-badge pb-done" style="align-self:flex-start">3 SKILLS INSTALLED</span>
+        <h3>المهارات المثبتة في المشروع</h3>
+        <div class="ftags">
+          <span class="ftag new">skills/anti-slop-web-design</span>
+          <span class="ftag new">skills/workflow-to-automation</span>
+          <span class="ftag new">skills/proactive-companion</span>
+          <span class="ftag ed">skills/all-in-one-maintenance</span>
+        </div>
+      </div>
+      <div class="hcard">
+        <span class="p-badge pb-run" style="align-self:flex-start">7 REPOS DISTILLED</span>
+        <h3>مراجع البحث للموديلات الجاية</h3>
+        <div class="ftags">
+          <span class="ftag">NousResearch/hermes-agent</span>
+          <span class="ftag">openclaw/openclaw</span>
+          <span class="ftag">deepseek-ai/deepseek-harness</span>
+          <span class="ftag">microsoft/skill-recorder</span>
+          <span class="ftag">obra/superpowers</span>
+          <span class="ftag">anthropics/skills</span>
+        </div>
+      </div>
+      <div class="hcard">
+        <span class="p-badge pb-plan" style="align-self:flex-start">ZERO-INSTALL GUARANTEE</span>
+        <h3>قواعد البناء والمزامنة</h3>
+        <div style="font-size:12.5px;color:var(--ink-2)">
+          • ملف EXE واحد مدمج فيه <b>ffmpeg</b> الحقيقي + WebView2 + marked + PPTX<br>
+          • Commit + Push تلقائي على <b>origin/main</b> بعد كل مرحلة مُختبرة<br>
+          • تحديث <b>IMPLEMENTATION_PLAN.md</b> في الروت فقط
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">أمر التسليم الجاهز (لـ Claude Opus 5.5 أو Codex Sol 6.2)</h3>
+        <button class="btn brass" id="copyHandoff">نسخ الأمر فوراً</button>
+      </div>
+      <div class="prompt-box" id="handoffPrompt">Read AGENTS.md, CLAUDE.md, top of HISTORY.md, LESSONS.md, and root IMPLEMENTATION_PLAN.md (single source of truth).
+Check git status and the Phase Execution Matrix in IMPLEMENTATION_PLAN.md, then continue from the first unfinished phase cleanly in C# 5 / .NET 4.8 (zero-bloat native Windows winsqlite3.dll, open corporate-network automation, anti-slop UI via skills/anti-slop-web-design/SKILL.md).
+After verifying all tests (including tools/test-build.ps1 and relevant suites), update IMPLEMENTATION_PLAN.md, HISTORY.md, LESSONS.md, and docs/architecture-visual.html automatically, then commit and push to GitHub origin/main.</div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast">تم النسخ بنجاح ✓</div>
+
+<script>
+const PHASES = [
+  {
+    num: "PHASE 01", st: "done", stLbl: "مكتملة ✓",
+    name: "الهوية المستقلة ورؤية الـ 20 صفحة", en: "STANDALONE HARNESS · COUNCIL/LEADER · 20-PAGE CONTEXT",
+    items: [
+      { t: "عزل الـ Agent العام", d: "محادثات مستقلة في data\\assistant\\chats\\ مخفية عن صفحة Agents." },
+      { t: "أزرار Solo / Council / Leader", d: "تبديل فوري مع توريث MCP والـ Harness لكل الأعضاء والعمال." },
+      { t: "رؤية الـ 20 صفحة من الرام", d: "ملفات Explorer المتعلمة، تابات Documents، روابط Browser، بدون بطء." },
+      { t: "التقليب التلقائي + السرد الحي", d: "شريط نشاط يورّيك كل صفحة بيفتحها أو يقلب عليها لحظياً." }
+    ],
+    newFiles: ["src/AssistantHarness.cs", "tools/test-assistant-harness.ps1"],
+    edFiles: ["src/Assistant.cs", "src/Agents.cs", "src/MainForm.cs", "src/Explorer.cs", "src/DocumentsPage.cs", "src/ApiTools.cs"],
+    proof: "نجاح 6 Suites كاملة: test-build · test-assistant-harness · regressions · forms · leader-team · document-close"
+  },
+  {
+    num: "PHASE 02", st: "done", stLbl: "مكتملة ✓",
+    name: "التحكم الحي في الأوفيس + NASCA COM", en: "LIVE EXCEL/WORD/PPT COM · BULK STA EXTRACTOR",
+    items: [
+      { t: "تحكم Excel لايف (6 أدوات)", d: "قراءة UsedRange، كتابة قيم ومعادلات، تنسيق ألوان، إضافة شيتات." },
+      { t: "تحكم Word وPowerPoint لايف", d: "قراءة وتعديل فقرات وجداول وشرايح وحفظ مباشر داخل التاب." },
+      { t: "سحب خلفي متوافق مع NASCA", d: "خيط STA معزول يقرأ Excel/Word/PPT/PDF ويفك NASCA في الرام." },
+      { t: "حماية من تعليق PDF وتسريب العمليات", d: "تخطي تحذير PDF تلقائياً + PID Watchdog → 0 عمليات Office عالقة." }
+    ],
+    newFiles: ["src/OfficeCom.cs", "tools/test-office-com.ps1"],
+    edFiles: ["src/OfficeEdit.cs", "src/MainForm.cs", "src/ApiTools.cs", "src/AssistantHarness.cs"],
+    proof: "test-office-com.ps1 نجح على Excel/Word/PPT/PDF حقيقيين (معادلات =SUM + 0 عمليات عالقة)"
+  },
+  {
+    num: "PHASE 03", st: "done", stLbl: "مكتملة ✓",
+    name: "SQLite Vault + ذاكرة Hermes/OpenClaw + Canvas", en: "WINSQLITE3 WAL · MEMORY/SKILLS/CRON · CREATOR MODE",
+    items: [
+      { t: "قاعدة data\\vault.db (0 KB)", d: "winsqlite3.dll + WAL + جداول SQL حقيقية لكل شيت لعمل SQL JOIN." },
+      { t: "سحب تلقائي عند أي Preview", d: "تفتح الملف في Documents ← يتفهرس في الخلفية ويفضل محفوظ للأبد." },
+      { t: "الذاكرة + FTS5 + المهارات + Creator", d: "Frozen Snapshot · يوميات · Decay+MMR · skill_manage · tool_create." },
+      { t: "الاستيقاظ الصامت + Live Canvas", d: "Timer واحد (Cron + HEARTBEAT_OK) + قناة التواصل البصرية في Browser." }
+    ],
+    newFiles: ["src/SqliteVault.cs", "src/AgentMemory.cs", "src/CronEngine.cs", "src/DashboardGen.cs", "tools/test-sqlite-vault.ps1", "tools/test-hermes-memory.ps1"],
+    edFiles: ["src/DocumentsPage.cs", "src/AssistantHarness.cs", "src/Agents.cs", "src/ApiTools.cs", "src/App.cs"],
+    proof: "نجاح 8 Suites: test-sqlite-vault (SQL JOIN + FTS5 3.53.4 + Arabic UTF-8) + test-hermes-memory + Phases 1–2"
+  },
+  {
+    num: "PHASE 04", st: "run", stLbl: "شغالة الآن",
+    name: "مسجّل المهام + ثيمين استوديو + سيطرة كاملة", en: "WORKFLOW RECORDER · ATELIER & NORDIC · ZERO-INSTALL EXE",
+    items: [
+      { t: "مسجّل Show-Me-Once (بدون فيديو)", d: "UIA Events + لقطات ~40 KB → ترقية لكود COM/SQL/CDP + SKILL.md." },
+      { t: "ثيمين استوديو جداد (فاتح وغامق)", d: "Atelier (Obsidian & Warm Paper) + Nordic (Porcelain & Emerald)." },
+      { t: "مراجعة سكرين شوت لكل الـ 33 شاشة", d: "فحص بصري فعلي وتصليح أي AI slop أو خلل تباين." },
+      { t: "أدوات PC الكاملة + بناء EXE مستقل", d: "Explorer · CDP · UIA · OCR · ffmpeg الحقيقي مدمج + Push لـ GitHub main." }
+    ],
+    newFiles: ["src/WorkflowRecorder.cs", "tools/test-workflow-recorder.ps1"],
+    edFiles: ["src/Ui.cs", "src/LookPicker.cs", "src/SettingsForm.cs", "src/ApiTools.cs", "src/Browser.cs", "src/Explorer.cs"],
+    proof: "test-all.ps1 + test-ui-sweep.ps1 (فحص PNG حقيقي) + build.ps1 + AllInOne.exe Clean Smoke Test"
+  }
+];
+
+const TABLES = [
+  { n: "vault_docs", d: "ملف واحد = صف واحد. يحفظ الكاش بتاريخ وحجم الملف عشان ما نفتحش أوفيس لو الملف ما اتغيّرش.", wires: ["e-doc-tbl", "e-doc-fts"],
+    cols: [["id","INTEGER PK"], ["path","TEXT UNIQUE"], ["kind","TEXT (excel/word/ppt/pdf)"], ["is_drm","INTEGER (NASCA)"], ["file_size / modified_ticks","CACHE KEY"], ["full_text","TEXT"]] },
+  { n: "vault_tables", d: "يربط كل ملف بأسماء الجداول الحقيقية اللي اتولّدت لكل شيت وأسماء أعمدتها.", wires: ["e-doc-tbl", "e-tbl-dyn"],
+    cols: [["id","INTEGER PK"], ["doc_id","FK → vault_docs"], ["sheet_name","TEXT"], ["sql_table","TEXT UNIQUE"], ["columns_json","TEXT"], ["row_count","INTEGER"]] },
+  { n: "data_<docId>_<sheet>", d: "جدول SQL حقيقي لكل شيت Excel بأرقام ونصوص — تقدر تعمل عليه SUM وGROUP BY وSQL JOIN بين ملفات مقفولة!", wires: ["e-tbl-dyn"],
+    cols: [["col_1 .. col_n","REAL / INTEGER / TEXT"], ["SQL JOIN","ربط عدة تقارير في < 5 ms"]] },
+  { n: "vault_fts (FTS5)", d: "فهرس بحث نصي كامل جوه كل الوثائق والشيتات المحفوظة.", wires: ["e-doc-fts"],
+    cols: [["doc_id","UNINDEXED"], ["file_name","FTS5"], ["sheet_name","FTS5"], ["content","FTS5 BM25"]] },
+  { n: "session_msgs", d: "كل رسائل الـ Agent العام وصفحة Agents محفوظة للرجوع إليها في أي وقت.", wires: ["e-msg-fts", "e-msg-stp"],
+    cols: [["id","INTEGER PK"], ["chat_id","TEXT"], ["scope","assistant | agents"], ["role / agent","TEXT"], ["text","TEXT"], ["time_ticks","INTEGER"]] },
+  { n: "session_fts + Decay", d: "بحث ذكي في تاريخ الشهور: BM25 × Temporal Decay (يرفع الأحدث) + MMR (يمنع التكرار).", wires: ["e-msg-fts"],
+    cols: [["msg_id / chat_id","UNINDEXED"], ["text","FTS5"], ["decay","exp(-ageDays/30)"], ["mmr","Jaccard < 0.75"]] },
+  { n: "step_events", d: "سجل أحداث DeepSeek Harness (Session → Turn → Step) للـ Fork والـ Rollback والاسترجاع بعد الانقطاع.", wires: ["e-msg-stp"],
+    cols: [["chat_id","TEXT"], ["turn_idx / step_idx","INTEGER"], ["kind","user|tool_call|checkpoint"], ["payload_json","TEXT"]] },
+  { n: "alert_dedup", d: "بصمة كل تنبيه استباقي عشان الـ Heartbeat ما يكررش نفس الإشعار مرتين.", wires: [],
+    cols: [["hash","TEXT PK"], ["source","TEXT"], ["first_seen_utc","TEXT"], ["last_seen_utc","TEXT"]] }
+];
+
+// --- Phase Picker ---
+let curP = 2; // Highlight currently active Phase 3 by default!
+function pickPhase(i) {
+  curP = i;
+  document.getElementById("spine").innerHTML = PHASES.map((p, idx) => `
+    <div class="p-item ${idx === i ? "sel" : ""}" onclick="pickPhase(${idx})">
+      <div class="p-top">
+        <span class="p-num">${p.num}</span>
+        <span class="p-badge ${p.st === "done" ? "pb-done" : p.st === "run" ? "pb-run" : "pb-plan"}">${p.stLbl}</span>
+      </div>
+      <div class="p-name">${p.name}</div>
+      <div class="p-mini">${p.items[0].t} · ${p.items[1].t}</div>
+    </div>
+  `).join("");
+  const p = PHASES[i];
+  const icCls = p.st === "done" ? "ic-done" : p.st === "run" ? "ic-run" : "ic-plan";
+  const icTxt = p.st === "done" ? "✓" : p.st === "run" ? "●" : "○";
+  document.getElementById("pDetail").innerHTML = `
+    <div class="pd-head">
+      <div>
+        <h2>${p.num} — ${p.name}</h2>
+        <div class="pd-en">${p.en}</div>
+      </div>
+      <span class="p-badge ${p.st === "done" ? "pb-done" : p.st === "run" ? "pb-run" : "pb-plan"}">${p.stLbl}</span>
+    </div>
+    <div class="chk-grid">
+      ${p.items.map(it => `
+        <div class="chk">
+          <div class="chk-ic ${icCls}">${icTxt}</div>
+          <div><b>${it.t}</b><span>${it.d}</span></div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="meta-split">
+      <div class="mbox">
+        <div class="mbox-t">الملفات (أخضر = جديد · نحاسي = تعديل)</div>
+        <div class="ftags">
+          ${p.newFiles.map(f => `<span class="ftag new">+ ${f}</span>`).join("")}
+          ${p.edFiles.map(f => `<span class="ftag ed">~ ${f}</span>`).join("")}
+        </div>
+      </div>
+      <div class="mbox">
+        <div class="mbox-t">بوابة الإثبات والاختبار</div>
+        <div style="font-size:13px;color:var(--ink);font-weight:600;line-height:1.55">${p.proof}</div>
+      </div>
+    </div>
+  `;
+}
+
+// --- ERD Picker ---
+function pickTable(i) {
+  document.querySelectorAll(".tbox").forEach(b => b.classList.toggle("sel", +b.dataset.t === i));
+  const t = TABLES[i];
+  document.querySelectorAll(".elink").forEach(l => l.classList.toggle("lit", t.wires.includes(l.id)));
+  document.getElementById("erdInfo").innerHTML = `
+    <span class="p-badge pb-done" style="font-family:var(--mono);direction:ltr">${t.n}</span>
+    <p style="font-size:13.5px;color:var(--ink-2);margin:10px 0 12px;line-height:1.55">${t.d}</p>
+    <div class="col-list">
+      ${t.cols.map(c => `<div class="col-row"><span>${c[0]}</span><span class="ty">${c[1]}</span></div>`).join("")}
+    </div>
+  `;
+}
+
+// --- Lean Subagent Toggle ---
+function setStackMode(lean) {
+  document.getElementById("mFull").classList.toggle("brass", !lean);
+  document.getElementById("mLean").classList.toggle("brass", lean);
+  document.querySelectorAll('[data-lean="drop"]').forEach(el => el.classList.toggle("stripped", lean));
+}
+document.getElementById("mFull").onclick = () => setStackMode(false);
+document.getElementById("mLean").onclick = () => setStackMode(true);
+
+// --- Tabs, Theme, Copy, Spotlight ---
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  document.getElementById("p-" + t.dataset.p).classList.add("active");
+});
+
+document.getElementById("themeBtn").onclick = () => {
+  const el = document.documentElement;
+  const next = el.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  el.setAttribute("data-theme", next);
+  document.getElementById("themeBtn").textContent = next === "dark" ? "ورق فاتح" : "ليلي زمردي";
+};
+
+function copyHandoff() {
+  const txt = document.getElementById("handoffPrompt").textContent;
+  navigator.clipboard.writeText(txt).catch(() => {});
+  const el = document.getElementById("toast");
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2000);
+}
+document.getElementById("copyHandoff").onclick = copyHandoff;
+document.getElementById("copyHandoffTop").onclick = copyHandoff;
+
+document.addEventListener("pointermove", e => {
+  document.documentElement.style.setProperty("--mx", e.clientX + "px");
+  document.documentElement.style.setProperty("--my", e.clientY + "px");
+});
+
+pickPhase(2);
+pickTable(0);
+</script>
+</body>
+</html>

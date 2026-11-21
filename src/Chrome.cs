@@ -624,6 +624,7 @@ namespace StickyPro
             tabs.Select(0);
         }
         public void SelectTab(string id) { tabs.Select(id == "extensions" ? 1 : 0); }
+        public string ActiveTab { get { return selected == 1 ? "extensions" : "bookmarks"; } }
 
         // Wide windows show bookmarks and extensions side by side (no tabs); narrow windows show one tab at a time.
         readonly Panel host;

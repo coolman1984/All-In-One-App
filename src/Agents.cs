@@ -147,6 +147,9 @@ namespace StickyPro
 
         static bool loading;
         static readonly List<Action> afterLoad = new List<Action>();
+        static string ChatDirFor(AgentChat c) { return AssistantHarness.IsAssistant(c) ? AssistantHarness.ChatsDir : ChatsDir; }
+        static string ChatFile(AgentChat c) { return Path.Combine(ChatDirFor(c), c.Id + ".json"); }
+
         public static void LoadAll(Action done)
         {
             if (Loaded) { if (done != null) done(); return; }
@@ -155,34 +158,40 @@ namespace StickyPro
             loading = true;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                var list = new List<AgentChat>();
+                var byId = new Dictionary<string, AgentChat>(StringComparer.OrdinalIgnoreCase);
                 try
                 {
-                    if (Directory.Exists(ChatsDir))
-                        foreach (var f in Directory.GetFiles(ChatsDir, "*.json*")
+                    foreach (string dir in new[] { ChatsDir, AssistantHarness.ChatsDir })
+                    {
+                        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+                        foreach (var f in Directory.GetFiles(dir, "*.json*")
                             .Where(p => p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".json.bak", StringComparison.OrdinalIgnoreCase))
                             .Select(p => p.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ? p.Substring(0, p.Length - 4) : p)
                             .Distinct(StringComparer.OrdinalIgnoreCase))
                         {
                             var c = ReadChat(f);
-                            if (c != null) list.Add(c);
+                            if (c != null) byId[c.Id] = c;
                         }
+                    }
                 }
                 catch (Exception ex) { App.Log("Agent chats: " + ex.Message); }
+                var list = byId.Values.ToList();
+                Action finish = () =>
+                {
+                    // Keep chats created before loading finished.
+                    var live = new HashSet<string>(Chats.Select(c => c.Id), StringComparer.OrdinalIgnoreCase);
+                    list.RemoveAll(c => live.Contains(c.Id)); list.AddRange(Chats);
+                    Chats = list; Loaded = true; loading = false;
+                    var callbacks = afterLoad.ToArray(); afterLoad.Clear();
+                    foreach (var callback in callbacks) callback();
+                    Raise();
+                };
                 try
                 {
-                    App.I.Sync.BeginInvoke(new Action(() =>
-                    {
-                        // Keep chats created before loading finished.
-                        var live = new HashSet<string>(Chats.Select(c => c.Id), StringComparer.OrdinalIgnoreCase);
-                        list.RemoveAll(c => live.Contains(c.Id)); list.AddRange(Chats);
-                        Chats = list; Loaded = true; loading = false;
-                        var callbacks = afterLoad.ToArray(); afterLoad.Clear();
-                        foreach (var callback in callbacks) callback();
-                        Raise();
-                    }));
+                    if (App.I != null && App.I.Sync != null && !App.I.Sync.IsDisposed) App.I.Sync.BeginInvoke(finish);
+                    else finish();
                 }
-                catch { }
+                catch { loading = false; }
             });
         }
         internal static AgentChat ReadChat(string file)
@@ -227,7 +236,7 @@ namespace StickyPro
             lock (writeLock)
             {
                 if (drafts.Count == 0) draftTimer.Change(450, -1);
-                drafts[Path.Combine(ChatsDir, c.Id + ".json.draft")] = value;
+                drafts[ChatFile(c) + ".draft"] = value;
             }
         }
         static void FlushDrafts()
@@ -277,7 +286,11 @@ namespace StickyPro
         // What an agent has not seen yet: the user's new message, plus what the other agents answered since its last turn.
         public static string PromptFor(AgentChat c, string agentId)
         {
-            return DocumentPrompt(c, ConversationPrompt(c, agentId));
+            string prompt = DocumentPrompt(c, ConversationPrompt(c, agentId));
+            string sharedHint = AssistantHarness.SharedHarnessHint(c, agentId);
+            if (!string.IsNullOrEmpty(sharedHint) && prompt.IndexOf("session_search", StringComparison.OrdinalIgnoreCase) < 0)
+                prompt += "\n\n" + sharedHint;
+            return prompt;
         }
         internal static string DocumentPrompt(AgentChat c, string prompt)
         {
@@ -366,8 +379,9 @@ namespace StickyPro
             if (!c.Persisted && !Chats.Contains(c)) Chats.Add(c);
             c.Persisted = true;
             object snapshot; try { snapshot = DataSnapshot.Copy(c); } catch (Exception ex) { App.Log("Agent save: " + ex.Message); return; }
-            string file = Path.Combine(ChatsDir, c.Id + ".json");
+            string file = ChatFile(c);
             QueueWrite(file, snapshot);
+            SqliteVault.IndexChatAsync(c);
             Raise();
         }
         static readonly Dictionary<string, object> pending = new Dictionary<string, object>();
@@ -448,16 +462,20 @@ namespace StickyPro
         public static void Delete(AgentChat c)
         {
             Chats.Remove(c);
-            string path = Path.Combine(ChatsDir, c.Id + ".json");
+            var paths = new[] { Path.Combine(ChatsDir, c.Id + ".json"), Path.Combine(AssistantHarness.ChatsDir, c.Id + ".json") }
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             lock (fileLock)
             {
-                lock (writeLock) { drafts.Remove(path + ".draft"); }
-                foreach (string target in new[] { path, path + ".draft" })
+                foreach (string path in paths)
                 {
-                    lock (writeLock) { if (writing) deleted.Add(target); pending.Remove(target); failed.Remove(target); }
-                    recoveredFiles.Remove(target);
-                    try { File.Delete(target); File.Delete(target + ".bak"); }
-                    catch (Exception ex) { App.Log("Delete chat: " + ex.Message); }
+                    lock (writeLock) { drafts.Remove(path + ".draft"); }
+                    foreach (string target in new[] { path, path + ".draft" })
+                    {
+                        lock (writeLock) { if (writing) deleted.Add(target); pending.Remove(target); failed.Remove(target); }
+                        recoveredFiles.Remove(target);
+                        try { File.Delete(target); File.Delete(target + ".bak"); }
+                        catch (Exception ex) { App.Log("Delete chat: " + ex.Message); }
+                    }
                 }
             }
             Raise();
@@ -679,29 +697,9 @@ namespace StickyPro
                 catch (Exception ex) { App.Log("Long message file: " + ex.Message); }
             }
             if (chat.Web && d.Id == "claude" && !args.Contains("--allowedTools")) args += " --allowedTools WebSearch WebFetch";   // headless Claude may search
-            // The Assistant (collection "Assistant") works the app itself: its run gets the app's own MCP server
-            // (notes, tasks, prompts, clipboard, pages, browser, Markdown, Explorer, terminals) and may use all of its tools.
-            if (chat.Collection == "Assistant")
-            {
-                string exe = System.Windows.Forms.Application.ExecutablePath;
-                // It works on whatever you have open: the note's folder, the vaults, the Explorer folder, the app folder.
-                foreach (var dir in AssistantPanel.Dirs().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).Take(12))
-                    if (d.Id == "claude" || d.Id == "codex") args += " --add-dir " + Quote(dir);
-                if (d.Id == "claude")
-                {
-                    try
-                    {
-                        string dir = Path.Combine(Path.GetTempPath(), "AllInOne-agents"); Directory.CreateDirectory(dir);
-                        string cfg = Path.Combine(dir, "assistant-mcp.json");
-                        File.WriteAllText(cfg, Js.Serialize(new Dictionary<string, object> { { "mcpServers", new Dictionary<string, object> { { "all-in-one", new Dictionary<string, object> { { "command", exe }, { "args", new[] { "--mcp" } } } } } } }), new UTF8Encoding(false));
-                        args += " --mcp-config " + Quote(cfg);
-                        args = args.Contains("--allowedTools ") ? args.Replace("--allowedTools ", "--allowedTools mcp__all-in-one ") : args + " --allowedTools mcp__all-in-one";
-                    }
-                    catch (Exception ex) { App.Log("Assistant MCP: " + ex.Message); }
-                }
-                else if (d.Id == "codex")
-                    args = "-c " + Quote("mcp_servers.all_in_one.command='" + exe + "'") + " -c " + Quote("mcp_servers.all_in_one.args=[\"--mcp\"]") + " " + args;
-            }
+            // The Assistant (collection "Assistant") works the app itself via AssistantHarness.
+            if (AssistantHarness.IsAssistant(chat))
+                args = AssistantHarness.ApplyMcpArgs(d, chat, args);
             string clineModel = null;
             if (d.Id == "cline")
             {
@@ -1038,6 +1036,76 @@ namespace StickyPro
                         break;
                     }
             }
+        }
+    }
+
+    // Auto Account/Model Fallback selector when a run fails with rate-limit, quota, or transient provider errors.
+    static class AgentFallback
+    {
+        public static bool IsRetryableError(string errorText)
+        {
+            if (string.IsNullOrWhiteSpace(errorText)) return false;
+            string s = errorText.ToLowerInvariant();
+            return s.Contains("rate limit") || s.Contains("rate_limit") || s.Contains("429")
+                || s.Contains("too many requests") || s.Contains("quota") || s.Contains("usage limit")
+                || s.Contains("overloaded") || s.Contains("capacity") || s.Contains("529")
+                || s.Contains("502") || s.Contains("503") || s.Contains("temporarily unavailable")
+                || s.Contains("routing discovery timed out") || s.Contains("account/read failed");
+        }
+
+        public static bool PickAlternate(AgentDef def, AgentChat chat, string failedAccount, string failedModel, out string nextAccount, out string nextModel)
+        {
+            nextAccount = null;
+            nextModel = null;
+            if (def == null) return false;
+            string curAcc = failedAccount ?? "";
+            string curModel = failedModel ?? "";
+
+            // 1. Prefer another configured account for the same CLI (skipping accounts with >= 90% usage).
+            if (AgentAccounts.Supported(def.Id))
+            {
+                var candidates = new List<string>();
+                try
+                {
+                    foreach (var n in AgentAccounts.Names(def.Id))
+                        if (!string.Equals(n, curAcc, StringComparison.OrdinalIgnoreCase)) candidates.Add(n);
+                }
+                catch (Exception) { }
+                if (curAcc.Length > 0) candidates.Add(""); // CLI default as fallback when a named account fails
+
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    string acc = candidates[i];
+                    LimitRow lim = null;
+                    try { lim = AgentLimits.Find(def.Id, acc); }
+                    catch (Exception) { }
+                    if (lim != null && lim.High) continue;
+                    nextAccount = acc;
+                    return true;
+                }
+            }
+
+            // 2. Otherwise pick an alternate model from user favorites or built-in model list.
+            if (AgentModels.HasModels(def))
+            {
+                string effectiveCur = curModel.Length > 0 ? curModel : AgentModels.DefaultModel(def);
+                var models = new List<string>();
+                try { models.AddRange(AgentModels.Mine(def)); }
+                catch (Exception) { }
+                if (def.Models != null) models.AddRange(def.Models);
+
+                for (int i = 0; i < models.Count; i++)
+                {
+                    string m = (models[i] ?? "").Trim();
+                    if (m.Length == 0) continue;
+                    if (string.Equals(m, effectiveCur, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (AgentModels.IsDead(def, m)) continue;
+                    nextModel = m;
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 
@@ -1510,6 +1578,8 @@ namespace StickyPro
 
         public bool Busy { get { return runAgent != null || councilBusy; } }
         string netRetry; readonly HashSet<string> retried = new HashSet<string>();   // one automatic retry per agent per message
+        readonly HashSet<string> fallbackTried = new HashSet<string>();              // one account/model fallback per agent per message
+        string fallbackAccountOverride, fallbackModelOverride;
         readonly List<AgentRun> councilRuns = new List<AgentRun>();
         bool councilBusy;
         public bool IsActive { get { return active; } set { if (active != value) { active = value; Invalidate(); header.Invalidate(); } } }
@@ -2188,6 +2258,7 @@ namespace StickyPro
             MetaStore.Touch("folders", c.Folder);
             queue.Clear();
             retried.Clear(); netRetry = null;
+            fallbackTried.Clear(); fallbackAccountOverride = null; fallbackModelOverride = null;
             foreach (var a in who) queue.Enqueue(a);
             AgentStore.Busy.Add(c.Id);
             send.Text = "Stop";
@@ -2234,15 +2305,33 @@ namespace StickyPro
             string prompt = BuildPrompt(id);
             if (Chat.Web) prompt = AgentRun.WebNote + prompt;
             var r = new AgentRun();
+            if (fallbackAccountOverride != null) { r.AccountOverride = fallbackAccountOverride; fallbackAccountOverride = null; }
+            if (fallbackModelOverride != null) { r.ModelOverride = fallbackModelOverride; fallbackModelOverride = null; }
             r.Attach = LatestFiles();
             r.Usage += u => Ui0(() => OnUsage(u));
             runAgent = id; run = r;
+            bool gotText = false;
+            string lastErr = null;
+            int stepSeq = 0;
+            int turnIdx = Chat != null && Chat.Messages != null ? Chat.Messages.Count : 0;
             view.Working = def.Name + " is working"; view.WorkingSince = Store.Now(); view.LastTool = null; view.Relayout(false);
             r.Event += (kind, text) => Ui0(() =>
             {
                 if (r != run) return;
                 if (kind == "session") { Chat.Sessions[r.ActiveSessionKey] = text; return; }
-                if (kind == "tool") { if (text == "system message" || string.IsNullOrWhiteSpace(text)) return; view.LastTool = text; Add("tool", id, text); return; }
+                if (kind == "tool")
+                {
+                    if (text == "system message" || string.IsNullOrWhiteSpace(text)) return;
+                    view.LastTool = text; Add("tool", id, text);
+                    if (AssistantHarness.IsAssistant(Chat))
+                    {
+                        string cid = Chat.Id; int sIdx = ++stepSeq; string toolLine = text;
+                        ThreadPool.QueueUserWorkItem(delegate { try { SqliteVault.RecordStep(cid, turnIdx, sIdx, "tool_call", id, toolLine, Store.Now()); } catch (Exception) { } });
+                    }
+                    return;
+                }
+                if (kind == "text") gotText = true;
+                if (kind == "error") lastErr = text;
                 Add(kind == "text" ? "agent" : kind, id, text);
                 if (kind == "text" && Chat.Messages.Count > 0) Chat.Messages[Chat.Messages.Count - 1].Model = r.UsedLabel;
                 if (text != null && (text.Contains("routing discovery timed out") || text.Contains("account/read failed"))) netRetry = id;
@@ -2254,8 +2343,28 @@ namespace StickyPro
             {
                 if (r != run) return;
                 Chat.Seen[r.ActiveSessionKey] = Chat.Messages.Count;
+                string usedAccount = r.Account ?? "";
+                string usedModel = r.ModelOverride;
+                if (string.IsNullOrEmpty(usedModel) && Chat.Models != null) Chat.Models.TryGetValue(id, out usedModel);
                 run = null; runAgent = null;
                 AgentStore.Save(Chat);
+                if (!gotText && !string.IsNullOrEmpty(lastErr) && AgentFallback.IsRetryableError(lastErr) && !fallbackTried.Contains(id))
+                {
+                    string nextAcc, nextModel;
+                    if (AgentFallback.PickAlternate(def, Chat, usedAccount, usedModel, out nextAcc, out nextModel))
+                    {
+                        fallbackTried.Add(id);
+                        netRetry = null;
+                        fallbackAccountOverride = nextAcc;
+                        fallbackModelOverride = nextModel;
+                        string targetDesc = nextAcc != null ? ("account \"" + (nextAcc.Length == 0 ? "CLI default" : nextAcc) + "\"") : ("model \"" + nextModel + "\"");
+                        App.Log("Auto-fallback for " + def.Name + ": switching to " + targetDesc);
+                        Add("info", "", def.Name + " hit a rate/transient limit. Automatically retrying once on " + targetDesc + "...");
+                        var rest = queue.ToList(); queue.Clear(); queue.Enqueue(id); foreach (var q in rest) queue.Enqueue(q);
+                        RunNext();
+                        return;
+                    }
+                }
                 if (netRetry == id && !retried.Contains(id))
                 {
                     retried.Add(id); netRetry = null;
@@ -2398,7 +2507,8 @@ namespace StickyPro
                 done(code == 0 && !failed ? answer.ToString().Trim() : null);
             });
             string err = "Unknown agent";
-            if (d == null || !r.Start(d, Chat, prompt, out err)) { councilRuns.Remove(r); Add("error", m.Agent, m.Label + ": " + err); done(null); return; }
+            string runPrompt = AssistantHarness.IsAssistant(Chat) ? AssistantHarness.WrapTeamPromptLean(Chat, prompt, worker != null) : prompt;
+            if (d == null || !r.Start(d, Chat, runPrompt, out err)) { councilRuns.Remove(r); Add("error", m.Agent, m.Label + ": " + err); done(null); return; }
             MetaStore.Touch("agents", m.Agent);
         }
 
@@ -2407,6 +2517,37 @@ namespace StickyPro
             if (!councilBusy) return;
             councilBusy = false; councilRuns.Clear();
             Done();
+        }
+
+        public void SetAssistantMode(string mode)
+        {
+            if (Chat == null) return;
+            if (Busy) { if (App.I != null) App.I.Status("Wait for the current turn to finish before changing mode."); return; }
+            mode = (mode ?? "solo").Trim().ToLowerInvariant();
+            if (mode == "solo")
+            {
+                Chat.Council = false;
+                Chat.LeaderTeam = false;
+            }
+            else if (mode == "council" || mode == "leader")
+            {
+                if (Chat.Members == null) Chat.Members = new List<CouncilMember>();
+                if (Chat.Members.Count == 0) Chat.Members.AddRange(Council.Starter());
+                if (mode == "leader")
+                {
+                    var activeMembers = Chat.Members.Where(m => !m.Off && AgentStore.Def(m.Agent) != null).ToList();
+                    if (activeMembers.Count == 1)
+                        Chat.Members.Add(new CouncilMember { Agent = activeMembers[0].Agent, Role = "Engineer" });
+                }
+                Chat.Council = true;
+                Chat.LeaderTeam = mode == "leader";
+            }
+            else return;
+            header.Invalidate();
+            if (strip != null) strip.Invalidate();
+            view.Invalidate();
+            AgentStore.Save(Chat);
+            RaiseChanged();
         }
 
         public void EditCouncil() { ConfigureTeam(Chat.LeaderTeam); }
@@ -2864,7 +3005,7 @@ namespace StickyPro
             string q = search.Text.Trim();
             string scope = filter.SelectedItem as string ?? "All chats";
             var options = new[] { "All chats", "Favorites", "Drafts", "Archived" }
-                .Concat(AgentStore.Chats.Select(c => c.Collection).Where(x => !string.IsNullOrWhiteSpace(x))
+                .Concat(AgentStore.Chats.Where(c => !AssistantHarness.IsAssistant(c)).Select(c => c.Collection).Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(x => FolderPrefix + x)).ToArray();
             if (!filter.Items.Cast<string>().SequenceEqual(options))
             {
@@ -2873,7 +3014,7 @@ namespace StickyPro
                 filter.SelectedIndex = Math.Max(0, Array.IndexOf(options, scope)); filter.EndUpdate();
                 scope = (string)filter.SelectedItem; updatingFilter = false;
             }
-            IEnumerable<AgentChat> src = AgentStore.Chats.Where(c => c.HasContent && c.Archived == (scope == "Archived"));
+            IEnumerable<AgentChat> src = AgentStore.Chats.Where(c => !AssistantHarness.IsAssistant(c) && c.HasContent && c.Archived == (scope == "Archived"));
             if (scope == "Favorites") src = src.Where(c => c.Fav);
             if (scope == "Drafts") src = src.Where(c => c.PendingInput.Length > 0);
             if (scope.StartsWith(FolderPrefix)) src = src.Where(c => string.Equals(c.Collection, scope.Substring(FolderPrefix.Length), StringComparison.OrdinalIgnoreCase));
@@ -2924,7 +3065,7 @@ namespace StickyPro
                 var name = Ui.Ask("Chat folder", "Folder name", "", FindForm());
                 if (!string.IsNullOrWhiteSpace(name)) { c.Collection = name.Trim(); AgentStore.Save(c); }
             });
-            foreach (var name in AgentStore.Chats.Select(x => x.Collection).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x))
+            foreach (var name in AgentStore.Chats.Where(x => !AssistantHarness.IsAssistant(x)).Select(x => x.Collection).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x))
             {
                 string folder = name;
                 move.DropDownItems.Add(folder, null, delegate { c.Collection = folder; AgentStore.Save(c); });
@@ -3193,7 +3334,7 @@ namespace StickyPro
         void UpdateInfo()
         {
             int busy = panes.Take(Visible_).Count(p => p.Busy);
-            int chats = AgentStore.Chats.Count(c => c.Messages.Count > 0);
+            int chats = AgentStore.Chats.Count(c => !AssistantHarness.IsAssistant(c) && c.Messages.Count > 0);
             info.Text = (busy > 0 ? busy + " working  ·  " : "") + chats + " saved chats";
         }
 
@@ -3337,7 +3478,7 @@ namespace StickyPro
         void ShowHistory()
         {
             var cols = new[] { "Last message", "Chat", "Agents", "Folder", "Messages", "Created" };
-            Func<List<HistRow>> rows = () => AgentStore.Chats.Where(c => c.HasContent).Select(c => new HistRow
+            Func<List<HistRow>> rows = () => AgentStore.Chats.Where(c => !AssistantHarness.IsAssistant(c) && c.HasContent).Select(c => new HistRow
             {
                 Tag = c, Fav = c.Fav, Time = new DateTime(Math.Max(c.Updated, c.Created)),
                 Cells = new[] { new DateTime(Math.Max(c.Updated, c.Created)).ToString("yyyy-MM-dd HH:mm"), c.Title.Length > 0 ? c.Title : "(no title)",
@@ -3362,7 +3503,7 @@ namespace StickyPro
                 new HistAction { Name = "Delete older than 30 days (not ★)", NeedsSelection = false, Run = sel =>
                     {
                         long cut = DateTime.Now.AddDays(-30).Ticks;
-                        var list = AgentStore.Chats.Where(c => !c.Fav && Math.Max(c.Updated, c.Created) < cut && !panes.Any(p => p.Chat == c)).ToList();
+                        var list = AgentStore.Chats.Where(c => !AssistantHarness.IsAssistant(c) && !c.Fav && Math.Max(c.Updated, c.Created) < cut && !panes.Any(p => p.Chat == c)).ToList();
                         if (list.Count == 0) { App.I.Status("No chats older than 30 days."); return; }
                         if (MessageBox.Show(FindForm(), "Delete " + list.Count + " chat(s) older than 30 days (favorites kept)?", "Agents", MessageBoxButtons.OKCancel) != DialogResult.OK) return;
                         foreach (var c in list) AgentStore.Delete(c);

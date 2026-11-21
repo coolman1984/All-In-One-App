@@ -18,12 +18,13 @@ namespace StickyPro
         public static readonly string[] Pages = { "dashboard", "tasks", "notes", "prompts", "clips", "agents", "terminals", "explorer", "markdown", "browser", "documents", "accounts", "snip", "chrome", "power", "system", "cards", "activity", "tagged", "shortcuts" };
 
         // ---------- Schema ----------
-        static List<Dictionary<string, object>> schema;
+        static List<Dictionary<string, object>> builtInSchema;
+        static HashSet<string> builtInNames;
         public static HashSet<string> Names { get { return new HashSet<string>(Schema().Select(t => (string)t["name"])); } }
 
-        public static List<Dictionary<string, object>> Schema()
+        static List<Dictionary<string, object>> BuiltInSchema()
         {
-            if (schema != null) return schema;
+            if (builtInSchema != null) return builtInSchema;
             var l = new List<Dictionary<string, object>>();
             l.Add(T("app_status", "App status", "Data folder, counts of notes, prompts, clips, open tasks and agent chats. Start here.", true, new string[0]));
             l.Add(T("search_all", "Search everything", "Search notes, tasks, prompts, clipboard history and agent chats at once. Every word must match.", true,
@@ -84,12 +85,102 @@ namespace StickyPro
             l.Add(T("markdown_open", "Open a Markdown note", "Show a .md file on the Markdown notes page.", false, new[] { "path|string|Full path of the .md file" }, "path"));
             l.Add(T("explorer_open", "Open a folder in Explorer page", "Show a folder in the app's Explorer page.", false, new[] { "path|string|Folder path" }, "path"));
             l.Add(T("terminal_open", "Open a terminal", "Open a PowerShell terminal in a folder, optionally running a command.", false, new[] { "folder|string|Folder", "command|string|Command to run" }, "folder"));
-            l.Add(T("document_open", "View a document in the app", "Open an Excel, PowerPoint, Word, Visio or PDF file (read only, company-protected files too) on the Documents page; emails (.eml, .msg, .mysingle) open on the Browser page.", false, new[] { "path|string|full file path" }, "path"));
+            l.Add(T("document_open", "Open a document in the app", "Open an Excel, PowerPoint, Word, Visio or PDF file on the Documents page (optionally choosing edit or preview mode); emails (.eml, .msg, .mysingle) open on the Browser page.", false,
+                new[] { "path|string|Full file path", "edit|boolean|true = edit in Office, false = read-only preview, omit = page default" }, "path"));
+            l.Add(T("documents_list", "List open documents", "List open document tabs on the Documents page, active document, edit/preview mode and kind.", true, new string[0]));
+            l.Add(T("document_switch", "Switch document tab", "Switch to an already-open document tab (by path or filename) or open the file on the Documents page.", false,
+                new[] { "path|string|Full file path or open tab filename" }, "path"));
+            l.Add(T("document_save", "Save a document", "Save the active or named edited Office document on the Documents page.", false,
+                new[] { "path|string|Optional full file path or tab filename (defaults to active document)" }));
+            // ---- live Office COM control & background bulk extraction (NASCA DRM-safe) ----
+            l.Add(T("excel_info", "Excel workbook info", "Inspect a live Excel workbook (active sheet, selection, all sheet names and dimensions). Uses active Excel tab or opens path in Edit mode.", true,
+                new[] { "path|string|Optional full file path or open tab filename" }));
+            l.Add(T("excel_read", "Read Excel cells", "Read cells from a live Excel worksheet (range or UsedRange) in one bulk COM call.", true,
+                new[] { "path|string|Optional full file path or open tab filename", "sheet|string|Optional sheet name (defaults to active sheet)", "range|string|Optional A1 range e.g. A1:F30 (defaults to UsedRange)", "max_rows|integer|Max rows to read (default 200)", "max_cols|integer|Max columns to read (default 40)" }));
+            l.Add(T("excel_write", "Write Excel cells", "Write a 2D array of values or formulas starting at start_cell in one bulk COM call.", false,
+                new[] { "path|string|Optional full file path or open tab filename", "sheet|string|Optional sheet name (defaults to active sheet)", "start_cell|string|Top-left cell e.g. A1 (default A1)", "values|matrix|2D array of rows (or JSON string of 2D array)", "save|boolean|Save workbook after writing (default false)" }, "values"));
+            l.Add(T("excel_formula", "Set Excel formula", "Set a formula on a live Excel cell and return its calculated value and formatted text.", false,
+                new[] { "path|string|Optional full file path or open tab filename", "sheet|string|Optional sheet name (defaults to active sheet)", "cell|string|Target cell address e.g. D10", "formula|string|Excel formula e.g. =SUM(D2:D9)", "save|boolean|Save workbook after setting formula (default false)" }, "cell", "formula"));
+            l.Add(T("excel_sheet_add", "Add Excel worksheet", "Add a new worksheet to a live Excel workbook and optionally activate it.", false,
+                new[] { "path|string|Optional full file path or open tab filename", "name|string|Worksheet name", "activate|boolean|Activate the new sheet (default true)" }, "name"));
+            l.Add(T("excel_format", "Format Excel range", "Apply bold, background/font hex colors (#RRGGBB), number format, or AutoFit to a live Excel range.", false,
+                new[] { "path|string|Optional full file path or open tab filename", "sheet|string|Optional sheet name (defaults to active sheet)", "range|string|Range address e.g. A1:F1", "bold|boolean|Set bold font", "bg_color|string|Background hex color e.g. #EAF1FF or none", "font_color|string|Font hex color e.g. #1E293B", "number_format|string|Excel number format e.g. #,##0.00 or 0.0%", "auto_fit|boolean|Auto-fit column widths (default false)" }, "range"));
+            l.Add(T("word_read", "Read Word document", "Read body text and all tables from a live Word document.", true,
+                new[] { "path|string|Optional full file path or open tab filename", "max_chars|integer|Max characters of body text (default 30000)" }));
+            l.Add(T("word_write", "Edit Word document", "Append text, find/replace text, or insert a formatted table in a live Word document.", false,
+                new[] { "path|string|Optional full file path or open tab filename", "mode|string|append, replace, or insert_table", "text|string|Text to append or replacement text", "find|string|Text to find (for mode=replace)", "rows|str_matrix|2D array of table rows (for mode=insert_table)", "save|boolean|Save document after editing (default false)" }, "mode"));
+            l.Add(T("ppt_read", "Read PowerPoint presentation", "Read all slides (titles, texts, tables, speaker notes) from a live PowerPoint presentation.", true,
+                new[] { "path|string|Optional full file path or open tab filename" }));
+            l.Add(T("ppt_write", "Edit PowerPoint presentation", "Edit a slide title/body or add a new slide in a live PowerPoint presentation.", false,
+                new[] { "path|string|Optional full file path or open tab filename", "slide|integer|1-based slide index (default 1, or appended when add_slide=true)", "title|string|Slide title text", "body|string|Slide body text", "add_slide|boolean|Add a new slide instead of editing an existing one (default false)", "save|boolean|Save presentation after editing (default false)" }));
+            l.Add(T("office_extract", "Extract Office or PDF file", "Read-only background extraction of Excel, CSV, Word, PowerPoint, or PDF files (works on NASCA DRM files) off the UI thread.", true,
+                new[] { "path|string|Full file path", "max_rows|integer|Max rows per sheet/table (default 25000)", "preview_rows|integer|Preview rows per table in output (default 50)" }, "path"));
             l.Add(T("browser_open", "Open in the app browser", "Open a web address or a local file (PDF, HTML, email) in a new tab of the app's Browser page.", false, new[] { "target|string|URL or file path" }, "target"));
             l.Add(T("browser_read", "Read the browser tab", "Title, address and visible text of the active tab of the app's Browser page.", true, new[] { "max_chars|integer|Limit (default 20000)" }));
             l.Add(T("browser_run_js", "Run JavaScript in the browser tab", "Run a script in the active tab (click, fill, extract). Returns the result as JSON.", false, new[] { "script|string|JavaScript expression" }, "script"));
-            schema = l;
+
+            // ---- Native Windows SQLite Vault (data\vault.db, WAL, per-sheet SQL JOINs, FTS5) ----
+            l.Add(T("vault_list", "List indexed vault documents", "List Excel/CSV/Word/PowerPoint/PDF files indexed in data\\vault.db with their dynamic SQL sheet table names.", true,
+                new[] { "query|string|Optional filter text", "limit|integer|Max documents (default 50)" }));
+            l.Add(T("vault_extract", "Extract and index file into SQLite Vault", "Extract an Office/CSV/PDF file (NASCA DRM-safe via COM) off the UI thread and persist its sheets as real SQL tables in data\\vault.db. Uses smart cache when file size and mtime are unchanged unless force=true.", false,
+                new[] { "path|string|Full file path", "force|boolean|Re-extract even if cached unchanged (default false)", "max_rows|integer|Max rows per sheet (default 25000)" }, "path"));
+            l.Add(T("vault_schema", "Inspect SQLite Vault table schemas", "List dynamic SQL sheet tables (data_<docId>_<sheet>) and their column names for writing SQL queries and cross-report JOINs.", true,
+                new[] { "doc_id|integer|Optional document id (omit or 0 for all tables)" }));
+            l.Add(T("vault_query", "Run SQL query on SQLite Vault", "Execute arbitrary SQL (including cross-report JOIN, GROUP BY, SUM, AVG) against data\\vault.db off the UI thread.", true,
+                new[] { "sql|string|SQL query to execute", "max_rows|integer|Max rows returned (default 500)" }, "sql"));
+            l.Add(T("vault_search", "Full-text search SQLite Vault", "Full-text search across all indexed document sheets, sections and text in data\\vault.db.", true,
+                new[] { "query|string|Search query", "limit|integer|Max results (default 20)" }, "query"));
+
+            // ---- Hermes / OpenClaw / DeepSeek Memory, Skills, Dynamic Tools, Todo & Compaction ----
+            l.Add(T("memory_manage", "Read or update companion memory", "Read, add, replace, remove, daily_log, list, or reset_snapshot on SOUL.md, USER.md, TOOLS.md, MEMORY.md, GOALS.md, HEARTBEAT.md, or daily/YYYY-MM-DD.md.", false,
+                new[] { "file|string|SOUL.md, USER.md, TOOLS.md, MEMORY.md, GOALS.md, HEARTBEAT.md, daily, or all", "action|string|read, add, replace, remove, daily_log, list, or reset_snapshot", "content|string|Text to add or replace with", "old_text|string|Existing text to match for replace/remove" }, "action"));
+            l.Add(T("session_search", "Search past chat sessions", "Full-text search across Assistant and Agents chat transcripts in vault.db with temporal decay and MMR deduplication.", true,
+                new[] { "query|string|Search query", "scope|string|assistant, agents, or empty for both", "limit|integer|Max results (default 15)" }, "query"));
+            l.Add(T("skill_manage", "Manage procedural skills (SKILL.md)", "List, read, save, patch, or delete self-improving SKILL.md playbooks (Progressive Disclosure).", false,
+                new[] { "action|string|list, read, save, patch, or delete", "slug|string|Skill slug (e.g. monthly-factory-report)", "content|string|Full SKILL.md content (save) or replacement text (patch)", "old_text|string|Existing snippet to replace (patch)" }, "action"));
+            l.Add(T("tool_list", "List dynamic tools", "List all hot-loaded custom tools registered under data\\assistant\\tools\\*.json.", true, new string[0]));
+            l.Add(T("tool_create", "Create a dynamic MCP tool", "Creator Mode: register a reusable sql, powershell, cmd, or python tool under data\\assistant\\tools\\*.json. Hot-loads immediately into MCP without rebuilding.", false,
+                new[] { "name|string|Unique tool name (lowercase letters, digits, underscores)", "title|string|Human-readable title", "description|string|What the tool does", "kind|string|sql, powershell, cmd, or python", "script|string|SQL template (supports {{arg}}) or script body (receives JSON args in AIO_TOOL_ARGS)", "args_schema|any_object|Optional parameter schema object or JSON string", "read_only|boolean|Whether the tool is read-only (default true for sql)" }, "name", "kind", "script"));
+            l.Add(T("tool_delete", "Delete a dynamic MCP tool", "Remove a dynamic tool from data\\assistant\\tools\\.", false,
+                new[] { "name|string|Dynamic tool name" }, "name"));
+            l.Add(T("todo_plan", "Manage per-chat step plan", "Set, update, get, or clear the active step checklist for a chat (reports live progress in the status strip).", false,
+                new[] { "action|string|set, update, get, or clear", "chat_id|string|Chat id (default 'default')", "steps|any_array|Array of step strings or {text,status} objects (for set)", "step|integer|1-based step index (for update)", "status|string|pending, in_progress, done, or blocked", "text|string|Optional updated step text" }, "action"));
+            l.Add(T("chat_steps", "Inspect or fork chat step events", "Read event-sourced step_events for a chat or fork a chat's step timeline at step_id.", false,
+                new[] { "chat_id|string|Chat id", "action|string|list (default) or fork", "step_id|integer|Step id to fork at (for action=fork)", "new_chat_id|string|Optional new chat id for fork", "limit|integer|Max events (default 200)" }, "chat_id"));
+            l.Add(T("chat_compact", "Compact chat context safely", "Flush a durable summary to today's daily log, protect the last N conversational turns without splitting tool pairs, and insert a clean checkpoint.", false,
+                new[] { "chat_id|string|Chat id to compact", "protect_last_n|integer|Number of recent turns to keep verbatim (default 6)" }, "chat_id"));
+
+            // ---- Proactive Cron, Idle-Only Heartbeat & Folder Watchers ----
+            l.Add(T("cron_manage", "Manage proactive cron jobs and follow-ups", "List, create, follow_up (one-shot self-schedule), update, delete, or run_now on scheduled routines with 0-token pre-checks and [SILENT] suppression.", false,
+                new[] { "action|string|list, create, follow_up, update, delete, or run_now", "id|string|Job id (for update, delete, run_now)", "name|string|Job name", "schedule|string|every:15m, daily:08:00, or once:YYYY-MM-DDTHH:mm", "prompt|string|Task prompt when triggered", "skill|string|Optional skill slug", "precheck_type|string|none, folder_changed, sql_nonzero, or overdue_tasks", "precheck_arg|string|Folder path or SQL query for 0-token pre-check", "enabled|boolean|Enable or disable job", "one_shot|boolean|Disable automatically after firing once", "in_minutes|integer|Relative minutes for action=follow_up (default 15)" }, "action"));
+            l.Add(T("heartbeat_status", "Check or run idle-only Heartbeat", "Inspect HEARTBEAT.md/GOALS.md status or run an immediate 0-token local heartbeat check (returns HEARTBEAT_OK when clean).", true,
+                new[] { "run_now|boolean|Run the 0-token local heartbeat check immediately (default false)", "force|boolean|Run even if an Assistant chat is marked busy (default false)" }));
+            l.Add(T("watch_folder", "Watch a folder for automatic vault indexing", "Add, remove, or list FileSystemWatcher folders whose new/modified Office and PDF files auto-index into vault.db after a 1.5 s debounce.", false,
+                new[] { "action|string|add (default), remove, or list", "path|string|Folder path (required for add/remove)" }));
+
+            // ---- Visual-First Live Communication Canvas & Interactive Dashboards ----
+            l.Add(T("dashboard_publish", "Publish interactive HTML dashboard", "Write an offline studio-grade HTML dashboard to data\\dashboards\\<slug>.html and open/refresh it in the embedded Browser (reuses existing tab).", false,
+                new[] { "slug|string|Dashboard slug (e.g. q4-sales-comparison)", "title|string|Dashboard title", "html|string|Full HTML5 document or studio HTML fragment (follow skills/anti-slop-web-design/SKILL.md)", "open|boolean|Open/reload in Browser automatically (default true)" }, "slug", "html"));
+            l.Add(T("canvas_update", "Update the Live Communication Canvas", "Overwrite data\\dashboards\\live-canvas.html with an interactive SVG diagram, architecture flow, comparison, or telemetry view and auto-flip/reload the Browser tab without duplicating tabs.", false,
+                new[] { "html|string|Full HTML5 document or visual fragment (follow skills/anti-slop-web-design/SKILL.md)", "title|string|Canvas title (default Live Canvas)", "open|boolean|Open/reload in Browser automatically (default true)" }, "html"));
+            l.Add(T("dashboard_list", "List published dashboards", "List saved HTML dashboards and Live Canvas files in data\\dashboards\\.", true, new string[0]));
+
+            builtInSchema = l;
+            builtInNames = new HashSet<string>(l.Select(t => (string)t["name"]), StringComparer.OrdinalIgnoreCase);
             return l;
+        }
+
+        public static List<Dictionary<string, object>> Schema()
+        {
+            var baseList = BuiltInSchema();
+            var combined = new List<Dictionary<string, object>>(baseList);
+            try
+            {
+                var dyn = AgentMemory.BuildDynamicToolSchemas(builtInNames);
+                if (dyn != null && dyn.Count > 0) combined.AddRange(dyn);
+            }
+            catch (Exception) { }
+            return combined;
         }
 
         static Dictionary<string, object> T(string name, string title, string desc, bool readOnly, string[] props, params string[] required)
@@ -100,7 +191,11 @@ namespace StickyPro
                 var parts = spec.Split('|');
                 var prop = new Dictionary<string, object> { { "type", parts[1] }, { "description", parts[2] } };
                 if (parts[1] == "array") prop["items"] = new Dictionary<string, object> { { "type", "string" } };
-                if (parts[1] == "object") prop["additionalProperties"] = new Dictionary<string, object> { { "type", "string" } };
+                else if (parts[1] == "any_array") prop["type"] = "array";
+                else if (parts[1] == "matrix") { prop["type"] = "array"; prop["items"] = new Dictionary<string, object> { { "type", "array" } }; }
+                else if (parts[1] == "str_matrix") { prop["type"] = "array"; prop["items"] = new Dictionary<string, object> { { "type", "array" }, { "items", new Dictionary<string, object> { { "type", "string" } } } }; }
+                else if (parts[1] == "object") prop["additionalProperties"] = new Dictionary<string, object> { { "type", "string" } };
+                else if (parts[1] == "any_object") prop["type"] = "object";
                 p[parts[0]] = prop;
             }
             var input = new Dictionary<string, object> { { "type", "object" }, { "properties", p } };
@@ -118,9 +213,33 @@ namespace StickyPro
             switch (tool)
             {
                 case "agent_ask": return AgentAsk(a);
+                case "office_extract": return OfficeExtract(a);
                 case "browser_read": case "browser_run_js": return BrowserScript(tool, a);
+                // Phase 3: Off-UI-thread Vault, Memory, Skills, Dynamic Tools, Cron, Heartbeat, Live Canvas
+                case "vault_list": return J(SqliteVault.ListDocs(S(a, "query"), I(a, "limit", 50)));
+                case "vault_extract": return VaultExtract(a);
+                case "vault_schema": return J(SqliteVault.GetSchema(L64(a, "doc_id", 0)));
+                case "vault_query": return J(SqliteVault.QuerySql(S(a, "sql"), I(a, "max_rows", 500)));
+                case "vault_search": return J(SqliteVault.SearchVault(S(a, "query"), I(a, "limit", 20)));
+                case "memory_manage": return J(AgentMemory.MemoryManage(S(a, "file"), S(a, "action"), S(a, "content"), S(a, "old_text")));
+                case "session_search": return J(SqliteVault.SearchSessions(S(a, "query"), S(a, "scope"), I(a, "limit", 15)));
+                case "skill_manage": return J(AgentMemory.SkillManage(S(a, "action"), S(a, "slug"), S(a, "content"), S(a, "old_text")));
+                case "tool_list": return J(AgentMemory.ToolList());
+                case "tool_create": return ToolCreate(a);
+                case "tool_delete": return J(AgentMemory.ToolDelete(S(a, "name")));
+                case "todo_plan": return TodoPlanTool(a);
+                case "chat_steps": return ChatStepsTool(a);
+                case "chat_compact": return ChatCompactTool(a);
+                case "cron_manage": return CronManageTool(a);
+                case "heartbeat_status": return J(CronEngine.HeartbeatStatus(B(a, "run_now") == true, B(a, "force") == true));
+                case "watch_folder": return WatchFolderTool(a);
+                case "dashboard_publish": return J(DashboardGen.Publish(S(a, "slug"), S(a, "title"), S(a, "html"), B(a, "open") != false));
+                case "canvas_update": return J(DashboardGen.UpdateCanvas(S(a, "html"), Has(a, "title") ? S(a, "title") : "Live Canvas", B(a, "open") != false));
+                case "dashboard_list": return J(DashboardGen.ListDashboards());
                 case "agent_chats": case "agent_chat_get": case "search_all": EnsureChats(); break;
             }
+            if (AgentMemory.HasDynamicTool(tool))
+                return J(AgentMemory.RunDynamicTool(tool, a));
             return UI(() => RunUi(tool, a));
         }
 
@@ -169,14 +288,182 @@ namespace StickyPro
                 {
                     string page = S(a, "page").ToLowerInvariant();
                     if (!Pages.Contains(page)) throw new Exception("Unknown page. Use one of: " + string.Join(", ", Pages));
-                    App.I.ShowMain(page); return J(new { opened = page });
+                    App.I.ShowMain(page);
+                    AssistantHarness.Report("Switched to " + Ui.PageName(page, char.ToUpper(page[0]) + page.Substring(1)));
+                    return J(new { opened = page });
                 }
                 case "page_context": return J(App.I.PageContext());
-                case "markdown_open": { string p = S(a, "path"); if (!File.Exists(p)) throw new Exception("No such file: " + p); App.I.OpenMarkdown(p); return J(new { opened = p }); }
-                case "explorer_open": { string p = S(a, "path"); if (!Directory.Exists(p)) throw new Exception("No such folder: " + p); App.I.OpenInExplorerPage(p); return J(new { opened = p }); }
-                case "terminal_open": { string p = S(a, "folder"); if (!Directory.Exists(p)) throw new Exception("No such folder: " + p); Term.Open(p, Has(a, "command") ? S(a, "command") : ""); return J(new { opened = p }); }
-                case "document_open": { string p = S(a, "path"); if (!System.IO.File.Exists(p)) throw new Exception("File not found: " + p); App.I.OpenDocument(p); return J(new { opened = p }); }
-                case "browser_open": { string t = S(a, "target"); if (string.IsNullOrWhiteSpace(t)) throw new Exception("Give a URL or a file path."); App.I.OpenInBrowser(t); return J(new { opened = t }); }
+                case "markdown_open":
+                {
+                    string p = S(a, "path"); if (!File.Exists(p)) throw new Exception("No such file: " + p);
+                    App.I.OpenMarkdown(p);
+                    AssistantHarness.Report("Opened " + Path.GetFileName(p) + " in Markdown");
+                    return J(new { opened = p });
+                }
+                case "explorer_open":
+                {
+                    string p = S(a, "path"); if (!Directory.Exists(p)) throw new Exception("No such folder: " + p);
+                    App.I.OpenInExplorerPage(p);
+                    string label = Path.GetFileName(p.TrimEnd('\\', '/'));
+                    AssistantHarness.Report("Opened " + (label.Length > 0 ? label : p) + " in Explorer");
+                    return J(new { opened = p });
+                }
+                case "terminal_open":
+                {
+                    string p = S(a, "folder"); if (!Directory.Exists(p)) throw new Exception("No such folder: " + p);
+                    Term.Open(p, Has(a, "command") ? S(a, "command") : "");
+                    string label = Path.GetFileName(p.TrimEnd('\\', '/'));
+                    AssistantHarness.Report("Opened terminal in " + (label.Length > 0 ? label : p));
+                    return J(new { opened = p });
+                }
+                case "document_open":
+                {
+                    string p = S(a, "path"); if (!System.IO.File.Exists(p)) throw new Exception("File not found: " + p);
+                    bool? edit = B(a, "edit");
+                    App.I.OpenDocument(p, edit);
+                    AssistantHarness.Report("Opened " + Path.GetFileName(p) + " in Documents");
+                    var dv = App.I.DocumentsView;
+                    return J(new { opened = p, editing = dv != null && dv.IsEditing(p), kind = dv != null ? dv.ActiveKind : (OfficeEdit.KindOf(p) ?? Path.GetExtension(p).TrimStart('.').ToLowerInvariant()) });
+                }
+                case "documents_list":
+                {
+                    var dv = App.I.DocumentsView;
+                    string cur = dv != null ? (dv.CurrentPath ?? "") : "";
+                    var openTabs = dv != null ? dv.OpenTabs : new List<string>();
+                    return J(new
+                    {
+                        current = cur,
+                        mode = cur.Length > 0 && dv != null ? (dv.IsEditing(cur) ? "edit" : "preview") : (Store.Settings.ViewerEdit ? "edit" : "preview"),
+                        kind = dv != null ? (dv.ActiveKind ?? "") : "",
+                        tabs = openTabs.Select(p => new
+                        {
+                            path = p,
+                            editing = dv != null && dv.IsEditing(p),
+                            kind = OfficeEdit.KindOf(p) ?? Path.GetExtension(p ?? "").TrimStart('.').ToLowerInvariant()
+                        }).ToList()
+                    });
+                }
+                case "document_switch":
+                {
+                    string p = S(a, "path");
+                    if (string.IsNullOrWhiteSpace(p)) throw new Exception("path is required.");
+                    App.I.ShowMain("documents");
+                    var dv = App.I.DocumentsView;
+                    if (dv == null || !dv.SwitchTo(p)) throw new Exception("Could not switch to document: " + p);
+                    string cur = dv.CurrentPath ?? p;
+                    AssistantHarness.Report("Switched to " + Path.GetFileName(cur) + " in Documents");
+                    return J(new { switched = cur, editing = dv.IsEditing(cur), kind = dv.ActiveKind ?? "" });
+                }
+                case "document_save":
+                {
+                    string p = S(a, "path");
+                    var dv = App.I.DocumentsView;
+                    if (dv == null) return J(new { saved = false, path = p, error = "Documents page is not open." });
+                    string target = string.IsNullOrWhiteSpace(p) ? (dv.CurrentPath ?? "") : p;
+                    string err;
+                    bool saved = dv.SaveDocument(target, out err);
+                    if (saved && target.Length > 0) AssistantHarness.Report("Saved " + Path.GetFileName(target) + " in Documents");
+                    return J(new { saved = saved, path = target, error = err });
+                }
+                case "excel_info":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "excel");
+                    AssistantHarness.Report("Inspecting Excel " + Path.GetFileName(ed.Path));
+                    return J(OfficeCom.ExcelInfo(ed));
+                }
+                case "excel_read":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "excel");
+                    string sheet = S(a, "sheet");
+                    string range = S(a, "range");
+                    int maxRows = I(a, "max_rows", 200);
+                    int maxCols = I(a, "max_cols", 40);
+                    AssistantHarness.Report("Reading Excel " + Path.GetFileName(ed.Path) + (sheet.Length > 0 ? " [" + sheet + "]" : ""));
+                    return J(OfficeCom.ExcelRead(ed, sheet, range, maxRows, maxCols));
+                }
+                case "excel_write":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "excel");
+                    string sheet = S(a, "sheet");
+                    string startCell = Has(a, "start_cell") ? S(a, "start_cell") : "A1";
+                    var values = Matrix(a, "values");
+                    bool save = B(a, "save") == true;
+                    AssistantHarness.Report("Writing Excel " + Path.GetFileName(ed.Path) + " at " + startCell + (save ? " (saving)" : ""));
+                    return J(OfficeCom.ExcelWrite(ed, sheet, startCell, values, save));
+                }
+                case "excel_formula":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "excel");
+                    string sheet = S(a, "sheet");
+                    string cell = S(a, "cell");
+                    string formula = S(a, "formula");
+                    bool save = B(a, "save") == true;
+                    AssistantHarness.Report("Setting formula " + cell + " in " + Path.GetFileName(ed.Path));
+                    return J(OfficeCom.ExcelFormula(ed, sheet, cell, formula, save));
+                }
+                case "excel_sheet_add":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "excel");
+                    string name = S(a, "name");
+                    bool activate = B(a, "activate") != false;
+                    AssistantHarness.Report("Adding Excel sheet " + name + " in " + Path.GetFileName(ed.Path));
+                    return J(OfficeCom.ExcelSheetAdd(ed, name, activate));
+                }
+                case "excel_format":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "excel");
+                    string sheet = S(a, "sheet");
+                    string range = S(a, "range");
+                    bool? bold = B(a, "bold");
+                    string bg = S(a, "bg_color");
+                    string fg = S(a, "font_color");
+                    string nf = S(a, "number_format");
+                    bool autoFit = B(a, "auto_fit") == true;
+                    AssistantHarness.Report("Formatting Excel " + Path.GetFileName(ed.Path) + " " + range);
+                    return J(OfficeCom.ExcelFormat(ed, sheet, range, bold, bg, fg, nf, autoFit));
+                }
+                case "word_read":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "word");
+                    int maxChars = I(a, "max_chars", 30000);
+                    AssistantHarness.Report("Reading Word " + Path.GetFileName(ed.Path));
+                    return J(OfficeCom.WordRead(ed, maxChars));
+                }
+                case "word_write":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "word");
+                    string mode = S(a, "mode");
+                    string text = Has(a, "text") ? S(a, "text") : null;
+                    string find = S(a, "find");
+                    var rows = Has(a, "rows") ? StrMatrix(a, "rows") : null;
+                    bool save = B(a, "save") == true;
+                    AssistantHarness.Report("Editing Word " + Path.GetFileName(ed.Path) + " (" + mode + ")");
+                    return J(OfficeCom.WordWrite(ed, mode, text, find, rows, save));
+                }
+                case "ppt_read":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "powerpoint");
+                    AssistantHarness.Report("Reading PowerPoint " + Path.GetFileName(ed.Path));
+                    return J(OfficeCom.PptRead(ed));
+                }
+                case "ppt_write":
+                {
+                    var ed = ResolveOfficeEditor(S(a, "path"), "powerpoint");
+                    int slide = I(a, "slide", 0);
+                    string title = Has(a, "title") ? S(a, "title") : null;
+                    string body = Has(a, "body") ? S(a, "body") : null;
+                    bool addSlide = B(a, "add_slide") == true;
+                    bool save = B(a, "save") == true;
+                    AssistantHarness.Report((addSlide ? "Adding slide in " : "Editing slide " + (slide > 0 ? slide : 1) + " in ") + Path.GetFileName(ed.Path));
+                    return J(OfficeCom.PptWrite(ed, slide, title, body, addSlide, save));
+                }
+                case "browser_open":
+                {
+                    string t = S(a, "target"); if (string.IsNullOrWhiteSpace(t)) throw new Exception("Give a URL or a file path.");
+                    App.I.OpenInBrowser(t);
+                    AssistantHarness.Report("Opened " + Cut(t, 60) + " in Browser");
+                    return J(new { opened = t });
+                }
                 case "notify": App.I.Balloon(Has(a, "title") ? S(a, "title") : Ui.AppTitle, S(a, "text")); return J(new { shown = true });
 
                 case "notes_search":
@@ -485,6 +772,302 @@ namespace StickyPro
                 UI(() => { AgentStore.Busy.Remove(chat.Id); AgentStore.Save(chat); AgentStore.RaiseChat(chat); AgentStore.Raise(); return ""; });
             }
             return J(new { chat_id = chat.Id, folder = chat.Folder, mode = chat.Mode, replies = replies });
+        }
+
+        // ---------- Office COM Helpers & Background Extractor ----------
+        static string OfficeExtract(Dictionary<string, object> a)
+        {
+            string p = S(a, "path").Trim();
+            if (p.Length == 0) throw new Exception("path is required.");
+            if (!File.Exists(p)) throw new Exception("File not found: " + p);
+            int maxRows = Math.Max(1, Math.Min(200000, I(a, "max_rows", 25000)));
+            int previewRows = Math.Max(0, Math.Min(500, I(a, "preview_rows", 50)));
+
+            AssistantHarness.Report("Extracting " + Path.GetFileName(p) + "...");
+            ExtractedDoc doc = OfficeCom.ExtractFile(p, maxRows);
+            AssistantHarness.Report("Extracted " + Path.GetFileName(p) + " (" + doc.Tables.Count + " tables, " + doc.Sections.Count + " sections)");
+
+            return J(new
+            {
+                path = doc.Path,
+                kind = doc.Kind,
+                is_drm = doc.IsDrm,
+                file_size = doc.FileSize,
+                modified_ticks = doc.ModifiedTicks,
+                error = doc.Error,
+                table_count = doc.Tables.Count,
+                section_count = doc.Sections.Count,
+                tables = doc.Tables.Select(t => new
+                {
+                    name = t.Name,
+                    total_rows = t.TotalRows,
+                    total_cols = t.TotalCols,
+                    columns = t.Columns,
+                    preview_rows = t.Rows.Take(previewRows).ToList()
+                }).ToList(),
+                sections = doc.Sections.Select(s => new
+                {
+                    index = s.Index,
+                    title = s.Title,
+                    text = Cut(s.Text, 4000)
+                }).ToList(),
+                full_text_length = doc.FullText != null ? doc.FullText.Length : 0,
+                full_text_preview = Cut(doc.FullText, 20000)
+            });
+        }
+
+        // ---------- Phase 3 Tool Handlers (Off-UI-Thread) ----------
+        static string VaultExtract(Dictionary<string, object> a)
+        {
+            string p = S(a, "path").Trim();
+            if (p.Length == 0) throw new Exception("path is required.");
+            bool force = B(a, "force") == true;
+            int maxRows = Math.Max(1, Math.Min(200000, I(a, "max_rows", 25000)));
+            var res = SqliteVault.ExtractAndStore(p, force, maxRows);
+            bool cached = res.ContainsKey("cached") && true.Equals(res["cached"]);
+            if (!cached && !res.ContainsKey("error"))
+                AssistantHarness.Report("Indexed " + Path.GetFileName(p) + " -> vault.db");
+            return J(res);
+        }
+
+        static string ToolCreate(Dictionary<string, object> a)
+        {
+            BuiltInSchema();
+            object argsSchema = Has(a, "args_schema") ? a["args_schema"] : null;
+            return J(AgentMemory.ToolCreate(
+                S(a, "name"),
+                S(a, "title"),
+                S(a, "description"),
+                S(a, "kind"),
+                S(a, "script"),
+                argsSchema,
+                B(a, "read_only"),
+                builtInNames));
+        }
+
+        static string TodoPlanTool(Dictionary<string, object> a)
+        {
+            string action = S(a, "action");
+            string chatId = S(a, "chat_id");
+            var steps = new List<Dictionary<string, object>>();
+            if (Has(a, "steps"))
+            {
+                object raw = a["steps"];
+                string rawStr = raw as string;
+                if (rawStr != null && rawStr.Trim().StartsWith("["))
+                {
+                    try { raw = Js.DeserializeObject(rawStr); }
+                    catch (Exception) { }
+                }
+                var seq = raw as IEnumerable;
+                if (seq != null && !(raw is string))
+                {
+                    foreach (var item in seq)
+                    {
+                        var d = item as Dictionary<string, object>;
+                        if (d != null) steps.Add(d);
+                        else if (item != null)
+                            steps.Add(new Dictionary<string, object> { { "text", Convert.ToString(item, CultureInfo.InvariantCulture) }, { "status", "pending" } });
+                    }
+                }
+            }
+            return J(AgentMemory.TodoManage(chatId, action, steps, I(a, "step", 0), S(a, "status"), S(a, "text")));
+        }
+
+        static string ChatStepsTool(Dictionary<string, object> a)
+        {
+            string chatId = S(a, "chat_id");
+            string action = Has(a, "action") ? S(a, "action").Trim().ToLowerInvariant() : "list";
+            if (action == "fork")
+                return J(SqliteVault.ForkAt(chatId, L64(a, "step_id", 0), S(a, "new_chat_id")));
+            return J(SqliteVault.GetSteps(chatId, I(a, "limit", 200)));
+        }
+
+        static string ChatCompactTool(Dictionary<string, object> a)
+        {
+            string chatId = S(a, "chat_id").Trim();
+            if (chatId.Length == 0) throw new Exception("chat_id is required.");
+            int keepN = I(a, "protect_last_n", AgentMemory.ProtectLastN);
+            if (App.I != null)
+            {
+                EnsureChats();
+                return UI(() =>
+                {
+                    var c = AgentStore.Find(chatId);
+                    if (c == null) throw new Exception("No chat with id " + chatId);
+                    return J(AgentMemory.CompactChat(c, keepN));
+                });
+            }
+            var chat = AgentStore.Find(chatId);
+            if (chat == null) throw new Exception("No chat with id " + chatId);
+            return J(AgentMemory.CompactChat(chat, keepN));
+        }
+
+        static string CronManageTool(Dictionary<string, object> a)
+        {
+            return J(CronEngine.Manage(
+                S(a, "action"),
+                S(a, "id"),
+                S(a, "name"),
+                S(a, "schedule"),
+                S(a, "prompt"),
+                S(a, "skill"),
+                S(a, "precheck_type"),
+                S(a, "precheck_arg"),
+                B(a, "enabled"),
+                B(a, "one_shot"),
+                I(a, "in_minutes", 0)));
+        }
+
+        static string WatchFolderTool(Dictionary<string, object> a)
+        {
+            string act = Has(a, "action") ? S(a, "action").Trim().ToLowerInvariant() : "add";
+            if (act == "list")
+                return J(new { watched_folders = CronEngine.WatchedFolders() });
+            if (act == "remove" || act == "unwatch" || act == "delete")
+                return J(CronEngine.UnwatchFolder(S(a, "path")));
+            return J(CronEngine.WatchFolder(S(a, "path")));
+        }
+
+        static long L64(Dictionary<string, object> a, string k, long def)
+        {
+            long v;
+            return Has(a, k) && long.TryParse(S(a, k), NumberStyles.Integer, CultureInfo.InvariantCulture, out v) ? v : def;
+        }
+
+        static OfficeEdit ResolveOfficeEditor(string path, string expectedKind)
+        {
+            var dv = App.I != null ? App.I.DocumentsView : null;
+            string p = (path ?? "").Trim();
+
+            if (p.Length > 0)
+            {
+                if (dv != null)
+                {
+                    var ed = FindEditorIn(dv, p, expectedKind);
+                    if (ed != null)
+                    {
+                        if (!string.Equals(dv.CurrentPath, ed.Path, StringComparison.OrdinalIgnoreCase))
+                            dv.SwitchTo(ed.Path);
+                        return ed;
+                    }
+                }
+                if (!File.Exists(p)) throw new Exception("File not found: " + p);
+                string kind = OfficeEdit.KindOf(p);
+                if (!string.Equals(kind, expectedKind, StringComparison.OrdinalIgnoreCase))
+                    throw new Exception("File is " + (kind ?? Path.GetExtension(p)) + ", expected " + expectedKind + ": " + p);
+                App.I.OpenDocument(p, true);
+                dv = App.I.DocumentsView;
+                var opened = dv != null ? dv.EditorFor(p) : null;
+                if (opened == null)
+                    throw new Exception("Could not open " + Path.GetFileName(p) + " in live " + expectedKind + " Edit mode (check if it is already open in another app). Use office_extract for read-only extraction.");
+                return opened;
+            }
+
+            if (dv != null && dv.ActiveEditor != null && string.Equals(dv.ActiveEditor.Kind, expectedKind, StringComparison.OrdinalIgnoreCase))
+                return dv.ActiveEditor;
+
+            if (dv != null && !string.IsNullOrEmpty(dv.CurrentPath)
+                && string.Equals(OfficeEdit.KindOf(dv.CurrentPath), expectedKind, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(dv.CurrentPath))
+            {
+                App.I.OpenDocument(dv.CurrentPath, true);
+                dv = App.I.DocumentsView;
+                if (dv != null && dv.ActiveEditor != null && string.Equals(dv.ActiveEditor.Kind, expectedKind, StringComparison.OrdinalIgnoreCase))
+                    return dv.ActiveEditor;
+            }
+
+            if (dv != null)
+            {
+                var matches = new List<OfficeEdit>();
+                foreach (var tab in dv.OpenTabs)
+                {
+                    var e = dv.EditorFor(tab);
+                    if (e != null && string.Equals(e.Kind, expectedKind, StringComparison.OrdinalIgnoreCase))
+                        matches.Add(e);
+                }
+                if (matches.Count == 1) return matches[0];
+            }
+
+            throw new Exception("No active " + expectedKind + " document is open in Edit mode. Pass a file path or open one on the Documents page.");
+        }
+
+        static OfficeEdit FindEditorIn(DocumentsPage dv, string pathOrName, string expectedKind)
+        {
+            var exact = dv.EditorFor(pathOrName);
+            if (exact != null)
+            {
+                if (!string.Equals(exact.Kind, expectedKind, StringComparison.OrdinalIgnoreCase))
+                    throw new Exception("Open document is " + exact.Kind + ", expected " + expectedKind + ".");
+                return exact;
+            }
+            var byName = new List<OfficeEdit>();
+            foreach (var tab in dv.OpenTabs)
+            {
+                if (string.Equals(Path.GetFileName(tab), pathOrName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var e = dv.EditorFor(tab);
+                    if (e != null && string.Equals(e.Kind, expectedKind, StringComparison.OrdinalIgnoreCase))
+                        byName.Add(e);
+                }
+            }
+            return byName.Count == 1 ? byName[0] : null;
+        }
+
+        static List<List<object>> Matrix(Dictionary<string, object> a, string k)
+        {
+            if (!Has(a, k)) return new List<List<object>>();
+            object raw = a[k];
+            string s = raw as string;
+            if (s != null)
+            {
+                string trimmed = s.Trim();
+                if (trimmed.StartsWith("["))
+                {
+                    try { raw = Js.DeserializeObject(trimmed); }
+                    catch (Exception ex) { throw new Exception("Invalid JSON array for " + k + ": " + ex.Message); }
+                }
+                else
+                {
+                    return new List<List<object>> { new List<object> { s } };
+                }
+            }
+            var outer = raw as IEnumerable;
+            if (outer == null || raw is string)
+                return new List<List<object>> { new List<object> { raw } };
+
+            var rows = new List<List<object>>();
+            var flat = new List<object>();
+            foreach (var item in outer)
+            {
+                var inner = item as IEnumerable;
+                if (inner != null && !(item is string) && !(item is IDictionary))
+                {
+                    var row = new List<object>();
+                    foreach (var cell in inner) row.Add(cell);
+                    rows.Add(row);
+                }
+                else
+                {
+                    flat.Add(item);
+                }
+            }
+            if (flat.Count > 0) rows.Add(flat);
+            return rows;
+        }
+
+        static List<List<string>> StrMatrix(Dictionary<string, object> a, string k)
+        {
+            var m = Matrix(a, k);
+            var outRows = new List<List<string>>(m.Count);
+            foreach (var r in m)
+            {
+                var row = new List<string>(r.Count);
+                foreach (var c in r)
+                    row.Add(c == null ? "" : Convert.ToString(c, CultureInfo.InvariantCulture));
+                outRows.Add(row);
+            }
+            return outRows;
         }
 
         // ---------- Helpers ----------

@@ -35,6 +35,8 @@ namespace StickyPro
         public string Error { get; private set; }
         public string Kind { get; private set; }   // excel / word / powerpoint
         object app, doc;
+        internal object ComApp { get { return app; } }
+        internal object ComDoc { get { return doc; } }
         IntPtr wnd;
         bool startedPowerPoint;
         readonly Timer watch = new Timer { Interval = 1000 };

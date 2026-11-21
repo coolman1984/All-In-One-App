@@ -1093,6 +1093,7 @@ namespace StickyPro
         }
 
         public void SelectTab(string id) { int i = Array.IndexOf(ids, id); if (i >= 0) tabs.Select(i); }
+        public string ActiveTab { get { return selected >= 0 && selected < ids.Length ? ids[selected] : "procs"; } }
 
         // Wide windows: Processes stays on the left and the chosen other tab (Startup / Drives / Uninstall) fills the right,
         // instead of one list with a wide empty area. Narrow windows: one tab at a time.

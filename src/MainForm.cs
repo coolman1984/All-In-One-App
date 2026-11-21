@@ -477,25 +477,175 @@ namespace StickyPro
             else if (page == "tasks") tasks.FocusQuick();
         }
 
+        public DocumentsPage DocumentsView { get { return documents; } }
+        public ExplorerPage ExplorerView { get { return explorer; } }
+        public BrowserPage BrowserView { get { return browser; } }
+
         public void SelectTask(TaskItem t) { ShowPage("tasks"); tasks.Select(t); }
-        public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); }
-        public void OpenMarkdownFile(string path) { ShowPage("markdown"); if (markdown != null) markdown.Open(path, true); }
-        public void OpenDocument(string path, bool? edit = null) { ShowPage("documents"); if (documents != null) documents.Open(path, edit); }
+        public void OpenInExplorer(string path) { ShowPage("explorer"); explorer.OpenPath(path); PageChangedForAssistant(); }
+        public void OpenMarkdownFile(string path) { ShowPage("markdown"); if (markdown != null) markdown.Open(path, true); PageChangedForAssistant(); }
+        public void OpenDocument(string path, bool? edit = null) { ShowPage("documents"); if (documents != null) documents.Open(path, edit); PageChangedForAssistant(); }
         public void OpenInBrowser(string target)
         {
             ShowPage("browser");
             if (browser == null || string.IsNullOrEmpty(target)) return;
             bool file = false; try { file = System.IO.File.Exists(target); } catch { }
             if (file) browser.OpenPath(target); else browser.Go(target, true);
+            PageChangedForAssistant();
         }
-        // What the user is looking at, for the Assistant and the MCP tool page_context.
+        public void OpenOrReloadInBrowser(string path)
+        {
+            ShowPage("browser");
+            if (browser == null || string.IsNullOrEmpty(path)) return;
+            browser.OpenOrReloadFile(path);
+            PageChangedForAssistant();
+        }
+        // Live 20-page awareness for the Assistant Companion and MCP tool page_context (in-memory only, never blocks on disk/network).
         public Dictionary<string, object> PageContext()
         {
-            var d = new Dictionary<string, object> { { "page", page ?? "" } };
-            if (page == "markdown" && markdown != null) { d["note"] = markdown.CurrentPath ?? ""; string sel = markdown.SelectedText; if (sel.Length > 0) d["selected_text"] = sel.Length > 4000 ? sel.Substring(0, 4000) : sel; }
-            if (page == "explorer" && explorer != null) d["folder"] = explorer.CurrentFolder;
-            if (page == "browser" && browser != null) { d["browser_title"] = browser.ActiveTitle; d["browser_url"] = browser.ActiveUrl; }
-            if (page == "agents" || page == "terminals") d["note_for_agent"] = "The user is on the " + page + " page.";
+            string p = page ?? "";
+            string docCur = documents != null ? (documents.CurrentPath ?? "") : "";
+            var docTabs = documents != null ? documents.OpenTabs : new List<string>();
+            bool docEdit = documents != null && docCur.Length > 0 && documents.IsEditing(docCur);
+            string expFolder = explorer != null ? (explorer.CurrentFolder ?? "") : "";
+            var expSel = explorer != null ? explorer.SelectedPaths().Take(25).ToList() : new List<string>();
+            string brTitle = browser != null ? (browser.ActiveTitle ?? "") : "";
+            string brUrl = browser != null ? (browser.ActiveUrl ?? "") : "";
+            string mdNote = markdown != null ? (markdown.CurrentPath ?? "") : "";
+
+            var d = new Dictionary<string, object>
+            {
+                { "page", p },
+                { "loaded_pages", loadedPages.Keys.OrderBy(k => k).ToList() },
+                { "documents_current", docCur },
+                { "documents_tabs", docTabs },
+                { "documents_editing", docEdit },
+                { "explorer_folder", expFolder },
+                { "explorer_selected", expSel },
+                { "browser_title", brTitle },
+                { "browser_url", brUrl },
+                { "markdown_note", mdNote }
+            };
+
+            if (documents != null && documents.ActiveEditor != null && documents.ActiveEditor.Kind == "excel")
+            {
+                try
+                {
+                    var xctx = OfficeCom.ExcelQuickContext(documents.ActiveEditor);
+                    if (xctx != null)
+                    {
+                        foreach (var kv in xctx) d[kv.Key] = kv.Value;
+                    }
+                }
+                catch (Exception) { }
+            }
+
+            switch (p)
+            {
+                case "dashboard":
+                    d["tasks_open"] = Store.Tasks.Count(t => !t.Done);
+                    d["tasks_due_today"] = Store.Tasks.Count(TaskParse.DueToday);
+                    d["tasks_overdue"] = Store.Tasks.Count(TaskParse.Overdue);
+                    d["notes_active"] = Store.Notes.Count(n => !n.Archived);
+                    d["prompts_count"] = Store.Prompts.Count;
+                    d["clips_count"] = Store.Clips.Count;
+                    d["tagged_count"] = Store.Tagged.Count;
+                    d["activity_count"] = Store.Activity.Count;
+                    break;
+                case "tasks":
+                    d["tasks_open"] = Store.Tasks.Count(t => !t.Done);
+                    d["tasks_done"] = Store.Tasks.Count(t => t.Done);
+                    d["tasks_due_today"] = Store.Tasks.Count(TaskParse.DueToday);
+                    d["tasks_overdue"] = Store.Tasks.Count(TaskParse.Overdue);
+                    d["task_lists"] = Store.TaskLists();
+                    break;
+                case "notes":
+                    d["notes_active"] = Store.Notes.Count(n => !n.Archived);
+                    d["notes_archived"] = Store.Notes.Count(n => n.Archived);
+                    d["notes_open_windows"] = Store.Notes.Count(n => n.Open && !n.Archived);
+                    d["notes_with_reminder"] = Store.Notes.Count(n => n.RemindAt > 0);
+                    break;
+                case "prompts":
+                    d["prompts_count"] = Store.Prompts.Count;
+                    d["prompts_favorites"] = Store.Prompts.Count(x => x.Fav);
+                    d["prompts_categories"] = Store.Prompts.Select(x => x.Category).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToList();
+                    break;
+                case "clips":
+                    d["clips_count"] = Store.Clips.Count;
+                    d["clips_pinned"] = Store.Clips.Count(c => c.Pinned);
+                    d["clips_paused"] = Store.Settings.Paused;
+                    break;
+                case "documents":
+                    d["documents_mode"] = docCur.Length > 0 ? (docEdit ? "edit" : "preview") : (Store.Settings.ViewerEdit ? "edit" : "preview");
+                    d["documents_kind"] = documents != null ? (documents.ActiveKind ?? "") : "";
+                    d["documents_tab_count"] = docTabs.Count;
+                    break;
+                case "explorer":
+                    d["folder"] = expFolder;
+                    d["explorer_panes"] = explorer != null ? explorer.PaneFolders() : new List<string>();
+                    d["explorer_layout"] = Store.Settings.ExplorerLayout ?? "";
+                    break;
+                case "browser":
+                    d["browser_tabs"] = browser != null ? browser.OpenTabsInfo() : new List<Dictionary<string, string>>();
+                    d["browser_automation"] = Store.Settings.BrowserAutomation;
+                    break;
+                case "markdown":
+                    d["note"] = mdNote;
+                    d["markdown_vault"] = MdVault.Current ?? "";
+                    d["markdown_mode"] = Store.Settings.MdMode ?? "read";
+                    if (markdown != null)
+                    {
+                        string sel = markdown.SelectedText;
+                        if (sel.Length > 0) d["selected_text"] = sel.Length > 4000 ? sel.Substring(0, 4000) : sel;
+                    }
+                    break;
+                case "agents":
+                    d["agents_chats_count"] = AgentStore.Loaded ? AgentStore.Chats.Count(c => !AssistantHarness.IsAssistant(c) && c.HasContent) : 0;
+                    d["agents_busy_count"] = AgentStore.Busy.Count;
+                    if (!string.IsNullOrEmpty(Store.Dir)) d["agents_defs"] = AgentStore.Defs.Select(x => x.Id).ToList();
+                    break;
+                case "terminals":
+                    d["terminals_shell"] = Store.Settings.TermShell ?? "pwsh";
+                    d["terminals_workspaces"] = (Store.Settings.TermWorkspaces ?? new List<TermWorkspace>()).Select(w => w.Name).Take(20).ToList();
+                    d["terminals_recent"] = (Store.Settings.TermRecent ?? new List<string>()).Take(10).ToList();
+                    break;
+                case "system":
+                    d["system_tab"] = system != null ? system.ActiveTab : "procs";
+                    break;
+                case "chrome":
+                    d["chrome_tab"] = chrome != null ? chrome.ActiveTab : "bookmarks";
+                    break;
+                case "power":
+                    d["keep_awake"] = Awake.On;
+                    d["overlay_on"] = Overlay.On;
+                    break;
+                case "shortcuts":
+                    d["launchers_count"] = Store.Settings.Launchers != null ? Store.Settings.Launchers.Count : 0;
+                    d["hotkeys_count"] = Hotkeys.Actions.Length;
+                    break;
+                case "cards":
+                    d["cards_count"] = Store.Cards.Count;
+                    d["cards_visible"] = Store.Cards.Count(c => c.Visible);
+                    break;
+                case "snip":
+                    d["snip_auto_save"] = Store.Settings.SnipAutoSave;
+                    d["snip_copy_mode"] = Store.Settings.SnipCopyMode ?? "image";
+                    d["recorder_active"] = Recorder.Active;
+                    break;
+                case "activity":
+                    d["activity_count"] = Store.Activity.Count;
+                    d["activity_on"] = Store.Settings.ActivityOn;
+                    d["activity_recent"] = Store.Activity.OrderByDescending(a => a.Time).Take(5).Select(a => a.Path).ToList();
+                    break;
+                case "tagged":
+                    d["tagged_count"] = Store.Tagged.Count;
+                    d["tagged_categories"] = Store.TagCats.Select(c => c.Name).ToList();
+                    break;
+                case "accounts":
+                    d["accounts_default_map"] = Store.Settings.AgentDefaultAccount != null ? new Dictionary<string, string>(Store.Settings.AgentDefaultAccount) : new Dictionary<string, string>();
+                    if (!string.IsNullOrEmpty(Store.Dir)) d["agents_defs"] = AgentStore.Defs.Select(x => x.Id).ToList();
+                    break;
+            }
             return d;
         }
         public System.Threading.Tasks.Task<string> BrowserScript(string js) { if (browser == null) { ShowPage("browser"); } if (browser == null) throw new InvalidOperationException("The Browser page is not open."); return browser.RunScript(js); }

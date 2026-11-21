@@ -106,6 +106,68 @@ namespace StickyPro
                 if (d.ShowDialog(FindForm()) == DialogResult.OK) foreach (var f in d.FileNames) Open(f);
         }
 
+        public string CurrentPath { get { return current; } }
+        public List<string> OpenTabs { get { return tabs != null ? tabs.Paths.ToList() : new List<string>(); } }
+        public bool IsEditing(string path) { return !string.IsNullOrEmpty(path) && edits.ContainsKey(path); }
+        public string ActiveKind
+        {
+            get
+            {
+                OfficeEdit e;
+                if (current != null && edits.TryGetValue(current, out e)) return e.Kind ?? "";
+                if (current == null) return "";
+                return OfficeEdit.KindOf(current) ?? Path.GetExtension(current).TrimStart('.').ToLowerInvariant();
+            }
+        }
+        public OfficeEdit ActiveEditor { get { OfficeEdit e; return current != null && edits.TryGetValue(current, out e) ? e : null; } }
+        public OfficeEdit EditorFor(string path) { OfficeEdit e; return !string.IsNullOrEmpty(path) && edits.TryGetValue(path, out e) ? e : null; }
+
+        public bool SwitchTo(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            string match = tabs != null ? tabs.Paths.FirstOrDefault(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)) : null;
+            if (match == null && tabs != null)
+            {
+                var byName = tabs.Paths.Where(p => string.Equals(Path.GetFileName(p), path, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (byName.Count == 1) match = byName[0];
+            }
+            if (match != null)
+            {
+                Show(match);
+                return true;
+            }
+            if (File.Exists(path))
+            {
+                Open(path, null);
+                return string.Equals(current, path, StringComparison.OrdinalIgnoreCase)
+                    || (tabs != null && tabs.Paths.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)));
+            }
+            return false;
+        }
+
+        public bool SaveDocument(string path, out string error)
+        {
+            error = null;
+            string target = string.IsNullOrWhiteSpace(path) ? current : path;
+            if (string.IsNullOrWhiteSpace(target)) { error = "No active document."; return false; }
+            OfficeEdit editor;
+            if (!edits.TryGetValue(target, out editor))
+            {
+                var pair = edits.FirstOrDefault(kv => string.Equals(Path.GetFileName(kv.Key), target, StringComparison.OrdinalIgnoreCase));
+                editor = pair.Value;
+                if (editor != null) target = pair.Key;
+            }
+            if (editor == null) { error = "Document is not open in Edit mode: " + target; return false; }
+            bool ok = editor.Save();
+            error = editor.Error;
+            if (string.Equals(target, current, StringComparison.OrdinalIgnoreCase))
+            {
+                info.ForeColor = ok ? Ui.Muted : Ui.Warning;
+                info.Text = editor.Error ?? (current + "   ·   saved");
+            }
+            return ok;
+        }
+
         // Any file: documents open here, emails and web files on the Browser page, the rest in their own app.
         public void Open(string path) { Open(path, null); }
         public void Open(string path, bool? edit)
@@ -153,6 +215,7 @@ namespace StickyPro
                     foreach (Control c in host.Controls) c.Visible = c == ed;
                     saveBtn.Enabled = true;
                     info.Text = path + "   ·   editing in " + ed.Kind + " (Ctrl+S saves)" + (Mail.IsDrm(path) ? "   ·   protected (NASCA)" : "");
+                    SqliteVault.QueueExtract(path);
                     return;
                 }
             }
@@ -176,6 +239,7 @@ namespace StickyPro
             long size = 0; try { size = new FileInfo(path).Length; } catch (IOException) { }
             info.Text = (editError != null ? editError + "   ·   " : "") + path + "   ·   " + (size / 1024.0 / 1024.0).ToString("0.0") + " MB" + (Mail.IsDrm(path) ? "   ·   protected (NASCA)" : "") + "   ·   read only";
             info.ForeColor = editError != null ? Ui.Warning : Ui.Muted;
+            SqliteVault.QueueExtract(path);
         }
         void SetMode(bool edit)
         {

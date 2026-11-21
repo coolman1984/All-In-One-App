@@ -82,6 +82,7 @@ namespace StickyPro
             Store.PromptsChanged += Snippets.Update;
             Snippets.Update();
             Ui.Later(3000, ActivityMonitor.Start);
+            Ui.Later(4000, () => { try { CronEngine.Start(); } catch (Exception ex) { Log("Cron engine: " + ex.Message); } });
 
             foreach (var n in Store.Notes.Where(n => n.Open && !n.Archived).ToList()) OpenNote(n);
             foreach (var d in Store.Cards.Where(c => c.Visible).ToList()) OpenCard(d, false);
@@ -89,8 +90,8 @@ namespace StickyPro
             if (failed.Count > 0)
                 Balloon("Some shortcuts are used by another app", string.Join(", ", failed) + " could not be registered. Change them in Settings.");
 
-            Microsoft.Win32.SystemEvents.SessionEnding += delegate { try { Overlay.Shutdown(); } catch { } try { Snippets.Stop(); } catch { } FlushAll(); try { AgentStore.FlushWrites(); } catch { } };
-            Application.ApplicationExit += delegate { FlushAll(); Snippets.Stop(); };
+            Microsoft.Win32.SystemEvents.SessionEnding += delegate { try { Overlay.Shutdown(); } catch { } try { Snippets.Stop(); } catch { } try { CronEngine.Stop(); } catch { } FlushAll(); try { AgentStore.FlushWrites(); } catch { } try { SqliteVault.Close(); } catch { } };
+            Application.ApplicationExit += delegate { try { CronEngine.Stop(); } catch { } FlushAll(); Snippets.Stop(); try { SqliteVault.Close(); } catch { } };
             Ui.Later(1500, CheckReminders);
             Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerMode;
         }
@@ -987,8 +988,13 @@ namespace StickyPro
         public void OpenMarkdown(string path) { ShowMain("markdown"); main.OpenMarkdownFile(path); }
         // A web address or a local file (PDF, email, HTML, picture) in a new Browser tab.
         public void OpenInBrowser(string target) { ShowMain("browser"); main.OpenInBrowser(target); }
+        // Live Canvas / Dashboard local HTML file: reuses existing tab if already open and reloads cleanly.
+        public void OpenOrReloadInBrowser(string path) { ShowMain("browser"); main.OpenOrReloadInBrowser(path); }
         // Text into the message box of the active Agents chat.
         public void SendToAgents(string text) { ShowMain("agents"); main.SendToAgents(text); }
+        public DocumentsPage DocumentsView { get { return main != null && !main.IsDisposed ? main.DocumentsView : null; } }
+        public ExplorerPage ExplorerView { get { return main != null && !main.IsDisposed ? main.ExplorerView : null; } }
+        public BrowserPage BrowserView { get { return main != null && !main.IsDisposed ? main.BrowserView : null; } }
         public void OpenDocument(string path) { OpenDocument(path, null); }
         public void OpenDocument(string path, bool? edit) { ShowMain("documents"); main.OpenDocument(path, edit); }
         public void ToggleZen() { if (main != null && !main.IsDisposed) main.SetZen(!main.Zen); }
@@ -1153,6 +1159,8 @@ namespace StickyPro
             Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerMode;
             Snippets.Stop();
             ActivityMonitor.Stop();
+            try { CronEngine.Stop(); } catch { }
+            try { SqliteVault.Close(); } catch { }
             if (Recorder.Active) Recorder.Stop(true);
             try { Native.RemoveClipboardFormatListener(msg.Handle); } catch { }
             foreach (int id in registered) Native.UnregisterHotKey(msg.Handle, id);
