@@ -4,7 +4,7 @@ Newest first. One entry per task: date, what was asked, what was done, proof, wh
 
 ## 2026-11-22 — GitHub main sync and test-runner fix
 
-- Asked to push, merge and sync with GitHub main. Fetched twelve upstream commits and prepared the Windows GitHub workflow documentation and agent-conversation test fix.
+- Asked to push, merge and sync with GitHub main. Fetched twelve upstream commits, pushed the Windows GitHub workflow documentation and agent-conversation test fix, and merged them into main at 6bc581e. Local main matched the live GitHub branch.
 - On source based on GitHub main at c3bd675, the native test build completed and the agent-conversation suite printed its success message and exited zero. The publishing diff and local references were checked.
 - The local app changes remain available for a separate merge decision because they conflict with the documented automation policy.
 
