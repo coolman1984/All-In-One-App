@@ -2,6 +2,14 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — Approved app cleanup and workflow repairs
+
+- Cleaned up Home, Agents, Assistant, Accounts, and Team. Added Team to the local page API and visual sweep. The test now checks live navigation against both inventories.
+- Team saves a membership only after publishing the signed join request. Slow setup work runs in the background. The failed-join regression reproduces the old bug, and the revised Team suite passed 67 checks. The Assistant reports a blocked recording start, and its regression passed.
+- Browser keyboard calls now stop on an unresponsive Edge step without replaying keys. The cause of the intermittent Edge stall remains open.
+- GitHub merged the Windows checks and automatic merge setup in PRs #2 and #3. PR #4 deliberately failed the required Windows check, stayed blocked with auto-merge enabled, and was closed. Live Office tests remain a local Windows check.
+- The desktop release and corporate-share acceptance are tracked separately from the source changes.
+
 ## 2026-11-22 — App cleanup, repairs and automatic merge plan
 
 - Asked to simplify the whole app, repair bugs and broken workflows, and automatically merge verified changes to GitHub main. Wrote the [repair plan](docs/plans/app-cleanup-and-reliability.html) for owner approval.

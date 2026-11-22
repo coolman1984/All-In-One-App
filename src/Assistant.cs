@@ -96,7 +96,7 @@ namespace StickyPro
             expand.Click += delegate { main.SetAssistantWide(!main.AssistantWide); };
             head.Controls.Add(chats); head.Controls.Add(Gap()); head.Controls.Add(fold); head.Controls.Add(expand); head.Controls.Add(fresh); head.Controls.Add(Gap()); head.Controls.Add(close); head.Controls.Add(title);
 
-            // Compact Mode bar: Solo | Council | Leader | Team... | Workspace | Rec
+            // Chat modes and workflow controls.
             modeBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(0, Ui.S(2), 0, Ui.S(2)), Margin = new Padding(0) };
             btnSolo = ModeBtn("Solo", "Single autonomous companion", delegate { SetMode("solo"); });
             btnCouncil = ModeBtn("Council", "Model council: multiple models discuss and write a verdict", delegate { SetMode("council"); });
@@ -104,14 +104,14 @@ namespace StickyPro
             btnTeam = ModeBtn("Team…", "Configure council / leader team roster and roles", delegate { if (pane != null) { pane.EditCouncil(); UpdateModeBar(); } });
             btnWorkspace = ModeBtn("Workspace", "Open Leader Team workspace", delegate { if (pane != null) pane.OpenLeaderTeam(); });
             btnWorkspace.Visible = false;
-            btnRec = ModeBtn("● Rec", "Show-Me-Once Workflow Recorder: record clicks & actions and compile into an automated skill + tool", delegate { ToggleRecording(); });
+            btnRec = ModeBtn("Record", "Record the steps of a workflow", delegate { ToggleRecording(); });
             modeBar.Controls.Add(btnSolo);
             modeBar.Controls.Add(btnCouncil);
             modeBar.Controls.Add(btnLeader);
             modeBar.Controls.Add(btnTeam);
             modeBar.Controls.Add(btnWorkspace);
             modeBar.Controls.Add(btnRec);
-            modeBar.Controls.Add(ModeBtn("Build last", "Build a reusable tool from the last saved recording", delegate { BuildLastRecording(); }));
+            modeBar.Controls.Add(ModeBtn("Build workflow", "Turn the last recording into a reusable workflow", delegate { BuildLastRecording(); }));
 
             // Live Companion Status bar: shows current page awareness and updates live on AssistantHarness.Activity.
             statusBar = new Label
@@ -131,8 +131,8 @@ namespace StickyPro
 
             var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, WrapContents = true, Padding = new Padding(0, Ui.S(4), 0, 0) };
             bottom.Controls.Add(Small("Copy answer", delegate { string a = Last(); if (a.Length > 0 && App.I != null) App.I.CopyText(a); }));
-            bottom.Controls.Add(Small("Answer -> note", delegate { string a = Last(); if (a.Length > 0) main.InsertIntoNote(a); }));
-            bottom.Controls.Add(Small("Answer -> task", delegate { string a = Last(); if (a.Length > 0) { var t = Store.NewTask(Ui.OneLine(a, 100)); t.Notes = a; Store.TouchTask(t); if (App.I != null) App.I.Status("Task created."); } }));
+            bottom.Controls.Add(Small("Save to note", delegate { string a = Last(); if (a.Length > 0) main.InsertIntoNote(a); }));
+            bottom.Controls.Add(Small("Create task", delegate { string a = Last(); if (a.Length > 0) { var t = Store.NewTask(Ui.OneLine(a, 100)); t.Notes = a; Store.TouchTask(t); if (App.I != null) App.I.Status("Task created."); } }));
 
             host = new Panel { Dock = DockStyle.Fill };
             host.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "Loading...", TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Muted });
@@ -206,7 +206,7 @@ namespace StickyPro
             if (IsDisposed || btnRec == null) return;
             bool rec = WorkflowRecorder.IsRecording;
             int steps = WorkflowRecorder.CurrentStepCount;
-            btnRec.Text = rec ? ("■ Stop (" + steps + ")") : "● Rec";
+            btnRec.Text = rec ? ("Stop (" + steps + ")") : "Record";
             var fb = btnRec as FluentButton;
             if (fb != null) fb.Primary = rec;
             btnRec.BackColor = rec ? Color.FromArgb(217, 72, 34) : Ui.SelBg;
@@ -226,24 +226,36 @@ namespace StickyPro
             if (WorkflowRecorder.IsRecording && statusBar != null)
             {
                 statusBar.ForeColor = Color.FromArgb(217, 72, 34);
-                statusBar.Text = "● Recording workflow (" + WorkflowRecorder.CurrentStepCount + " steps)... Click Stop when done.";
+                statusBar.Text = "Recording workflow · " + WorkflowRecorder.CurrentStepCount + " steps";
             }
         }
 
         public void ToggleRecording()
         {
-            if (!WorkflowRecorder.IsRecording)
+            bool stopping = WorkflowRecorder.IsRecording;
+            try
             {
-                string pageTitle = main != null && !string.IsNullOrEmpty(main.Page) ? main.Page : "desktop";
-                WorkflowRecorder.Start("Workflow on " + pageTitle, "Recorded from Assistant Companion panel");
-                UpdateRecButton();
+                var result = stopping ? WorkflowRecorder.Stop() : WorkflowRecorder.Start(
+                    "Workflow on " + (string.IsNullOrEmpty(main.Page) ? "desktop" : main.Page), "Recorded from Assistant");
+                if (true.Equals(result["ok"]))
+                {
+                    if (stopping)
+                    {
+                        statusBar.ForeColor = Ui.Muted;
+                        statusBar.Text = "Recording saved. Choose Build workflow to use it.";
+                    }
+                }
+                else ShowRecordingError(stopping, CtxStr(result, "error"));
             }
-            else
-            {
-                var result = WorkflowRecorder.Stop();
-                UpdateRecButton();
-                if (true.Equals(result["ok"])) statusBar.Text = "Recording saved. Choose Build last to create a workflow.";
-            }
+            catch (Exception ex) { ShowRecordingError(stopping, ex.Message); }
+            finally { UpdateRecButton(); }
+        }
+
+        void ShowRecordingError(bool stopping, string error)
+        {
+            statusBar.ForeColor = Ui.Danger;
+            statusBar.Text = (stopping ? "Could not save recording. " : "Could not start recording. ") + error;
+            tips.SetToolTip(statusBar, statusBar.Text);
         }
 
         void BuildLastRecording()
@@ -396,9 +408,9 @@ namespace StickyPro
             if (page == lastPage && orders.Controls.Count > 0) return;
             lastPage = page;
             orders.SuspendLayout(); Ui.ClearControls(orders.Controls);
-            foreach (var o in Orders.Where(o => o[0] == page).Concat(Orders.Where(o => o[0] == "*")).Take(7))
+            foreach (var o in Orders.Where(o => o[0] == page).Concat(Orders.Where(o => o[0] == "*")).Take(2))
             { var oo = o; var b = Small(oo[1], delegate { Order(oo[2]); }); tips.SetToolTip(b, oo[2]); orders.Controls.Add(b); }
-            var all = Small("All orders ▾", null);
+            var all = Small("More actions ▾", null);
             all.Click += delegate { OrdersMenu(all); };
             orders.Controls.Add(all);
             orders.ResumeLayout();

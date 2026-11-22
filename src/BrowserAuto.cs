@@ -214,7 +214,7 @@ namespace StickyPro
             return p;
         }
 
-        public async Task<object> Automate(string tool, Dictionary<string, object> a)
+        public async Task<object> Automate(string tool, Dictionary<string, object> a, CancellationToken stop)
         {
             if (AgentsPaused) throw new Exception("The user stopped browser automation (red bar on the Browser page). Ask them to click 'Allow agents'.");
             if (WebViewHost.Runtime() == null) throw new Exception(WebViewHost.Error);
@@ -225,9 +225,9 @@ namespace StickyPro
                 case "browser_snapshot": return await Snapshot(a);
                 case "browser_click": return await Click(a);
                 case "browser_hover": return await Hover(a);
-                case "browser_fill": return await Fill(a);
+                case "browser_fill": return await Fill(a, stop);
                 case "browser_select": return await SelectOption(a);
-                case "browser_key": return await Key(a);
+                case "browser_key": return await Key(a, stop);
                 case "browser_scroll": return await Scroll(a);
                 case "browser_wait": return await Wait(a);
                 case "browser_screenshot": return await Screenshot(a);
@@ -458,7 +458,7 @@ namespace StickyPro
             return new Dictionary<string, object> { { "hovered", p["name"] } };
         }
 
-        async Task<object> Fill(Dictionary<string, object> a)
+        async Task<object> Fill(Dictionary<string, object> a, CancellationToken stop)
         {
             var t = await Ready(a);
             var done = new List<object>();
@@ -471,27 +471,27 @@ namespace StickyPro
                     if (System.Text.RegularExpressions.Regex.IsMatch(f.Key, @"^e\d+$")) spec["ref"] = f.Key;
                     else if (System.Text.RegularExpressions.Regex.IsMatch(f.Key, @"^[#.\[]|^\w+\[|^(input|textarea|select)\b")) spec["selector"] = f.Key;
                     else spec["text"] = f.Key;
-                    done.Add(await FillOne(t, spec, Convert.ToString(f.Value, CultureInfo.InvariantCulture), true));
+                    done.Add(await FillOne(t, spec, Convert.ToString(f.Value, CultureInfo.InvariantCulture), true, stop));
                 }
             }
             else
             {
                 var spec = Spec(a);
                 if (spec.Count == 0) throw new Exception("Give ref (from browser_snapshot), selector or label, and value. Or fields: {ref/selector/label: value}.");
-                done.Add(await FillOne(t, spec, Str(a, "value"), Flag(a, "clear", true)));
+                done.Add(await FillOne(t, spec, Str(a, "value"), Flag(a, "clear", true), stop));
             }
             var r = new Dictionary<string, object> { { "filled", done } };
             if (Flag(a, "submit", false))
             {
                 int rev = t.NavigationRevision, count = tabs.Count; string before = t.View.CoreWebView2.Source;
                 Act("pressing Enter");
-                await PressOne(t, "Enter");
+                await PressOne(t, "Enter", stop);
                 foreach (var k in await Settle(t, rev, count, before, TimeoutOf(a, 15000))) r[k.Key] = k.Value;
             }
             return r;
         }
 
-        async Task<object> FillOne(Tab t, Dictionary<string, object> spec, string value, bool clear)
+        async Task<object> FillOne(Tab t, Dictionary<string, object> spec, string value, bool clear, CancellationToken stop)
         {
             var info = await Eval(t, "A.focusFor(" + JsArg(spec) + "," + (clear ? "true" : "false") + ")") as Dictionary<string, object>;
             if (info == null) throw new Exception("Element not found.");
@@ -501,8 +501,8 @@ namespace StickyPro
             if (!(info["editable"] is bool && (bool)info["editable"])) throw new Exception("'" + info["name"] + "' cannot take text (" + info["tag"] + ").");
             Act("typing into \"" + Cut(Convert.ToString(info["name"]), 50) + "\"");
             await Eval(t, "A.mark(A.point(" + JsArg(spec) + "))");
-            if (value.Length == 0) { if (clear) await PressOne(t, "Delete"); }
-            else await Cdp(t, "Input.insertText", new Dictionary<string, object> { { "text", value } });
+            if (value.Length == 0) { if (clear) await PressOne(t, "Delete", stop); }
+            else await KeyboardStep(() => Cdp(t, "Input.insertText", new Dictionary<string, object> { { "text", value } }), "typing text", stop);
             var after = await Eval(t, "A.after()") as Dictionary<string, object>;
             return new Dictionary<string, object> { { "field", info["name"] }, { "value", after != null ? after["value"] : "" } };
         }
@@ -534,7 +534,27 @@ namespace StickyPro
         static readonly Dictionary<string, string> Canon = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         { { "Esc", "Escape" }, { "Del", "Delete" }, { "Up", "ArrowUp" }, { "Down", "ArrowDown" }, { "Left", "ArrowLeft" }, { "Right", "ArrowRight" } };
 
-        async Task PressOne(Tab t, string combo)
+        static async Task<T> KeyboardStep<T>(Func<Task<T>> start, string action, CancellationToken stop)
+        {
+            stop.ThrowIfCancellationRequested();
+            if (AgentsPaused) throw new InvalidOperationException("Browser automation is stopped.");
+            var pending = start();
+            using (var timer = CancellationTokenSource.CreateLinkedTokenSource(stop))
+            {
+                var deadline = Task.Delay(5000, timer.Token);
+                if (await Task.WhenAny(pending, deadline) != pending)
+                {
+                    // WebView2 cannot cancel a protocol call. Observe a late failure and stop the sequence.
+                    GC.KeepAlive(pending.ContinueWith(task => GC.KeepAlive(task.Exception), CancellationToken.None,
+                        TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default));
+                    throw new TimeoutException("Edge did not finish " + action + ". Check the page before sending more keys.");
+                }
+                timer.Cancel();
+                return await pending;
+            }
+        }
+
+        async Task PressOne(Tab t, string combo, CancellationToken stop)
         {
             var parts = combo.Split('+').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
             if (combo.EndsWith("++")) parts.Add("+");
@@ -565,27 +585,29 @@ namespace StickyPro
             if ((mods & 7) != 0) text = null;   // shortcuts type nothing
             var down = new Dictionary<string, object> { { "type", text != null ? "keyDown" : "rawKeyDown" }, { "modifiers", mods }, { "key", key }, { "code", code }, { "windowsVirtualKeyCode", vk }, { "nativeVirtualKeyCode", vk } };
             if (text != null) { down["text"] = text; down["unmodifiedText"] = text; }
-            await Cdp(t, "Input.dispatchKeyEvent", down);
-            await Cdp(t, "Input.dispatchKeyEvent", new Dictionary<string, object> { { "type", "keyUp" }, { "modifiers", mods }, { "key", key }, { "code", code }, { "windowsVirtualKeyCode", vk }, { "nativeVirtualKeyCode", vk } });
+            await KeyboardStep(() => Cdp(t, "Input.dispatchKeyEvent", down), "pressing " + combo, stop);
+            var up = new Dictionary<string, object> { { "type", "keyUp" }, { "modifiers", mods }, { "key", key }, { "code", code }, { "windowsVirtualKeyCode", vk }, { "nativeVirtualKeyCode", vk } };
+            await KeyboardStep(() => Cdp(t, "Input.dispatchKeyEvent", up), "releasing " + combo, stop);
         }
 
-        async Task<object> Key(Dictionary<string, object> a)
+        async Task<object> Key(Dictionary<string, object> a, CancellationToken stop)
         {
             var t = await Ready(a);
             var spec = Spec(a); spec.Remove("text");
-            if (Has(a, "ref") || Has(a, "selector")) await Eval(t, "A.focusFor(" + JsArg(spec) + ",false)");
+            if (Has(a, "ref") || Has(a, "selector"))
+                await KeyboardStep(() => Eval(t, "A.focusFor(" + JsArg(spec) + ",false)"), "focusing the keyboard target", stop);
             int rev = t.NavigationRevision, count = tabs.Count; string before = t.View.CoreWebView2.Source;
             if (Has(a, "type_text"))
             {
                 Act("typing text");
-                await Cdp(t, "Input.insertText", new Dictionary<string, object> { { "text", Str(a, "type_text") } });
+                await KeyboardStep(() => Cdp(t, "Input.insertText", new Dictionary<string, object> { { "text", Str(a, "type_text") } }), "typing text", stop);
             }
             if (Has(a, "keys"))
             {
                 var seq = System.Text.RegularExpressions.Regex.Split(Str(a, "keys").Trim(), @"\s+").Where(x => x.Length > 0).ToList();
                 int repeat = Math.Max(1, Math.Min(100, Int(a, "repeat", 1)));
                 Act("pressing " + string.Join(" ", seq) + (repeat > 1 ? " x" + repeat : ""));
-                for (int r = 0; r < repeat; r++) foreach (var k in seq) { await PressOne(t, k); await Task.Delay(30); }
+                for (int r = 0; r < repeat; r++) foreach (var k in seq) { await PressOne(t, k, stop); await Task.Delay(30, stop); }
             }
             if (!Has(a, "keys") && !Has(a, "type_text")) throw new Exception("Give keys (e.g. 'Enter', 'Control+A', 'Tab Tab Enter') or type_text.");
             var res = await Settle(t, rev, count, before, TimeoutOf(a, 15000));
@@ -1000,17 +1022,23 @@ var meta={title:document.title,url:location.href,lang:document.documentElement.l
             if (App.I == null || App.I.Sync == null || !App.I.Sync.IsHandleCreated) throw new Exception("The app browser needs the desktop app running (not the headless MCP mode).");
             if (!App.I.Sync.InvokeRequired) throw new Exception("Browser automation must be called from a background thread.");
             int wait = Math.Max(5000, Math.Min(110000, I(a, "timeout_ms", tool == "browser_downloads" ? 60000 : 30000))) + 15000;
-            var done = new ManualResetEvent(false);
-            object result = null; string error = null; BrowserPage page = null;
-            App.I.Sync.BeginInvoke(new Action(async () =>
+            var response = new TaskCompletionSource<object>();
+            BrowserPage page = null;
+            using (var timer = new CancellationTokenSource(wait))
             {
-                try { page = BrowserPage.ForAutomation(); result = await page.Automate(tool, a ?? new Dictionary<string, object>()); }
-                catch (Exception ex) { error = ex.Message; }
-                done.Set();
-            }));
-            if (!done.WaitOne(wait)) throw new Exception("The browser did not answer in " + (wait / 1000) + " s" + (page != null && page.DialogOpen ? ": the page shows a dialog that waits for the user (see browser_dialogs)." : "."));
-            if (error != null) throw new Exception(error);
-            return J(result);
+                var stop = timer.Token;
+                var deadline = Task.Delay(Timeout.Infinite, stop);
+                App.I.Sync.BeginInvoke(new Action(async () =>
+                {
+                    if (stop.IsCancellationRequested) return;
+                    try { page = BrowserPage.ForAutomation(); response.TrySetResult(await page.Automate(tool, a ?? new Dictionary<string, object>(), stop)); }
+                    catch (Exception ex) { response.TrySetException(ex); }
+                }));
+                if (Task.WhenAny(response.Task, deadline).GetAwaiter().GetResult() != response.Task && response.TrySetCanceled())
+                    throw new TimeoutException("The browser did not answer in " + (wait / 1000) + " s" + (page != null && page.DialogOpen ? ": the page shows a dialog that waits for the user (see browser_dialogs)." : "."));
+                timer.Cancel();
+                return J(response.Task.GetAwaiter().GetResult());
+            }
         }
     }
 }

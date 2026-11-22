@@ -54,6 +54,14 @@ and Markdown uses the native preview. System screens can show local machine inve
 disposable copy of an approved fixture folder, never the live `data\` folder. Verify real editing, sign-in and web page
 rendering separately when they are in scope.
 
+## Merge verified work
+
+Open a pull request to `main` from the project branch. GitHub automatically queues same-repository
+pull requests from a collaborator and requires **Windows regression checks** against the current main.
+The hosted check runs 23 suites. Run the full 24-suite check on a Windows workstation for live Office COM.
+After GitHub merges, fetch and fast-forward the local main. Publishing or installing a desktop EXE is a separate step.
+
+
 ## Package and verify a release
 
 1. Stage the source and needed resources in an allowlisted release folder. Include build scripts, tests and their fixtures, documentation, and relevant project skills. Exclude generated test data, app data, logs, recordings and credentials.

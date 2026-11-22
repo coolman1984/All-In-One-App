@@ -35,7 +35,6 @@ namespace StickyPro
             var bar = MainForm.Bar();
             bar.Controls.Add(MainForm.Heading("Accounts"));
             bar.Controls.Add(Ui.Btn("Refresh", delegate { Fill(); }));
-            bar.Controls.Add(new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0), Text = "Sign in once here; Agents, council, leader team and terminals use it." });
 
             // Sign-in in progress: what the CLI says, its link or code, a box for a code it asks for.
             signin = new Panel { Dock = DockStyle.Top, Height = Ui.S(132), Visible = false, Padding = new Padding(Ui.S(16), Ui.S(10), Ui.S(16), Ui.S(10)) };
@@ -96,7 +95,11 @@ namespace StickyPro
             // One row of buttons only: a taller panel covered the first account row and hid its buttons.
             var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = Ui.Card, Anchor = AnchorStyles.Top | AnchorStyles.Right, WrapContents = false, MaximumSize = new Size(0, Ui.S(40)) };
             card.Controls.Add(buttons);
-            card.Resize += delegate { buttons.Location = new Point(card.Width - buttons.Width - Ui.S(14), Ui.S(16)); };
+            card.Layout += delegate
+            {
+                buttons.Location = new Point(card.Width - buttons.Width - Ui.S(14), Ui.S(16));
+                status.Width = Math.Max(0, card.ClientSize.Width - status.Left - Ui.S(14));
+            };
             if (installed)
             {
                 var def = d;

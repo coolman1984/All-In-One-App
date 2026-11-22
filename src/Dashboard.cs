@@ -393,7 +393,7 @@ namespace StickyPro
             }
             else
             {
-                liveHead = new Label { Text = "Live dashboard", Font = new Font(Ui.FontName, 12f, FontStyle.Bold), ForeColor = Ui.Header, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
+                liveHead = new Label { Text = "Home", Font = new Font(Ui.FontName, 12f, FontStyle.Bold), ForeColor = Ui.Header, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false };
                 liveHead.Disposed += delegate { liveHead.Font.Dispose(); };
                 grid = new TileGrid(Ui.S(220), Ui.S(136), 6) { Dock = DockStyle.None, AutoSize = false };
                 Add("cpu", "CPU", "system:procs"); Add("ram", "RAM", "system:procs"); Add("C", "Disk C", "system:drives"); Add("D", "Disk D", "system:drives");

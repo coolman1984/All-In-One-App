@@ -2,21 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
 namespace StickyPro
 {
-    // Home dashboard (Flow / SerQ / Nexus designs). Every number on it is real and every element does something:
-    // Flow design mirrors a crisp modern SaaS workspace (greeting + 4 colourful KPI cards + Storage Progress +
-    // Tasks Donut + This Week mini-calendar + Top Memory Apps + Stacked System Activity chart + 4-column Task Board).
     class NexusBoard : Control
     {
         class Hot { public Rectangle R; public string Key; public Action Run; }
 
         readonly List<Hot> hots = new List<Hot>();
         Hot hover;
+        readonly LinkLabel attention;
+        string attentionPage;
 
         // Shared / SerQ-Nexus rects
         Rectangle header, btnNew, btnTerm, bell, gear, overview, next, today, storage, apps;
@@ -24,7 +22,7 @@ namespace StickyPro
         readonly List<Rectangle> taskRows = new List<Rectangle>();
 
         // Flow-specific rects
-        Rectangle datePill, donut, weekCard, kanbanCard;
+        Rectangle donut, weekCard, kanbanCard;
         readonly Rectangle[] kpiCards = new Rectangle[4];
         readonly Rectangle[] kanbanCols = new Rectangle[4];
         readonly List<Rectangle>[] kanbanTaskRects = new List<Rectangle>[4];
@@ -50,7 +48,16 @@ namespace StickyPro
         {
             for (int i = 0; i < 4; i++) { kanbanTasks[i] = new List<TaskItem>(); kanbanTaskRects[i] = new List<Rectangle>(); }
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            AccessibleName = "Dashboard";
+            AccessibleName = "Home";
+            Color alertText = Ui.Dark ? Ui.Danger : Ui.Mix(Ui.Danger, Color.Black, 0.25);
+            attention = new LinkLabel
+            {
+                Font = Ui.Base, Visible = false, UseMnemonic = false, AutoEllipsis = true,
+                LinkBehavior = LinkBehavior.AlwaysUnderline, TextAlign = ContentAlignment.MiddleLeft,
+                LinkColor = alertText, ActiveLinkColor = alertText, VisitedLinkColor = alertText
+            };
+            attention.LinkClicked += delegate { if (App.I != null) App.I.ShowMain(attentionPage); };
+            Controls.Add(attention);
         }
 
         // ---------- data ----------
@@ -68,7 +75,27 @@ namespace StickyPro
             drives = DriveSnapshot.All();
             topApps = ProcessSampler.MemoryApps;
             if (data || !dataLoaded || lastStoreDay != DateTime.Today) { dataLoaded = true; lastStoreDay = DateTime.Today; RefreshStoreData(); }
+            UpdateAttention();
             Invalidate();
+        }
+
+        void UpdateAttention()
+        {
+            int low = drives.Count(d => d.Used > 0.9);
+            attentionPage = overdue > 0 ? "tasks" : "system:drives";
+            string text = overdue > 0 ? overdue + (overdue == 1 ? " overdue task" : " overdue tasks") :
+                low > 0 ? low + (low == 1 ? " drive nearly full" : " drives nearly full") : "";
+            if (attention.Text == text) return;
+            attention.Text = text;
+            attention.AccessibleDescription = overdue > 0 ? "Open tasks" : "Open storage";
+            attention.Visible = text.Length > 0;
+            ArrangeAttention();
+        }
+
+        void ArrangeAttention()
+        {
+            int width = Math.Min(header.Width, TextRenderer.MeasureText(attention.Text, attention.Font).Width + Ui.S(4));
+            attention.SetBounds(header.X, header.Y + Ui.S(37), width, Ui.S(23));
         }
 
         void RefreshStoreData()
@@ -130,7 +157,7 @@ namespace StickyPro
             var off = new Size(m, m);
             Func<Rectangle, Rectangle> o = r => r.Width > 0 ? new Rectangle(r.Location + off, r.Size) : r;
             header = o(header); btnNew = o(btnNew); btnTerm = o(btnTerm); bell = o(bell); gear = o(gear);
-            datePill = o(datePill);
+            ArrangeAttention();
             overview = o(overview); next = o(next); today = o(today); storage = o(storage); apps = o(apps);
             donut = o(donut); weekCard = o(weekCard); kanbanCard = o(kanbanCard);
             for (int i = 0; i < 4; i++)
@@ -155,26 +182,20 @@ namespace StickyPro
             int gap = Ui.S(16);
             header = new Rectangle(0, 0, w, Ui.S(60));
             int bh = Ui.S(36), c = Ui.S(36);
-            gear = new Rectangle(w - c, Ui.S(10), c, c);
-            bell = new Rectangle(gear.X - Ui.S(8) - c, Ui.S(10), c, c);
-            int rightX = bell.X - Ui.S(10);
+            gear = new Rectangle(w - c, 0, c, c);
+            bell = new Rectangle(gear.X - Ui.S(8) - c, 0, c, c);
             int bw = TextRenderer.MeasureText("New task", Ui.Bold).Width + Ui.S(42);
-            btnNew = w >= Ui.S(860) ? new Rectangle(rightX - bw, Ui.S(10), bw, bh) : Rectangle.Empty;
-            if (btnNew.Width > 0) rightX = btnNew.X - Ui.S(10);
-            string dateText = DateTime.Now.ToString("ddd, d MMM yyyy");
-            int dw = TextRenderer.MeasureText(dateText, Ui.Small).Width + Ui.S(42);
-            datePill = w >= Ui.S(640) ? new Rectangle(rightX - dw, Ui.S(10), dw, bh) : Rectangle.Empty;
+            btnNew = w >= Ui.S(360) ? new Rectangle(bell.X - Ui.S(10) - bw, 0, bw, bh) : Rectangle.Empty;
 
             hots.Add(new Hot { R = bell, Key = "bell", Run = () => App.I.ShowMain("tasks") });
             hots.Add(new Hot { R = gear, Key = "gear", Run = () => App.I.ShowSettings(FindForm()) });
             if (btnNew.Width > 0) hots.Add(new Hot { R = btnNew, Key = "new", Run = () => QuickTaskForm.Open() });
-            if (datePill.Width > 0) hots.Add(new Hot { R = datePill, Key = "datepill", Run = () => App.I.ShowMain("tasks") });
             int y = header.Bottom + Ui.S(10);
 
-            // Row 1: 4 Equal Colorful Circular-Badge KPI Cards
+            // Keep daily activity and task counts together.
             int kCols = w >= Ui.S(760) ? 4 : 2;
             int kRows = 4 / kCols;
-            int kh = Ui.S(94);
+            int kh = Ui.S(78);
             int kw = (w - gap * (kCols - 1)) / kCols;
             string[] kPages = { "tasks", "tasks", "clips", "activity" };
             for (int i = 0; i < 4; i++)
@@ -291,19 +312,19 @@ namespace StickyPro
         int Arrange(int w)
         {
             hots.Clear(); taskRows.Clear();
-            datePill = Rectangle.Empty; donut = Rectangle.Empty; weekCard = Rectangle.Empty; kanbanCard = Rectangle.Empty;
+            donut = Rectangle.Empty; weekCard = Rectangle.Empty; kanbanCard = Rectangle.Empty;
             for (int i = 0; i < 4; i++) { kpiCards[i] = Rectangle.Empty; kanbanCols[i] = Rectangle.Empty; kanbanTaskRects[i].Clear(); kanbanAddRects[i] = Rectangle.Empty; }
 
             int gap = Ui.S(18);
             header = new Rectangle(0, 0, w, Ui.S(64));
             int bh = Ui.S(38), c = Ui.S(38);
-            gear = new Rectangle(w - c, Ui.S(10), c, c);
-            bell = new Rectangle(gear.X - Ui.S(10) - c, Ui.S(10), c, c);
+            gear = new Rectangle(w - c, 0, c, c);
+            bell = new Rectangle(gear.X - Ui.S(10) - c, 0, c, c);
             int bw = TextRenderer.MeasureText("New task", Ui.Bold).Width + Ui.S(48);
             int tw = TextRenderer.MeasureText("Terminals", Ui.Bold).Width + Ui.S(48);
             bool roomy = w > Ui.S(700);
-            btnNew = roomy ? new Rectangle(bell.X - Ui.S(14) - bw, Ui.S(10), bw, bh) : Rectangle.Empty;
-            btnTerm = roomy && w > Ui.S(900) ? new Rectangle(btnNew.X - Ui.S(10) - tw, Ui.S(10), tw, bh) : Rectangle.Empty;
+            btnNew = roomy ? new Rectangle(bell.X - Ui.S(14) - bw, 0, bw, bh) : Rectangle.Empty;
+            btnTerm = roomy && w > Ui.S(900) ? new Rectangle(btnNew.X - Ui.S(10) - tw, 0, tw, bh) : Rectangle.Empty;
             hots.Add(new Hot { R = bell, Key = "bell", Run = () => App.I.ShowMain("tasks") });
             hots.Add(new Hot { R = gear, Key = "gear", Run = () => App.I.ShowSettings(FindForm()) });
             if (roomy) hots.Add(new Hot { R = btnNew, Key = "new", Run = () => QuickTaskForm.Open() });
@@ -430,14 +451,6 @@ namespace StickyPro
 
         static Color Usage(double f) { return f > 0.9 ? Ui.Danger : f > 0.8 ? Ui.Warning : Ui.Accent; }
 
-        static string GreetingName()
-        {
-            string n = Store.Settings != null ? Store.Settings.UserName : "";
-            if (!string.IsNullOrWhiteSpace(n)) return n.Trim();
-            try { string u = Environment.UserName; if (!string.IsNullOrWhiteSpace(u)) return u; } catch { }
-            return "there";
-        }
-
         // ---------- paint dispatch ----------
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -472,41 +485,8 @@ namespace StickyPro
         // =========================================================================
         void HeaderFlow(Graphics g)
         {
-            int rightEdge = datePill.Width > 0 ? datePill.X : btnNew.Width > 0 ? btnNew.X : bell.X;
-            int limit = Math.Max(Ui.S(80), rightEdge - Ui.S(12) - header.X);
-            int hr = DateTime.Now.Hour;
-            string part = hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
-            TextRenderer.DrawText(g, part + ", " + GreetingName() + "!", Ui.Title, new Rectangle(header.X, header.Y + Ui.S(2), limit, Ui.S(32)), Ui.Text, L);
+            DrawHomeTitle(g, btnNew.Width > 0 ? btnNew.X : bell.X);
 
-            string sub = "Here's what's happening with your workspace today.";
-            var warn = new List<string>();
-            if (overdue > 0) warn.Add(overdue + " overdue");
-            foreach (var d in drives) if (d.Used > 0.9) warn.Add(d.Letter + ": " + (d.Used * 100).ToString("0") + "% full");
-            var sr = new Rectangle(header.X, header.Y + Ui.S(36), limit, Ui.S(20));
-            if (warn.Count > 0)
-            {
-                string wText = "  ·  " + string.Join("  ·  ", warn);
-                int sw = TextRenderer.MeasureText(g, sub, Ui.Base, Size.Empty, TextFormatFlags.NoPadding).Width;
-                if (sw + Ui.S(60) < limit)
-                {
-                    TextRenderer.DrawText(g, sub, Ui.Base, sr, Ui.Muted, L);
-                    TextRenderer.DrawText(g, wText, Ui.Base, new Rectangle(sr.X + sw, sr.Y, Math.Max(1, limit - sw), sr.Height), Ui.Danger, L);
-                }
-                else TextRenderer.DrawText(g, string.Join("  ·  ", warn), Ui.Base, sr, Ui.Danger, L);
-            }
-            else TextRenderer.DrawText(g, sub, Ui.Base, sr, Ui.Muted, L);
-
-            if (datePill.Width > 0)
-            {
-                var r = datePill;
-                using (var path = Ui.Round(r, Ui.S(10)))
-                {
-                    using (var b = new SolidBrush(IsHot("datepill") ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                    using (var p = new Pen(IsHot("datepill") ? Ui.Accent : Ui.Line)) g.DrawPath(p, path);
-                }
-                TextRenderer.DrawText(g, "\uE787", Ui.Icon(10f), new Rectangle(r.X + Ui.S(10), r.Y, Ui.S(18), r.Height), Ui.Muted, C);
-                TextRenderer.DrawText(g, DateTime.Now.ToString("ddd, d MMM yyyy"), Ui.Small, new Rectangle(r.X + Ui.S(30), r.Y, Math.Max(1, r.Width - Ui.S(36)), r.Height), Ui.Text, L);
-            }
             if (btnNew.Width > 0)
             {
                 var r = btnNew;
@@ -514,11 +494,11 @@ namespace StickyPro
                 BtnText(g, r, "\uE710", "New task", Color.White);
             }
             RoundButton(g, bell, "\uEA8F", "bell");
-            int badgeN = dueToday + overdue;
+            int badgeN = dueToday;
             if (badgeN > 0)
             {
                 var br = new Rectangle(bell.Right - Ui.S(15), bell.Y - Ui.S(3), Ui.S(18), Ui.S(18));
-                using (var b = new SolidBrush(overdue > 0 ? Ui.Danger : Ui.Accent)) g.FillEllipse(b, br);
+                using (var b = new SolidBrush(Ui.Accent)) g.FillEllipse(b, br);
                 TextRenderer.DrawText(g, badgeN > 9 ? "9+" : badgeN.ToString(), BadgeFont, br, Color.White, C);
             }
             RoundButton(g, gear, "\uE713", "gear");
@@ -529,70 +509,47 @@ namespace StickyPro
             var r = kpiCards[i];
             Card(g, r, IsHot("kpi" + i));
 
-            Color circleCol; string glyph, label, val, trend, sub; Color trendCol;
+            string label, value, detail;
             if (i == 0)
             {
-                circleCol = Ui.AccentFill; glyph = "\uE73A"; label = "Open Tasks";
-                val = openTasks.ToString("N0");
-                trend = dueToday > 0 ? dueToday + " today" : "All clear";
-                trendCol = overdue > 0 ? Ui.Danger : Ui.Success;
-                sub = overdue > 0 ? overdue + " overdue" : "Nothing overdue";
+                label = "Open tasks"; value = openTasks.ToString("N0");
+                detail = dueToday > 0 ? dueToday + " due today" : "";
             }
             else if (i == 1)
             {
-                circleCol = FlowGreen; glyph = "\uE73E"; label = "Tasks Completed";
-                val = doneTasks.ToString("N0");
-                int pct = totalTasks > 0 ? (int)Math.Round(doneTasks * 100.0 / totalTasks) : 0;
-                trend = pct + "% done";
-                trendCol = Ui.Success;
-                sub = "of " + totalTasks.ToString("N0") + " total tasks";
+                label = "Completed"; value = doneTasks.ToString("N0");
+                detail = "of " + totalTasks.ToString("N0") + (totalTasks == 1 ? " task" : " tasks");
             }
             else if (i == 2)
             {
-                circleCol = FlowAmber; glyph = "\uE77F"; label = "Copied Today";
-                val = todayValue[1].ToString("N0");
-                trend = pinnedClips + " pinned";
-                trendCol = FlowAmber;
-                sub = Store.Clips.Count.ToString("N0") + " in history";
+                label = "Copied today"; value = todayValue[1].ToString("N0");
+                detail = todayNote[1];
             }
             else
             {
-                circleCol = FlowPurple; glyph = "\uE81C"; label = "Tracked Files";
-                val = todayValue[2].ToString("N0");
-                trend = todayValue[3] > 0 ? todayValue[3] + " urgent" : Store.Tagged.Count + " tagged";
-                trendCol = todayValue[3] > 0 ? Ui.Danger : FlowPurple;
-                sub = todayNote[2];
+                label = "Files opened"; value = todayValue[2].ToString("N0");
+                detail = todayValue[3] > 0 ? todayValue[3] + " tagged urgent" : todayNote[2];
             }
 
-            int d = Ui.S(44);
-            var cr = new Rectangle(r.X + Ui.S(16), r.Y + (r.Height - d) / 2, d, d);
-            using (var b = new SolidBrush(circleCol)) g.FillEllipse(b, cr);
-            TextRenderer.DrawText(g, glyph, Ui.Icon(14f), cr, Color.White, C);
-
-            int tx = cr.Right + Ui.S(14), tw = Math.Max(1, r.Right - tx - Ui.S(12));
-            TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(tx, r.Y + Ui.S(14), tw, Ui.S(18)), Ui.Muted, L);
-
-            int vw = TextRenderer.MeasureText(g, val, Ui.Kpi, Size.Empty, TextFormatFlags.NoPadding).Width;
-            TextRenderer.DrawText(g, val, Ui.Kpi, new Rectangle(tx, r.Y + Ui.S(32), Math.Min(tw, vw + Ui.S(4)), Ui.S(32)), Ui.Text, L);
-            int trendX = tx + vw + Ui.S(10);
-            if (trendX + Ui.S(34) < r.Right - Ui.S(8))
-                TextRenderer.DrawText(g, trend, Ui.Small, new Rectangle(trendX, r.Y + Ui.S(41), Math.Max(1, r.Right - trendX - Ui.S(10)), Ui.S(18)), trendCol, L);
-
-            TextRenderer.DrawText(g, sub, Ui.Small, new Rectangle(tx, r.Y + Ui.S(66), tw, Ui.S(18)), (i == 0 && overdue > 0) ? Ui.Danger : Ui.Muted, L);
+            int inset = Ui.S(r.Width < Ui.S(150) ? 10 : 16);
+            int width = Math.Max(1, r.Width - inset * 2);
+            TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(r.X + inset, r.Y + Ui.S(9), width, Ui.S(18)), Ui.Muted, L);
+            TextRenderer.DrawText(g, value, Ui.Kpi, new Rectangle(r.X + inset, r.Y + Ui.S(26), width, Ui.S(29)), Ui.Text, L);
+            if (detail.Length > 0)
+                TextRenderer.DrawText(g, detail, Ui.Small, new Rectangle(r.X + inset, r.Y + Ui.S(56), width, Ui.S(16)), i == 3 && todayValue[3] > 0 ? Ui.Danger : Ui.Muted, L);
         }
 
         void StorageFlow(Graphics g)
         {
             var c = storage;
             Card(g, c);
-            Title(g, c, "Storage Progress", null, LinkRect(c, "View All").Width);
+            Title(g, c, "Storage", null, LinkRect(c, "View All").Width);
             Link(g, c, "View All", "storageall");
             if (drives.Count == 0)
             {
                 TextRenderer.DrawText(g, "No fixed drives found", Ui.Base, new Rectangle(c.X + Ui.S(20), c.Y + Ui.S(64), Math.Max(1, c.Width - Ui.S(40)), Ui.S(28)), Ui.Muted, L);
                 return;
             }
-            Color[] rowCols = { FlowBlue, FlowPurple, FlowGreen, FlowAmber };
             int x = c.X + Ui.S(20), w = Math.Max(1, c.Width - Ui.S(40)), y = c.Y + Ui.S(54), rh = Ui.S(54);
             int maxBottom = drives.Count > 4 ? c.Bottom - Ui.S(26) : c.Bottom - Ui.S(10);
             int shown = 0;
@@ -600,7 +557,7 @@ namespace StickyPro
             {
                 if (y + rh > maxBottom) break;
                 var d = drives[i];
-                Color accent = rowCols[i % rowCols.Length];
+                Color accent = Usage(d.Used);
                 int ib = Ui.S(34);
                 var ir = new Rectangle(x, y + Ui.S(6), ib, ib);
                 using (var path = Ui.Round(ir, Ui.S(9)))
@@ -977,18 +934,7 @@ namespace StickyPro
         // =========================================================================
         void Header(Graphics g)
         {
-            int limit = Math.Max(Ui.S(60), (btnTerm.Width > 0 ? btnTerm.X : btnNew.Width > 0 ? btnNew.X : bell.X) - Ui.S(12) - header.X);
-            TextRenderer.DrawText(g, DateTime.Now.ToString("dddd, d MMMM"), Ui.Title, new Rectangle(header.X, header.Y + Ui.S(4), limit, Ui.S(32)), Ui.Text, L);
-            // Status line: plain facts, warnings in red.
-            string calm = dueToday == 0 ? "Nothing due today" : dueToday + (dueToday == 1 ? " task due today" : " tasks due today");
-            var warn = new List<string>();
-            if (overdue > 0) warn.Add(overdue + " overdue");
-            foreach (var d in drives) if (d.Used > 0.9) warn.Add(d.Letter + ": " + (d.Used * 100).ToString("0") + "% full");
-            int cw = TextRenderer.MeasureText(g, calm, Ui.Base, Size.Empty, TextFormatFlags.NoPadding).Width;
-            var sr = new Rectangle(header.X, header.Y + Ui.S(38), limit, Ui.S(20));
-            TextRenderer.DrawText(g, calm, Ui.Base, sr, Ui.Muted, L);
-            if (warn.Count > 0 && cw + Ui.S(40) < limit)
-                TextRenderer.DrawText(g, "  ·  " + string.Join("  ·  ", warn), Ui.Base, new Rectangle(sr.X + cw, sr.Y, Math.Max(1, limit - cw), sr.Height), Ui.Danger, L);
+            DrawHomeTitle(g, btnTerm.Width > 0 ? btnTerm.X : btnNew.Width > 0 ? btnNew.X : bell.X);
 
             if (btnTerm.Width > 0)
             {
@@ -1007,14 +953,20 @@ namespace StickyPro
                 BtnText(g, r, "", "New task", Color.White);
             }
             RoundButton(g, bell, "", "bell");
-            int badgeN = dueToday + overdue;
+            int badgeN = dueToday;
             if (badgeN > 0)
             {
                 var br = new Rectangle(bell.Right - Ui.S(15), bell.Y - Ui.S(3), Ui.S(18), Ui.S(18));
-                using (var b = new SolidBrush(overdue > 0 ? Ui.Danger : Ui.Accent)) g.FillEllipse(b, br);
+                using (var b = new SolidBrush(Ui.Accent)) g.FillEllipse(b, br);
                 TextRenderer.DrawText(g, badgeN > 9 ? "9+" : badgeN.ToString(), BadgeFont, br, Color.White, C);
             }
             RoundButton(g, gear, "", "gear");
+        }
+
+        void DrawHomeTitle(Graphics g, int rightEdge)
+        {
+            int width = Math.Max(1, rightEdge - Ui.S(10) - header.X);
+            TextRenderer.DrawText(g, "Home", Ui.Title, new Rectangle(header.X, header.Y, width, Ui.S(36)), Ui.Text, L);
         }
 
         void RoundButton(Graphics g, Rectangle r, string glyph, string key)
