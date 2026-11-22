@@ -2,6 +2,12 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — Built and installed the current Windows executable
+
+- Built and installed the release from archived source at `314926d` on the local Windows PC. `AllInOne.exe` is 89,902,592 bytes with SHA-256 `4F1B66CDAEE5BFA5B7377299E9BE061083386B816ABB5071DBD6869C4197DBC5`. Saved the previous executable and an offline copy of the active profile outside the repository.
+- All 24 extracted-source Windows suites passed, including live Office and Team tests. The release self-test and all six embedded resources passed, and the bundled FFmpeg encoded and decoded H.264/AAC. The exact release passed 44 live browser checks after two earlier keyboard timeouts. The intermittent timeout remains open.
+- Verified the installed hash, existing profile and saved-item counts, Team and dashboard pages, responsive window, and no new startup error log entries. A live Team update through the corporate share remains unverified.
+
 ## 2026-11-22 — Pulled all GitHub main updates
 
 - Fast-forwarded the project checkout by 15 commits, from `cbed099` to `29646ed`. The updates include browser automation, Projects and Team, signed releases, scheduled jobs, and saved-work fixes.

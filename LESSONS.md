@@ -3,6 +3,10 @@
 Short, proven lessons. Read before working on the app; add a new one whenever something is learned, fixed or improved.
 Format: what happened -> cause (proven) -> rule.
 
+## Release checks
+
+- The Team page can open from the sidebar and `--page team` even when the local API rejects it. The API uses a separate page list. Verify the actual Team page through a normal entry point before treating the API response as a desktop startup failure.
+
 ## Operating environment & automation
 - **Security audits repeatedly flagged open local MCP Named Pipe, Assistant `Full Auto`, and unsanitized local `MdWeb`/`Mail` HTML.** -> The app runs inside a closed, isolated corporate/factory local intranet behind a strict enterprise firewall, and the owner intentionally wants maximum unrestricted automation across local tools. -> **Rule:** Treat unrestricted local MCP, Assistant `Full Auto`, and raw local `MdWeb`/`Mail` rendering as intentional by design. Never flag them as open security issues, never add ACL/confirmation gates or restrictive sanitizers for them, and never ask the owner again whether to close them. Keep focus on reliability, saved-work safety, UX, performance, and new capabilities.
 

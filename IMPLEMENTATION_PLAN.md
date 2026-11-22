@@ -247,6 +247,10 @@ Fixed saved-work hazards and workflow bugs found on `cbed099`. See the [review m
 
 The project checkout pulled GitHub main through `29646ed`, including [browser automation](docs/BROWSER-AUTOMATION.md), Projects, and the [Team hub and signed updates](docs/TEAM.md). The Windows test build and all 24 suites passed on this checkout, including the live Office tests. The separate live browser and Team update checks remain open. See the [sync history](HISTORY.md#2026-11-22--pulled-all-github-main-updates).
 
+### Local release verification · November 22, 2026
+
+The Windows release built from `314926d` is running with the existing profile. All 24 Windows suites passed and the exact release passed 44 live browser checks on retry. Intermittent browser keyboard input and a live Team update through the corporate share remain open. See the [local release record](HISTORY.md#2026-11-22--built-and-installed-the-current-windows-executable).
+
 ---
 
 ## 3. File Map (Modular, Low-Bloat Structure)
