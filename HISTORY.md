@@ -2,6 +2,11 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — Accounts reflects Cline CLI sign-in
+
+- The current Cline CLI reported an active Cline Pass login while its legacy secrets file was empty. Accounts now uses the installed CLI package to check provider sign-in and displays only provider labels.
+- Built and installed `AllInOne.exe` (89,905,664 bytes, SHA-256 `38240AB5011280F2CA314ECA8380C50D9BDF2AF1D9629E920A0F11155E3DDC6D`). The full 24-suite Windows run passed. Checked the packaged status against local Cline 3.0.74 and isolated signed-out, OAuth, API key, and unavailable cases. The running Accounts page showed `Signed in: Cline Pass`.
+
 ## 2026-11-22 — Built and installed the current Windows executable
 
 - Built and installed the release from archived source at `314926d` on the local Windows PC. `AllInOne.exe` is 89,902,592 bytes with SHA-256 `4F1B66CDAEE5BFA5B7377299E9BE061083386B816ABB5071DBD6869C4197DBC5`. Saved the previous executable and an offline copy of the active profile outside the repository.

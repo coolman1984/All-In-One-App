@@ -3,6 +3,10 @@
 Short, proven lessons. Read before working on the app; add a new one whenever something is learned, fixed or improved.
 Format: what happened -> cause (proven) -> rule.
 
+## CLI account status
+
+- Cline 3.0.74 can report an active Cline Pass sign-in with an empty legacy secrets file. Use the installed CLI's provider status, expose provider names only, and distinguish an unavailable check from a confirmed sign-out. A configured provider can exist without credentials.
+
 ## Release checks
 
 - The Team page can open from the sidebar and `--page team` even when the local API rejects it. The API uses a separate page list. Verify the actual Team page through a normal entry point before treating the API response as a desktop startup failure.

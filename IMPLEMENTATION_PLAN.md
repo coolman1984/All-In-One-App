@@ -251,6 +251,8 @@ The project checkout pulled GitHub main through `29646ed`, including [browser au
 
 The Windows release built from `314926d` is running with the existing profile. All 24 Windows suites passed and the exact release passed 44 live browser checks on retry. Intermittent browser keyboard input and a live Team update through the corporate share remain open. See the [local release record](HISTORY.md#2026-11-22--built-and-installed-the-current-windows-executable).
 
+The next local release fixes Cline status in Accounts. The installed app showed the active Cline Pass login and the full Windows test run passed. See the [Cline Accounts release record](HISTORY.md#2026-11-22--accounts-reflects-cline-cli-sign-in).
+
 ---
 
 ## 3. File Map (Modular, Low-Bloat Structure)

@@ -192,38 +192,42 @@ const c = require(process.argv[1]);
             }
         }
 
+        internal static string RunClineCore(string exe, string command)
+        {
+            string node, prefix;
+            if (!AgentRun.Resolve(exe, out node, out prefix) || prefix.Length == 0 || !Path.GetFileName(node).Equals("node.exe", StringComparison.OrdinalIgnoreCase))
+                return null;
+            string script = Path.GetFullPath(prefix.Trim().Trim('"'));
+            string module = null;
+            for (var dir = Directory.GetParent(script); dir != null; dir = dir.Parent)
+            {
+                string candidate = Path.Combine(dir.FullName, @"node_modules\@cline\core\dist\index.js");
+                if (File.Exists(candidate)) { module = candidate; break; }
+            }
+            if (module == null) return null;
+            var psi = new ProcessStartInfo(node, "-e " + AgentRun.Quote(command) + " -- " + AgentRun.Quote(module))
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                RedirectStandardInput = true, StandardOutputEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(script)
+            };
+            using (var proc = Process.Start(psi))
+            {
+                proc.StandardInput.Close();
+                var data = proc.StandardOutput.ReadToEndAsync();
+                proc.ErrorDataReceived += delegate { };
+                proc.BeginErrorReadLine();
+                if (!proc.WaitForExit(20000)) { try { proc.Kill(); } catch (InvalidOperationException) { } return null; }
+                return proc.ExitCode == 0 && data.Wait(1000) ? data.Result : null;
+            }
+        }
+
         public static string[] ClineModels(AgentDef d)
         {
             var l = new List<string>();
             try
             {
-                string node, prefix;
-                if (!AgentRun.Resolve(d.Exe, out node, out prefix) || prefix.Length == 0 || !Path.GetFileName(node).Equals("node.exe", StringComparison.OrdinalIgnoreCase))
-                    return l.ToArray();
-                string script = Path.GetFullPath(prefix.Trim().Trim('"'));
-                string module = null;
-                for (var dir = Directory.GetParent(script); dir != null; dir = dir.Parent)
-                {
-                    string candidate = Path.Combine(dir.FullName, @"node_modules\@cline\core\dist\index.js");
-                    if (File.Exists(candidate)) { module = candidate; break; }
-                }
-                if (module == null) return l.ToArray();
-                var psi = new ProcessStartInfo(node, "-e " + AgentRun.Quote(ClineCatalogScript) + " -- " + AgentRun.Quote(module))
-                {
-                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                    RedirectStandardInput = true, StandardOutputEncoding = Encoding.UTF8, WorkingDirectory = Path.GetDirectoryName(script)
-                };
-                string output;
-                using (var proc = Process.Start(psi))
-                {
-                    proc.StandardInput.Close();
-                    var data = proc.StandardOutput.ReadToEndAsync();
-                    proc.ErrorDataReceived += delegate { };
-                    proc.BeginErrorReadLine();
-                    if (!proc.WaitForExit(20000)) { try { proc.Kill(); } catch (InvalidOperationException) { } return l.ToArray(); }
-                    if (proc.ExitCode != 0 || !data.Wait(1000)) return l.ToArray();
-                    output = data.Result;
-                }
+                string output = RunClineCore(d.Exe, ClineCatalogScript);
+                if (output == null) return l.ToArray();
                 var js = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))

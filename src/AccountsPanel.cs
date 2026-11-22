@@ -85,7 +85,43 @@ namespace StickyPro
         [System.Runtime.InteropServices.DllImport("advapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
         static extern bool CredDelete(string target, int type, int flags);
 
-        // Which Cline providers hold a key (names only).
+        const string ClineStatusScript = @"
+console.log = console.info = console.warn = console.error = () => {};
+const c = require(process.argv[1]);
+(async () => {
+    const manager = new c.ProviderSettingsManager();
+    await c.ensureCustomProvidersLoaded(manager);
+    const { providers } = await c.listLocalProviders(manager, { isClinePassEnabled: true });
+    const ids = providers.filter(p => p.oauthAccessTokenPresent === true ||
+        (typeof p.apiKey === 'string' && p.apiKey.trim().length > 0)).map(p => p.id);
+    process.stdout.write(JSON.stringify(ids), () => process.exit(0));
+})().catch(() => process.exit(1));";
+
+        public static string ClineStatus(string exe)
+        {
+            string[] ids = null;
+            try
+            {
+                string output = AgentModels.RunClineCore(exe, ClineStatusScript);
+                if (output != null) ids = new JavaScriptSerializer().Deserialize<string[]>(output);
+            }
+            catch { }
+
+            if (ids == null)
+            {
+                var legacy = ClineKeys();
+                return legacy.Count > 0 ? "Signed in: " + string.Join(", ", legacy) : "Could not check Cline sign-in";
+            }
+            if (ids.Length == 0) return "Not signed in";
+
+            bool hasPass = ids.Contains("cline-pass");
+            var labels = ids.Where(id => !hasPass || id != "cline").Select(id =>
+                id == "cline-pass" ? "Cline Pass" : id == "cline" ? "Cline account" :
+                id.IndexOf("codex", StringComparison.OrdinalIgnoreCase) >= 0 ? "ChatGPT (Codex)" : id);
+            return "Signed in: " + string.Join(", ", labels.Distinct());
+        }
+
+        // Legacy file-based Cline installs: show provider names only.
         static List<string> ClineKeys()
         {
             var l = new List<string>();

@@ -169,6 +169,7 @@ namespace StickyPro
                         string s = Run(d, account, (account.Length > 0 ? "-c cli_auth_credentials_store=file " : "") + "login status", 20000).Trim();
                         result = s.IndexOf("Logged in", StringComparison.OrdinalIgnoreCase) >= 0 ? "Signed in" + (s.Contains("ChatGPT") ? " with ChatGPT" : s.Contains("API") ? " with an API key" : "") : "Not signed in";
                     }
+                    else if (d.Id == "cline") result = CliAccounts.ClineStatus(d.Exe);
                     else result = CliAccounts.Status(d.Id);
                 }
                 catch (Exception ex) { result = "Could not check (" + ex.Message + ")"; }
