@@ -115,6 +115,53 @@ namespace StickyPro
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         static extern long sqlite3_last_insert_rowid(IntPtr db);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        static extern IntPtr sqlite3_backup_init(IntPtr destination, byte[] destName, IntPtr source, byte[] sourceName);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        static extern int sqlite3_backup_step(IntPtr backup, int pages);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        static extern int sqlite3_backup_finish(IntPtr backup);
+
+        public static void CopySnapshot(string source, string destination)
+        {
+            IntPtr src = IntPtr.Zero, dest = IntPtr.Zero;
+            bool ownsDestination = false, complete = false;
+            try
+            {
+                int code = sqlite3_open_v2(ToUtf8Z(source), out src, 1 /* read only */ | SQLITE_OPEN_FULLMUTEX, IntPtr.Zero);
+                if (code != SQLITE_OK) throw new IOException("Cannot read the vault for backup: " + GetError(src));
+                using (File.Open(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { ownsDestination = true; }
+                code = sqlite3_open_v2(ToUtf8Z(destination), out dest, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, IntPtr.Zero);
+                if (code != SQLITE_OK) throw new IOException("Cannot create the vault backup: " + GetError(dest));
+
+                byte[] main = ToUtf8Z("main");
+                IntPtr backup = sqlite3_backup_init(dest, main, src, main);
+                if (backup == IntPtr.Zero) throw new IOException("Cannot start the vault backup: " + GetError(dest));
+                int finish;
+                try
+                {
+                    for (int attempt = 0; ; attempt++)
+                    {
+                        code = sqlite3_backup_step(backup, -1);
+                        if ((code != 5 /* busy */ && code != 6 /* locked */) || attempt >= 25) break;
+                        Thread.Sleep(100);
+                    }
+                }
+                finally { finish = sqlite3_backup_finish(backup); }
+                if (code != SQLITE_DONE || finish != SQLITE_OK) throw new IOException("Could not finish a consistent vault backup: " + GetError(dest));
+                complete = true;
+            }
+            finally
+            {
+                if (dest != IntPtr.Zero) sqlite3_close_v2(dest);
+                if (src != IntPtr.Zero) sqlite3_close_v2(src);
+                if (ownsDestination && !complete)
+                    try { File.Delete(destination); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
         // =====================================================================
         // State & Lifecycle
         // =====================================================================

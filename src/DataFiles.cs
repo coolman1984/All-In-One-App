@@ -59,9 +59,15 @@ namespace StickyPro
         public static void CopyTree(string from, string to)
         {
             CheckSeparate(from, to);
-            CopyDirectory(new DirectoryInfo(from), to, true);
+            CopyDirectory(new DirectoryInfo(from), to, true, false);
         }
-        static void CopyDirectory(DirectoryInfo source, string target, bool root)
+        public static void CopyBackupTree(string from, string to)
+        {
+            CheckSeparate(from, to);
+            CopyDirectory(new DirectoryInfo(from), to, true, true);
+        }
+
+        static void CopyDirectory(DirectoryInfo source, string target, bool root, bool snapshotVault)
         {
             if ((source.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Cannot copy a linked folder: " + source.FullName);
             Directory.CreateDirectory(target);
@@ -69,12 +75,24 @@ namespace StickyPro
             {
                 if ((file.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Cannot copy a linked file: " + file.FullName);
                 if (file.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) continue;
-                file.CopyTo(Path.Combine(target, file.Name), false);
+                string destination = Path.Combine(target, file.Name);
+                if (root && snapshotVault)
+                {
+                    if (file.Name.Equals("vault.db-wal", StringComparison.OrdinalIgnoreCase) ||
+                        file.Name.Equals("vault.db-shm", StringComparison.OrdinalIgnoreCase) ||
+                        file.Name.Equals("vault.db-journal", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (file.Name.Equals("vault.db", StringComparison.OrdinalIgnoreCase))
+                    {
+                        SqliteVault.CopySnapshot(file.FullName, destination);
+                        continue;
+                    }
+                }
+                file.CopyTo(destination, false);
             }
             foreach (var child in source.EnumerateDirectories())
             {
                 if (root && (child.Name.Equals("restore-pending", StringComparison.OrdinalIgnoreCase) || child.Name.StartsWith("before-restore", StringComparison.OrdinalIgnoreCase))) continue;
-                CopyDirectory(child, Path.Combine(target, child.Name), false);
+                CopyDirectory(child, Path.Combine(target, child.Name), false, snapshotVault);
             }
         }
     }

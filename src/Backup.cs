@@ -42,7 +42,7 @@ namespace StickyPro
         }
 
         static string Stamp() { return DateTime.Now.ToString("yyyy-MM-dd HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8); }
-        public static void CopyData(string from, string to) { DataFiles.CopyTree(from, to); }
+        public static void CopyData(string from, string to) { DataFiles.CopyBackupTree(from, to); }
 
         // Validate before staging and again at startup: malformed JSON never replaces live data.
         public static void Validate(string folder)
