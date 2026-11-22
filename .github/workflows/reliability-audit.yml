@@ -1,0 +1,28 @@
+name: Verify reliability repairs on Windows
+
+on:
+  push:
+    branches:
+      - codex/reliability-audit-windows-check
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with Windows .NET Framework
+        shell: powershell
+        run: .\tools\test-build.ps1
+      - name: Run Windows regression fixtures
+        shell: powershell
+        run: |
+          $failed = @()
+          foreach ($suite in 'reliability', 'document-close', 'regressions', 'sqlite-vault') {
+              & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "tools\test-$suite.ps1"
+              if ($LASTEXITCODE -ne 0) { $failed += $suite }
+          }
+          if ($failed.Count) { throw ("Windows suites failed: " + ($failed -join ', ')) }
