@@ -288,7 +288,12 @@ namespace StickyPro
             if (!d.Visible) { d.Visible = true; Store.MarkCards(); }
             f = new CardForm(d);
             cardForms[d.Id] = f;
-            f.FormClosed += delegate { cardForms.Remove(d.Id); };
+            CardForm.StartPasteTracking();
+            f.FormClosed += delegate
+            {
+                cardForms.Remove(d.Id);
+                if (cardForms.Count == 0) CardForm.StopPasteTracking();
+            };
             f.Show();
             Native.EnsureRestored(f);
             if (activate) f.Activate();
@@ -400,6 +405,7 @@ namespace StickyPro
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("New note", null, delegate { NewNote(null); });
             menu.Items.Add("New task / reminder...", null, delegate { QuickTaskForm.Open(); });
+            menu.Items.Add("Scheduled jobs...", null, delegate { CronWindow.Open(main != null && main.Visible ? main : null); });
             menu.Items.Add("Quick run...", null, delegate { QuickRunForm.Open(); });
             menu.Items.Add("New snip", null, delegate { StartSnip("rect", 0, false); });
             var capture = new ToolStripMenuItem("Screen capture");
@@ -777,17 +783,26 @@ namespace StickyPro
             catch (Exception ex) { Log("Copy failed: " + ex.Message); return false; }
         }
 
-        public void PasteTo(IntPtr hwnd)
+        public void PasteTo(IntPtr hwnd, Action<bool> completed = null)
         {
-            if (hwnd == IntPtr.Zero || !Native.IsWindow(hwnd)) return;
+            uint pid;
+            if (hwnd == IntPtr.Zero || Native.GetWindowThreadProcessId(hwnd, out pid) == 0)
+            {
+                if (completed != null) completed(false);
+                return;
+            }
+            uint clipboardVersion = Native.GetClipboardSequenceNumber();
             Native.SetForegroundWindow(hwnd);
             Ui.Later(90, () =>
             {
                 AfterModifiers(() =>
                 {
-                    if (!Native.IsWindow(hwnd) || Native.GetForegroundWindow() != hwnd) return;
-                    try { SendKeys.SendWait("^v"); } catch { }
-                }, 40);
+                    uint currentPid;
+                    bool sent = Native.GetWindowThreadProcessId(hwnd, out currentPid) != 0 && currentPid == pid
+                        && Native.GetForegroundWindow() == hwnd && Native.GetClipboardSequenceNumber() == clipboardVersion;
+                    if (sent) try { SendKeys.SendWait("^v"); } catch { sent = false; }
+                    if (completed != null) completed(sent);
+                }, 40, () => { if (completed != null) completed(false); });
             });
         }
 
@@ -810,10 +825,11 @@ namespace StickyPro
             });
         }
 
-        static void AfterModifiers(Action action, int tries)
+        static void AfterModifiers(Action action, int tries, Action expired = null)
         {
             if (!Native.Down(0x11) && !Native.Down(0x12) && !Native.Down(0x10) && !Native.Down(0x5B) && !Native.Down(0x5C)) { action(); return; }
-            if (tries > 0) Ui.Later(25, () => AfterModifiers(action, tries - 1));
+            if (tries > 0) Ui.Later(25, () => AfterModifiers(action, tries - 1, expired));
+            else if (expired != null) expired();
         }
 
         void PastePlain()
@@ -1175,6 +1191,7 @@ namespace StickyPro
             tray.Dispose();
             foreach (var f in noteForms.Values.ToList()) { f.Exiting = true; f.Close(); }
             foreach (var f in cardForms.Values.ToList()) f.Close();
+            CardForm.StopPasteTracking();
             Store.SaveNow();
             if (main != null && !main.IsDisposed) { main.Exiting = true; main.Close(); }
             if (quick != null && !quick.IsDisposed) quick.Dispose();

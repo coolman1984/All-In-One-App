@@ -235,7 +235,6 @@ try {
         id = 'job-watch-1'
         name = 'Watch Reports Folder'
         schedule = 'every:15m'
-        prompt = 'Summarize new factory reports'
         precheck_type = 'folder_changed'
         precheck_arg = $watchDir
     }

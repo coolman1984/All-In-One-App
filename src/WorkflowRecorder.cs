@@ -1517,6 +1517,7 @@ namespace StickyPro
                 { "folder", workFolder },
                 { "prompt", cleanPrompt },
                 { "leanPromptLength", fullSubPrompt.Length },
+                { "simulated", cleanCli == "local" || cleanCli == "mock" || cleanCli == "dry_run" || cleanCli == "inline" },
                 { "status", "running" },
                 { "startedAt", startUtc.ToString("o", CultureInfo.InvariantCulture) },
                 { "completedAt", "" },
@@ -1575,17 +1576,21 @@ namespace StickyPro
                 string resolvedFile = null, resolvedPre = null;
                 bool installed = def != null && AgentRun.Resolve(def.Exe, out resolvedFile, out resolvedPre);
 
-                if (isLocalFast || !installed)
+                if (isLocalFast)
                 {
-                    Thread.Sleep(35);
-                    output = "[Lean Subagent " + role + " (" + jobId + ")] Completed task: " + rawPrompt;
+                    output = "[Simulation] " + role + ": " + rawPrompt;
+                }
+                else if (!installed)
+                {
+                    finalStatus = "failed";
+                    error = "Provider " + cli + " is unavailable on this PC.";
                 }
                 else
                 {
                     if (!string.IsNullOrEmpty(model)) subChat.Models[def.Id] = model;
                     var texts = new List<string>();
                     var errs = new List<string>();
-                    var done = new ManualResetEvent(false);
+                    var done = new System.Threading.Tasks.TaskCompletionSource<int>();
                     var run = new AgentRun();
                     run.Event += (kind, text) =>
                     {
@@ -1594,7 +1599,7 @@ namespace StickyPro
                         else if (kind == "error" && !string.IsNullOrEmpty(text))
                             lock (errs) errs.Add(text);
                     };
-                    run.Exited += code => done.Set();
+                    run.Exited += code => done.TrySetResult(code);
                     string startErr;
                     if (!run.Start(def, subChat, fullSubPrompt, out startErr))
                     {
@@ -1603,7 +1608,7 @@ namespace StickyPro
                     }
                     else
                     {
-                        if (!done.WaitOne(300 * 1000))
+                        if (!done.Task.Wait(300 * 1000))
                         {
                             run.Stop();
                             finalStatus = "timed_out";
@@ -1611,7 +1616,11 @@ namespace StickyPro
                         }
                         lock (texts) output = string.Join("\n\n", texts.ToArray());
                         lock (errs) if (errs.Count > 0 && string.IsNullOrEmpty(error)) error = string.Join("; ", errs.ToArray());
-                        if (string.IsNullOrEmpty(output) && !string.IsNullOrEmpty(error)) finalStatus = "failed";
+                        if (finalStatus == "completed" && (done.Task.Result != 0 || string.IsNullOrWhiteSpace(output)))
+                        {
+                            finalStatus = "failed";
+                            if (string.IsNullOrWhiteSpace(error)) error = "Provider returned no successful result (exit " + done.Task.Result + ").";
+                        }
                     }
                 }
             }

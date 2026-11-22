@@ -184,7 +184,8 @@ namespace StickyPro
             }
             if (!ok) return;
             IntPtr t = target();
-            if (paste && t != IntPtr.Zero && Native.IsWindow(t)) { App.I.PasteTo(t); status("Pasted."); }
+            if (paste && t != IntPtr.Zero)
+                App.I.PasteTo(t, sent => { if (!IsDisposed) status(sent ? "Paste sent." : "Copied - paste with Ctrl+V."); });
             else status("Copied - paste with Ctrl+V.");
         }
 
@@ -228,7 +229,48 @@ namespace StickyPro
     class CardForm : Form
     {
         public readonly CardDef D;
-        public IntPtr LastExternal;
+        static IntPtr pasteTarget, foregroundHook;
+        static uint pasteProcess;
+        static readonly N.WinEventProc foregroundChanged = OnForegroundChanged;
+
+        public IntPtr LastExternal
+        {
+            get
+            {
+                uint pid;
+                return pasteTarget != IntPtr.Zero && Native.GetWindowThreadProcessId(pasteTarget, out pid) != 0 && pid == pasteProcess
+                    ? pasteTarget : IntPtr.Zero;
+            }
+        }
+
+        public static void StartPasteTracking()
+        {
+            if (foregroundHook != IntPtr.Zero) return;
+            RememberPasteTarget(Native.GetForegroundWindow());
+            foregroundHook = N.SetWinEventHook(3, 3, IntPtr.Zero, foregroundChanged, 0, 0, 2); // EVENT_SYSTEM_FOREGROUND, WINEVENT_SKIPOWNPROCESS
+        }
+
+        public static void StopPasteTracking()
+        {
+            if (foregroundHook != IntPtr.Zero) N.UnhookWinEvent(foregroundHook);
+            foregroundHook = pasteTarget = IntPtr.Zero;
+            pasteProcess = 0;
+        }
+
+        static void OnForegroundChanged(IntPtr hook, uint ev, IntPtr window, int obj, int child, uint thread, uint time)
+        {
+            if (hook == foregroundHook) RememberPasteTarget(window);
+        }
+
+        static void RememberPasteTarget(IntPtr window)
+        {
+            uint pid;
+            if (window != IntPtr.Zero && Native.GetWindowThreadProcessId(window, out pid) != 0 && pid != myPid)
+            {
+                pasteTarget = window;
+                pasteProcess = pid;
+            }
+        }
         readonly EdgePanel header, body;
         readonly FlowLayoutPanel tabBar;
         readonly IconButton btnTop, btnHide, btnMenu, btnClose;
@@ -517,9 +559,7 @@ namespace StickyPro
         {
             if (m.Msg == 0x0006 /* WM_ACTIVATE */ && (m.WParam.ToInt64() & 0xFFFF) != 0 && m.LParam != IntPtr.Zero)
             {
-                uint pid;
-                Native.GetWindowThreadProcessId(m.LParam, out pid);
-                if (pid != myPid) LastExternal = m.LParam;
+                RememberPasteTarget(m.LParam);
             }
             if (m.Msg == Native.WM_NCHITTEST && !D.Collapsed)
             {

@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
@@ -805,6 +806,12 @@ namespace StickyPro
 
         public static Dictionary<string, object> RunDynamicTool(string name, Dictionary<string, object> args)
         {
+            return RunScheduledTool(name, args, CancellationToken.None);
+        }
+
+        public static Dictionary<string, object> RunScheduledTool(string name, Dictionary<string, object> args, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
             string cleanName = SanitizeToolName(name);
             string path = Path.Combine(ToolsDir, cleanName + ".json");
             if (!File.Exists(path)) throw new FileNotFoundException("Dynamic tool not found: " + name);
@@ -832,7 +839,7 @@ namespace StickyPro
                 return qres;
             }
 
-            return RunScriptTool(cleanName, kind, def.script ?? "", args);
+            return RunScriptTool(cleanName, kind, def.script ?? "", args, cancellation);
         }
 
         static string RenderSqlTemplate(string template, Dictionary<string, object> args)
@@ -859,7 +866,7 @@ namespace StickyPro
             });
         }
 
-        static Dictionary<string, object> RunScriptTool(string name, string kind, string script, Dictionary<string, object> args)
+        static Dictionary<string, object> RunScriptTool(string name, string kind, string script, Dictionary<string, object> args, CancellationToken cancellation)
         {
             string ext = kind == "powershell" ? ".ps1" : kind == "python" ? ".py" : ".cmd";
             string tempDir = Path.Combine(Path.GetTempPath(), "AllInOne-tools");
@@ -901,7 +908,9 @@ namespace StickyPro
                 psi.EnvironmentVariables["AIO_DATA_DIR"] = string.IsNullOrEmpty(Store.Dir) ? Store.DefaultDir : Store.Dir;
                 psi.EnvironmentVariables["AIO_VAULT_DB"] = SqliteVault.DbPath;
 
+                cancellation.ThrowIfCancellationRequested();
                 using (var proc = Process.Start(psi))
+                using (cancellation.Register(delegate { try { if (!proc.HasExited) proc.Kill(); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { } }))
                 {
                     var outTask = proc.StandardOutput.ReadToEndAsync();
                     var errTask = proc.StandardError.ReadToEndAsync();
@@ -918,6 +927,7 @@ namespace StickyPro
                             { "error", "Dynamic tool timed out after 60 s." }
                         };
                     }
+                    cancellation.ThrowIfCancellationRequested();
                     outTask.Wait(2000);
                     errTask.Wait(2000);
                     string stdout = (outTask.IsCompleted ? outTask.Result : "") ?? "";

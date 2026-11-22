@@ -24,6 +24,15 @@ namespace StickyPro
         public string last_run_utc = "";
         public string last_hash = "";
         public bool one_shot;
+        public string tool = "";
+        public Dictionary<string, object> tool_args;
+        public string agent = "";
+        public string folder = "";
+        public string last_run_id = "";
+        public string run_status = "";
+        public string run_output = "";
+        public string run_error = "";
+        public string run_finished_utc = "";
     }
 
     // Single lightweight tray timer + FileSystemWatcher event hooks:
@@ -44,6 +53,10 @@ namespace StickyPro
         static System.Threading.Timer debounceTimer;
         static volatile bool running;
         static int tickBusy;
+        static readonly Queue<CronJob> actions = new Queue<CronJob>();
+        static CancellationTokenSource runCancellation = new CancellationTokenSource();
+        static volatile bool actionWorker;
+        static bool actionsRecovered;
 
         static readonly Dictionary<string, FileSystemWatcher> watchers = new Dictionary<string, FileSystemWatcher>(StringComparer.OrdinalIgnoreCase);
         static readonly Dictionary<string, DateTime> pendingWatchFiles = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
@@ -68,6 +81,8 @@ namespace StickyPro
             lock (stateLock)
             {
                 if (running) return;
+                if (runCancellation.IsCancellationRequested) runCancellation = new CancellationTokenSource();
+                RecoverActionsLocked();
                 running = true;
                 tickTimer = new System.Threading.Timer(OnTick, null, 15000, 60000);
             }
@@ -79,6 +94,9 @@ namespace StickyPro
             lock (stateLock)
             {
                 running = false;
+                actionsRecovered = false;
+                runCancellation.Cancel();
+                actions.Clear();
                 if (tickTimer != null)
                 {
                     try { tickTimer.Dispose(); } catch (Exception) { }
@@ -163,13 +181,17 @@ namespace StickyPro
             string id = "",
             string name = "",
             string schedule = "",
-            string prompt = "",
-            string skill = "",
+            string prompt = null,
+            string skill = null,
             string precheckType = "",
-            string precheckArg = "",
+            string precheckArg = null,
             bool? enabled = null,
             bool? oneShot = null,
-            int inMinutes = 0)
+            int inMinutes = 0,
+            string tool = null,
+            Dictionary<string, object> toolArgs = null,
+            string agent = null,
+            string folder = null)
         {
             string act = string.IsNullOrWhiteSpace(action) ? "list" : action.Trim().ToLowerInvariant();
 
@@ -207,6 +229,10 @@ namespace StickyPro
                     schedule = sched,
                     prompt = (prompt ?? "").Trim(),
                     skill = (skill ?? "").Trim(),
+                    tool = (tool ?? "").Trim(),
+                    tool_args = toolArgs,
+                    agent = (agent ?? "").Trim(),
+                    folder = (folder ?? "").Trim(),
                     precheck_type = pcType,
                     precheck_arg = (precheckArg ?? "").Trim(),
                     enabled = enabled ?? true,
@@ -218,6 +244,8 @@ namespace StickyPro
                 lock (stateLock)
                 {
                     var jobs = LoadJobsLocked();
+                    EnsureEditable(FindJob(jobs, job.id));
+                    ValidateAction(job);
                     jobs.RemoveAll(j => string.Equals(j.id, job.id, StringComparison.OrdinalIgnoreCase));
                     jobs.Add(job);
                     SaveJobsLocked(jobs);
@@ -241,14 +269,29 @@ namespace StickyPro
                     var jobs = LoadJobsLocked();
                     updated = jobs.FirstOrDefault(j => string.Equals(j.id, id.Trim(), StringComparison.OrdinalIgnoreCase));
                     if (updated == null) throw new KeyNotFoundException("No cron job with id: " + id);
+                    EnsureEditable(updated);
                     if (!string.IsNullOrWhiteSpace(name)) updated.name = name.Trim();
-                    if (!string.IsNullOrWhiteSpace(schedule)) { ValidateSchedule(schedule.Trim()); updated.schedule = schedule.Trim(); }
-                    if (!string.IsNullOrEmpty(prompt)) updated.prompt = prompt.Trim();
-                    if (!string.IsNullOrEmpty(skill)) updated.skill = skill.Trim();
-                    if (!string.IsNullOrWhiteSpace(precheckType)) updated.precheck_type = NormalizePrecheckType(precheckType);
-                    if (!string.IsNullOrEmpty(precheckArg)) updated.precheck_arg = precheckArg.Trim();
+                    if (!string.IsNullOrWhiteSpace(schedule) && updated.schedule != schedule.Trim())
+                    {
+                        ValidateSchedule(schedule.Trim());
+                        updated.schedule = schedule.Trim();
+                        updated.last_run_utc = "";
+                    }
+                    if (prompt != null) updated.prompt = prompt.Trim();
+                    if (skill != null) updated.skill = skill.Trim();
+                    if (tool != null) updated.tool = tool.Trim();
+                    if (toolArgs != null) updated.tool_args = toolArgs;
+                    if (agent != null) updated.agent = agent.Trim();
+                    if (folder != null) updated.folder = folder.Trim();
+                    string check = string.IsNullOrWhiteSpace(precheckType) ? updated.precheck_type : NormalizePrecheckType(precheckType);
+                    string checkArg = precheckArg == null ? updated.precheck_arg : precheckArg.Trim();
+                    if (check != updated.precheck_type || checkArg != updated.precheck_arg) updated.last_hash = "";
+                    updated.precheck_type = check;
+                    updated.precheck_arg = checkArg;
+                    if (enabled == true && !updated.enabled && updated.one_shot) updated.last_run_utc = "";
                     if (enabled.HasValue) updated.enabled = enabled.Value;
                     if (oneShot.HasValue) updated.one_shot = oneShot.Value;
+                    ValidateAction(updated);
                     SaveJobsLocked(jobs);
                 }
                 return new Dictionary<string, object>
@@ -266,6 +309,7 @@ namespace StickyPro
                 lock (stateLock)
                 {
                     var jobs = LoadJobsLocked();
+                    EnsureEditable(FindJob(jobs, id.Trim()));
                     removed = jobs.RemoveAll(j => string.Equals(j.id, id.Trim(), StringComparison.OrdinalIgnoreCase));
                     if (removed > 0) SaveJobsLocked(jobs);
                 }
@@ -277,20 +321,23 @@ namespace StickyPro
                 };
             }
 
-            if (act == "run_now")
+            if (act == "run_now" || act == "retry")
             {
                 if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("id is required for cron_manage run_now.");
                 CronJob target;
                 lock (stateLock)
                 {
+                    if (!runCancellation.IsCancellationRequested) RecoverActionsLocked();
                     var jobs = LoadJobsLocked();
                     target = jobs.FirstOrDefault(j => string.Equals(j.id, id.Trim(), StringComparison.OrdinalIgnoreCase));
                 }
                 if (target == null) throw new KeyNotFoundException("No cron job with id: " + id);
-                return EvaluateJob(target, true);
+                if (act == "retry" && target.run_status != "failed" && target.run_status != "interrupted")
+                    throw new InvalidOperationException("Retry is available for failed or interrupted runs.");
+                return EvaluateJobCore(target, true, act == "retry");
             }
 
-            throw new ArgumentException("Unknown cron_manage action: " + action + ". Use list, create, follow_up, update, delete, or run_now.");
+            throw new ArgumentException("Unknown cron_manage action: " + action + ". Use list, create, follow_up, update, delete, run_now, or retry.");
         }
 
         // =====================================================================
@@ -317,97 +364,187 @@ namespace StickyPro
 
         public static Dictionary<string, object> EvaluateJob(CronJob job, bool ignoreSchedule)
         {
+            return EvaluateJobCore(job, ignoreSchedule, false);
+        }
+
+        static Dictionary<string, object> EvaluateJobCore(CronJob job, bool ignoreSchedule, bool retry)
+        {
             if (job == null) throw new ArgumentNullException("job");
+            lock (stateLock) if (!runCancellation.IsCancellationRequested) RecoverActionsLocked();
+            if (IsActive(job)) return NotTriggered(job, "BUSY", "A run is already queued or running.");
+
             string pcType = NormalizePrecheckType(job.precheck_type);
             bool hasSignal;
-            string precheckHash;
-            string detail;
+            string precheckHash, detail;
+            RunZeroTokenPrecheck(job, pcType, out hasSignal, out precheckHash, out detail, retry);
+            if (!hasSignal) return NotTriggered(job, "[SILENT]", detail);
 
-            RunZeroTokenPrecheck(job, pcType, out hasSignal, out precheckHash, out detail);
-
-            if (!hasSignal)
-            {
-                return new Dictionary<string, object>
-                {
-                    { "job_id", job.id },
-                    { "name", job.name },
-                    { "triggered", false },
-                    { "status", "[SILENT]" },
-                    { "reason", detail },
-                    { "tokens_used", 0 }
-                };
-            }
-
-            // Dedup unchanged folder state or repeat alert hashes within cooldown.
-            if (pcType == "folder_changed" && !string.IsNullOrEmpty(job.last_hash) && string.Equals(job.last_hash, precheckHash, StringComparison.Ordinal))
-            {
-                return new Dictionary<string, object>
-                {
-                    { "job_id", job.id },
-                    { "name", job.name },
-                    { "triggered", false },
-                    { "status", "[SILENT]" },
-                    { "reason", "Folder state unchanged since last run." },
-                    { "hash", precheckHash },
-                    { "tokens_used", 0 }
-                };
-            }
-
+            bool execute = CronExecution.HasAction(job);
             string alertHash = Sha256Short("cron|" + job.id + "|" + precheckHash);
-            bool checkDedup = !(pcType == "none" && ignoreSchedule);
-            if (checkDedup && SqliteVault.HasAlerted(alertHash, AlertCooldown))
-            {
-                return new Dictionary<string, object>
-                {
-                    { "job_id", job.id },
-                    { "name", job.name },
-                    { "triggered", false },
-                    { "status", "[SILENT]" },
-                    { "deduped", true },
-                    { "reason", "Already alerted within cooldown window." },
-                    { "hash", alertHash },
-                    { "tokens_used", 0 }
-                };
-            }
-
-            SqliteVault.MarkAlerted(alertHash, "cron:" + job.id);
-
             lock (stateLock)
             {
                 var jobs = LoadJobsLocked();
-                var stored = jobs.FirstOrDefault(j => string.Equals(j.id, job.id, StringComparison.OrdinalIgnoreCase));
-                if (stored != null)
+                var stored = FindJob(jobs, job.id);
+                if (stored == null || Js.Serialize(stored) != Js.Serialize(job))
+                    return NotTriggered(job, "BUSY", "The schedule changed while it was being checked.");
+                if (!ignoreSchedule && (!stored.enabled || !IsJobDue(stored, DateTime.UtcNow)))
+                    return NotTriggered(job, "[SILENT]", "The schedule is no longer due.");
+                if (runCancellation.IsCancellationRequested)
+                    return NotTriggered(job, "BUSY", "The scheduler is stopping.");
+
+                bool deduplicate = !retry && pcType != "none";
+                if (deduplicate && SqliteVault.HasAlerted(alertHash, AlertCooldown))
                 {
-                    stored.last_run_utc = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
-                    stored.last_hash = precheckHash;
-                    if (stored.one_shot) stored.enabled = false;
-                    SaveJobsLocked(jobs);
+                    var silent = NotTriggered(job, "[SILENT]", "Already alerted within cooldown window.");
+                    silent["deduped"] = true;
+                    silent["hash"] = alertHash;
+                    return silent;
                 }
+
+                stored.last_run_utc = UtcNow();
+                stored.last_hash = precheckHash;
+                stored.last_run_id = Guid.NewGuid().ToString("N");
+                stored.run_status = execute ? "queued" : "notified";
+                stored.run_output = "";
+                stored.run_error = "";
+                stored.run_finished_utc = execute ? "" : stored.last_run_utc;
+                if (stored.one_shot) stored.enabled = false;
+                SaveJobsLocked(jobs);
+                job = stored;
+                if (deduplicate)
+                {
+                    try { SqliteVault.MarkAlerted(alertHash, "cron:" + job.id); }
+                    catch (Exception ex) { App.Log("Record schedule alert: " + ex.Message); }
+                }
+                if (execute) QueueActionLocked(job);
             }
 
-            AssistantHarness.Report("Cron triggered: " + job.name + (detail.Length > 0 ? " (" + detail + ")" : ""));
-            NotifySafe("Scheduled routine: " + job.name, detail.Length > 0 ? detail : job.prompt);
-
+            if (!execute)
+            {
+                AssistantHarness.Report("Cron triggered: " + job.name);
+                NotifySafe("Scheduled routine: " + job.name, detail);
+            }
             var handler = JobTriggered;
             if (handler != null)
-            {
                 try { handler(job, detail); }
-                catch (Exception) { }
-            }
+                catch (Exception ex) { App.Log("Cron notification: " + ex.Message); }
 
             return new Dictionary<string, object>
             {
-                { "job_id", job.id },
-                { "name", job.name },
-                { "triggered", true },
-                { "status", "TRIGGERED" },
-                { "detail", detail },
-                { "hash", alertHash },
-                { "tokens_used", 0 }
+                { "job_id", job.id }, { "name", job.name }, { "triggered", true },
+                { "status", "TRIGGERED" }, { "detail", detail }, { "hash", alertHash },
+                { "run_id", job.last_run_id }, { "run_status", job.run_status },
+                { "tokens_used", execute && string.IsNullOrWhiteSpace(job.tool) ? (object)null : 0 }
             };
         }
 
-        static void RunZeroTokenPrecheck(CronJob job, string pcType, out bool hasSignal, out string fingerprint, out string detail)
+        static Dictionary<string, object> NotTriggered(CronJob job, string status, string reason)
+        {
+            return new Dictionary<string, object>
+            {
+                { "job_id", job.id }, { "name", job.name }, { "triggered", false },
+                { "status", status }, { "reason", reason }, { "tokens_used", 0 }
+            };
+        }
+
+        static CronJob FindJob(List<CronJob> jobs, string id)
+        {
+            return jobs.FirstOrDefault(j => string.Equals(j.id, id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        static bool IsActive(CronJob job) { return job != null && (job.run_status == "queued" || job.run_status == "running"); }
+
+        static void EnsureEditable(CronJob job)
+        {
+            if (IsActive(job)) throw new InvalidOperationException("Wait for the queued or running job to finish first.");
+        }
+
+        static void ValidateAction(CronJob job)
+        {
+            if (!string.IsNullOrWhiteSpace(job.tool) && (!string.IsNullOrWhiteSpace(job.prompt) || !string.IsNullOrWhiteSpace(job.skill)))
+                throw new ArgumentException("Choose a registered tool or a prompt/skill for each job.");
+            string check = NormalizePrecheckType(job.precheck_type);
+            if (check != "none" && check != "folder_changed" && check != "sql_nonzero" && check != "overdue_tasks")
+                throw new ArgumentException("Unknown pre-check: " + job.precheck_type);
+        }
+
+        static string UtcNow() { return DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture); }
+
+        static void RecoverActionsLocked()
+        {
+            if (actionsRecovered) return;
+            var jobs = LoadJobsLocked();
+            var interrupted = jobs.Where(j => j.run_status == "running").ToList();
+            foreach (var job in interrupted)
+            {
+                job.run_status = "interrupted";
+                job.run_error = "The app stopped during execution. Check any output before retrying.";
+                job.run_finished_utc = UtcNow();
+            }
+            if (interrupted.Count > 0) SaveJobsLocked(jobs);
+            foreach (var job in jobs.Where(j => j.run_status == "queued")) QueueActionLocked(job);
+            actionsRecovered = true;
+        }
+
+        static void QueueActionLocked(CronJob job)
+        {
+            actions.Enqueue(job);
+            if (actionWorker) return;
+            actionWorker = true;
+            ThreadPool.QueueUserWorkItem(delegate { WorkActions(); });
+        }
+
+        static void WorkActions()
+        {
+            while (true)
+            {
+                CronJob job;
+                CancellationToken cancellation;
+                lock (stateLock)
+                {
+                    if (actions.Count == 0 || runCancellation.IsCancellationRequested)
+                    {
+                        actionWorker = false;
+                        return;
+                    }
+                    job = actions.Dequeue();
+                    cancellation = runCancellation.Token;
+                }
+
+                try
+                {
+                    if (!SaveRunState(job, "queued", "running", "", "")) continue;
+                    string output = "", error = "", status = "completed";
+                    try { output = CronExecution.Run(job, cancellation); }
+                    catch (OperationCanceledException) { status = "interrupted"; error = "The app stopped during execution."; }
+                    catch (Exception ex) { status = "failed"; error = ex.Message; }
+                    if (SaveRunState(job, "running", status, output, error) && !cancellation.IsCancellationRequested)
+                    {
+                        AssistantHarness.Report("Scheduled job " + status + ": " + job.name);
+                        NotifySafe("Scheduled job " + status + ": " + job.name, error.Length > 0 ? error : output);
+                    }
+                }
+                catch (Exception ex) { App.Log("Save scheduled run " + job.id + ": " + ex.Message); }
+            }
+        }
+
+        static bool SaveRunState(CronJob run, string from, string status, string output, string error)
+        {
+            lock (stateLock)
+            {
+                var jobs = LoadJobsLocked();
+                var job = FindJob(jobs, run.id);
+                if (job == null || job.last_run_id != run.last_run_id || job.run_status != from) return false;
+                job.run_status = status;
+                job.run_output = Cut(output, 24000);
+                job.run_error = Cut(error, 4000);
+                if (status != "running") job.run_finished_utc = UtcNow();
+                SaveJobsLocked(jobs);
+                return true;
+            }
+        }
+
+        static void RunZeroTokenPrecheck(CronJob job, string pcType, out bool hasSignal, out string fingerprint, out string detail, bool retry)
         {
             hasSignal = false;
             fingerprint = "";
@@ -440,7 +577,7 @@ namespace StickyPro
                     catch (Exception) { }
                 }
                 fingerprint = Sha256Short(string.Join("\n", entries.ToArray()));
-                if (!string.IsNullOrEmpty(job.last_hash) && string.Equals(job.last_hash, fingerprint, StringComparison.Ordinal))
+                if (!retry && !string.IsNullOrEmpty(job.last_hash) && string.Equals(job.last_hash, fingerprint, StringComparison.Ordinal))
                 {
                     detail = "No changes in " + folder;
                     return;
@@ -508,6 +645,7 @@ namespace StickyPro
 
         public static bool IsAssistantBusy()
         {
+            if (actionWorker) return true;
             try
             {
                 if (AgentStore.Busy == null || AgentStore.Busy.Count == 0) return false;
@@ -892,7 +1030,12 @@ namespace StickyPro
                 { "enabled", j.enabled },
                 { "last_run_utc", j.last_run_utc },
                 { "last_hash", j.last_hash },
-                { "one_shot", j.one_shot }
+                { "one_shot", j.one_shot },
+                { "tool", j.tool }, { "tool_args", j.tool_args },
+                { "agent", j.agent }, { "folder", j.folder },
+                { "last_run_id", j.last_run_id }, { "run_status", j.run_status },
+                { "run_output", j.run_output }, { "run_error", j.run_error },
+                { "run_finished_utc", j.run_finished_utc }
             };
         }
 

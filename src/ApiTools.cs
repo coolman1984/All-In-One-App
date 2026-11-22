@@ -154,8 +154,8 @@ namespace StickyPro
                 new[] { "chat_id|string|Chat id to compact", "protect_last_n|integer|Number of recent turns to keep verbatim (default 6)" }, "chat_id"));
 
             // ---- Proactive Cron, Idle-Only Heartbeat & Folder Watchers ----
-            l.Add(T("cron_manage", "Manage proactive cron jobs and follow-ups", "List, create, follow_up (one-shot self-schedule), update, delete, or run_now on scheduled routines with 0-token pre-checks and [SILENT] suppression.", false,
-                new[] { "action|string|list, create, follow_up, update, delete, or run_now", "id|string|Job id (for update, delete, run_now)", "name|string|Job name", "schedule|string|every:15m, daily:08:00, or once:YYYY-MM-DDTHH:mm", "prompt|string|Task prompt when triggered", "skill|string|Optional skill slug", "precheck_type|string|none, folder_changed, sql_nonzero, or overdue_tasks", "precheck_arg|string|Folder path or SQL query for 0-token pre-check", "enabled|boolean|Enable or disable job", "one_shot|boolean|Disable automatically after firing once", "in_minutes|integer|Relative minutes for action=follow_up (default 15)" }, "action"));
+            l.Add(T("cron_manage", "Manage proactive cron jobs and follow-ups", "List, create, follow_up (one-shot self-schedule), update, delete, run_now, or retry scheduled routines. List exposes each last run status, output and error.", false,
+                new[] { "action|string|list, create, follow_up, update, delete, run_now, or retry", "id|string|Job id (for update, delete, run_now, retry)", "name|string|Job name", "schedule|string|every:15m, daily:08:00, or once:YYYY-MM-DDTHH:mm", "prompt|string|Task prompt when triggered", "skill|string|Optional saved skill slug", "tool|string|Registered dynamic tool to execute without an AI provider", "tool_args|any_object|Arguments for the registered tool", "agent|string|Optional Assistant provider ID", "folder|string|Optional working folder for Assistant prompts", "precheck_type|string|none, folder_changed, sql_nonzero, or overdue_tasks", "precheck_arg|string|Folder path or SQL query for 0-token pre-check", "enabled|boolean|Enable or disable job", "one_shot|boolean|Disable automatically after firing once", "in_minutes|integer|Relative minutes for action=follow_up (default 15)" }, "action"));
             l.Add(T("heartbeat_status", "Check or run idle-only Heartbeat", "Inspect HEARTBEAT.md/GOALS.md status or run an immediate 0-token local heartbeat check (returns HEARTBEAT_OK when clean).", true,
                 new[] { "run_now|boolean|Run the 0-token local heartbeat check immediately (default false)", "force|boolean|Run even if an Assistant chat is marked busy (default false)" }));
             l.Add(T("watch_folder", "Watch a folder for automatic vault indexing", "Add, remove, or list FileSystemWatcher folders whose new/modified Office and PDF files auto-index into vault.db after a 1.5 s debounce.", false,
@@ -976,13 +976,17 @@ namespace StickyPro
                 S(a, "id"),
                 S(a, "name"),
                 S(a, "schedule"),
-                S(a, "prompt"),
-                S(a, "skill"),
+                Has(a, "prompt") ? S(a, "prompt") : null,
+                Has(a, "skill") ? S(a, "skill") : null,
                 S(a, "precheck_type"),
-                S(a, "precheck_arg"),
+                Has(a, "precheck_arg") ? S(a, "precheck_arg") : null,
                 B(a, "enabled"),
                 B(a, "one_shot"),
-                I(a, "in_minutes", 0)));
+                I(a, "in_minutes", 0),
+                Has(a, "tool") ? S(a, "tool") : null,
+                Has(a, "tool_args") ? (a["tool_args"] as Dictionary<string, object> ?? new Dictionary<string, object>()) : null,
+                Has(a, "agent") ? S(a, "agent") : null,
+                Has(a, "folder") ? S(a, "folder") : null));
         }
 
         static string WatchFolderTool(Dictionary<string, object> a)

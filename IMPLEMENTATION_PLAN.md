@@ -237,6 +237,13 @@ Fixed saved-work hazards and workflow bugs found on `cbed099`. See the [review m
 
 The scheduler evaluates local conditions and publishes notifications. The current code has no subscriber that executes stored job prompts or skills automatically. End-to-end scheduling claims require that implementation plus verification.
 
+### Completing the workflow
+
+1. Give saved schedules an execution path. Send a prompt or saved playbook through the existing Assistant provider. Execute a registered tool directly when a model is unnecessary.
+2. Store each job's latest run state and output. Commit the queued state before launch, serialize desktop workflows, and surface interrupted work on the next start.
+3. Add a Scheduled jobs window for creating, enabling, running and checking routines. Keep the existing scheduler tool interface and stop on an idle pre-check.
+4. Verify saved schedules through a local provider fixture and through the already registered SQL tool path. Test duplicate attempts, interrupted runs, and missing providers without opening production files.
+
 ## 3. File Map (Modular, Low-Bloat Structure)
 
 | File | Type | Phase | Responsibility |

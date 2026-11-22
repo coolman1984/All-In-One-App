@@ -362,6 +362,7 @@ namespace StickyPro
 
             var bar = MainForm.Bar();
             bar.Controls.Add(MainForm.Heading("Tasks & reminders"));
+            bar.Controls.Add(Ui.Btn("Scheduled jobs...", delegate { CronWindow.Open(FindForm()); }));
             var hint = new Label { AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(0, Ui.S(9), 0, 0), Text = "Space = done · Del = delete · Ctrl+Alt+J adds a task from anywhere" };
             bar.Controls.Add(hint);
             Controls.Add(bar);
