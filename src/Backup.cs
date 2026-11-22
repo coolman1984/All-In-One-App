@@ -123,6 +123,7 @@ namespace StickyPro
                 if (new DirectoryInfo(root).Parent == null) throw new IOException("Cannot restore into a drive root.");
                 Validate(pending);
                 CopyData(pending, stage);
+                CronEngine.PrepareRestoredJobs(stage);
                 Validate(stage);
                 File.WriteAllText(marker, previous);
                 Directory.Move(root, previous);

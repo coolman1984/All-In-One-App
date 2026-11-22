@@ -151,27 +151,31 @@ namespace StickyPro
             }
         }
 
-        static List<CronJob> LoadJobsLocked()
+        static List<CronJob> LoadJobsLocked() { return ReadJobs(JobsFile); }
+
+        static List<CronJob> ReadJobs(string path)
         {
             string json;
-            try { json = File.ReadAllText(JobsFile, Encoding.UTF8); }
+            try { json = File.ReadAllText(path, Encoding.UTF8); }
             catch (FileNotFoundException) { return new List<CronJob>(); }
             catch (DirectoryNotFoundException) { return new List<CronJob>(); }
             var jobs = Js.Deserialize<List<CronJob>>(json);
-            if (jobs == null) throw new InvalidDataException("Empty schedule data in " + JobsFile);
+            if (jobs == null) throw new InvalidDataException("Empty schedule data in " + path);
             jobs.RemoveAll(j => j == null);
             return jobs;
         }
 
-        static void SaveJobsLocked(List<CronJob> jobs)
+        static void SaveJobsLocked(List<CronJob> jobs) { WriteJobs(JobsFile, jobs); }
+
+        static void WriteJobs(string path, List<CronJob> jobs)
         {
-            Directory.CreateDirectory(CronDir);
-            string tmp = JobsFile + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            string tmp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
                 File.WriteAllText(tmp, Js.Serialize(jobs), Utf8NoBom);
-                if (File.Exists(JobsFile)) File.Replace(tmp, JobsFile, null, true);
-                else File.Move(tmp, JobsFile);
+                if (File.Exists(path)) File.Replace(tmp, path, null, true);
+                else File.Move(tmp, path);
             }
             finally { try { File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
         }
@@ -469,6 +473,21 @@ namespace StickyPro
         }
 
         static string UtcNow() { return DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture); }
+
+        public static void PrepareRestoredJobs(string profile)
+        {
+            string path = Path.Combine(profile, "assistant", "cron", "jobs.json");
+            var jobs = ReadJobs(path);
+            var unsettled = jobs.Where(IsActive).ToList();
+            foreach (var job in unsettled)
+            {
+                job.run_status = "interrupted";
+                job.run_error = "This backup contained an unfinished run. Review the output before retrying.";
+                job.run_finished_utc = UtcNow();
+                job.enabled = false;
+            }
+            if (unsettled.Count > 0) WriteJobs(path, jobs);
+        }
 
         static void RecoverActionsLocked()
         {

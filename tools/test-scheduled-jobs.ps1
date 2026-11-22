@@ -105,6 +105,17 @@ if ($prompt -notmatch 'Fixture request' -or $prompt -notmatch 'Fixture skill ste
         if ($entry['id'] -eq 'assistant') { $entry['run_status'] = 'running'; $entry['run_output'] = '' }
     }
     [IO.File]::WriteAllText($jobFile, (ConvertTo-Json -InputObject $list -Depth 14 -Compress))
+    $restore = Join-Path $dir 'restore-fixture'
+    $restoreJobs = Join-Path $restore 'assistant\cron\jobs.json'
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($restoreJobs)) | Out-Null
+    [IO.File]::Copy($jobFile, $restoreJobs)
+    $cron.GetMethod('PrepareRestoredJobs', $static).Invoke($null, @($restore.PSObject.BaseObject)) | Out-Null
+    $restoredList = $json.DeserializeObject([IO.File]::ReadAllText($restoreJobs))
+    foreach ($id in 'tool', 'assistant') {
+        $restored = @($restoredList | Where-Object { $_['id'] -eq $id })[0]
+        Assert ($restored['run_status'] -eq 'interrupted' -and !$restored['enabled']) 'Restoring a backup could replay a stale queued or running job.'
+    }
+
     $cron.GetMethod('Start', $static).Invoke($null, @()) | Out-Null
     Assert ((Wait-ScheduledJob 'tool')['run_status'] -eq 'completed') 'Durable queued job was not processed after restart.'
     Assert ((Get-ScheduledJob 'assistant')['run_status'] -eq 'interrupted') 'An interrupted action was reset or replayed.'
@@ -113,7 +124,7 @@ if ($prompt -notmatch 'Fixture request' -or $prompt -notmatch 'Fixture skill ste
     $timerResult = Wait-ScheduledJob 'due-by-clock'
     Assert ($timerResult['run_status'] -eq 'completed' -and !$timerResult['enabled']) 'The timer did not execute the due one-shot.'
 
-    Write-Host 'SCHEDULED JOBS OK: window, tool args, prompt + skill subprocess, one-shot, duplicate protection, retries, provider failures and restart recovery'
+    Write-Host 'SCHEDULED JOBS OK: window, tool args, prompt + skill subprocess, one-shot, duplicate protection, retries, provider failures, restart recovery and backup restore'
 }
 finally {
     $cron.GetMethod('Stop', $static).Invoke($null, @()) | Out-Null
