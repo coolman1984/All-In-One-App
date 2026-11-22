@@ -19,6 +19,12 @@ $category = [Activator]::CreateInstance($assembly.GetType('StickyPro.TagCategory
 $category.Name = 'Urgent'; $category.Color = 'Red'
 $store.GetField('TagCats', $static).GetValue($null).Add($category)
 $getState = [Windows.Forms.Control].GetMethod('GetState', $instance)
+# WinForms caps sizable windows at the desktop's native tracking width, even when hidden.
+$maxWidth = [Windows.Forms.SystemInformation]::MaxWindowTrackSize.Width
+$widths = @(700, 1000, 1600 | Where-Object { $_ -le $maxWidth })
+if (!$widths.Count) { throw "The desktop is too narrow for the layout fixture (maximum tracking width $maxWidth px)." }
+if ($widths[-1] -lt 1600 -and $maxWidth -gt $widths[-1]) { $widths += $maxWidth }
+Write-Host ("Testing widths " + ($widths -join '/') + " px (native tracking maximum $maxWidth px)")
 $script:checks = 0
 function Layout-All($control) {
     $control.PerformLayout()
@@ -37,7 +43,7 @@ function Check-Actions($control, [string]$path) {
 }
 $main = [Activator]::CreateInstance($assembly.GetType('StickyPro.MainForm'), $true)
 try {
-    foreach ($width in @(700, 1000, 1600)) {
+    foreach ($width in $widths) {
         $main.MaximumSize = [Drawing.Size]::Empty
         $main.Size = New-Object Drawing.Size($width, 900)
         if ($main.Width -ne $width) { throw "Main window cannot reflow at $width px." }
@@ -52,11 +58,11 @@ try {
 $settingsForm = [Activator]::CreateInstance($assembly.GetType('StickyPro.SettingsForm'), $instance, $null, [object[]]@($false), $null)
 try {
     $settingsForm.MaximumSize = [Drawing.Size]::Empty
-    foreach ($width in @(700, 1000, 1600)) { $settingsForm.Width = $width; Layout-All $settingsForm; Check-Actions $settingsForm ("Settings/$width") }
+    foreach ($width in $widths) { $settingsForm.Width = $width; Layout-All $settingsForm; Check-Actions $settingsForm ("Settings/$width") }
 } finally { $settingsForm.Dispose() }
 $bitmap = New-Object Drawing.Bitmap(32, 32)
 $editor = [Activator]::CreateInstance($assembly.GetType('StickyPro.SnipEditor'), $instance, $null, [object[]]@($bitmap.PSObject.BaseObject, $null), $null)
 try {
-    foreach ($width in @(700, 1000, 1600)) { $editor.Width = $width; Layout-All $editor; Check-Actions $editor ("Editor/$width") }
+    foreach ($width in $widths) { $editor.Width = $width; Layout-All $editor; Check-Actions $editor ("Editor/$width") }
 } finally { $editor.Dispose(); $bitmap.Dispose() }
-Write-Host ("LAYOUT OK: 700/1000/1600 px; " + $script:checks + ' action bounds checked; no windows shown')
+Write-Host ("LAYOUT OK: " + ($widths -join "/") + " px; " + $script:checks + ' action bounds checked; no windows shown')
