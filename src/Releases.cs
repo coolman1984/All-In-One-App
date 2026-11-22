@@ -14,7 +14,8 @@ namespace StickyPro
     // One-click update distribution through the team folder.
     //  - The admin's PC holds an RSA-3072 release key in the Windows user key store (never in the share).
     //    team.json carries the public key; every client pins it when it joins.
-    //  - A release = releases\<version>\AllInOne.exe + manifest.json + manifest.sig (signed: version, SHA-256, size, notes).
+    //  - A release = releases\<version>\AllInOne.bin (the exe; company file servers often block *.exe, so it is stored as .bin;
+//    releases made before this change used AllInOne.exe and are still read) + manifest.json + manifest.sig (signed: version, SHA-256, size, notes).
     //  - channels.json + channels.sig (signed, with an increasing sequence number) say which version each channel
     //    gets: dev (the admin's PC), pilot (chosen PCs), stable (everyone, with a rollout percent), and a pause switch.
     //  - Clients check every 2 minutes: verify signatures, download in chunks with resume, verify the checksum,
@@ -38,6 +39,15 @@ namespace StickyPro
 
     static class Releases
     {
+        // The exe is stored on the share as .bin: company file servers (S:\Public_Folder) refuse any *.exe file.
+        public const string PackageName = "AllInOne.bin";
+        public static string PackagePath(TeamClient c, string version)
+        {
+            string dir = Path.Combine(c.Root, "releases", version);
+            string bin = Path.Combine(dir, PackageName), old = Path.Combine(dir, "AllInOne.exe");
+            return File.Exists(bin) || !File.Exists(old) ? bin : old;
+        }
+
         // ---------- keys (Windows key store, provider with SHA-256 support) ----------
         const int ProvRsaAes = 24;
         static CspParameters Csp(TeamClient c, bool existing)
@@ -184,7 +194,7 @@ namespace StickyPro
             ReleaseManifest m;
             try
             {
-                string sha = TeamClient.CopyResumable(exe, Path.Combine(staging, "AllInOne.exe"), null, null);
+                string sha = TeamClient.CopyResumable(exe, Path.Combine(staging, PackageName), null, null);
                 if (!string.Equals(sha, TeamClient.FileSha(exe), StringComparison.OrdinalIgnoreCase)) throw new IOException("Published copy differs from the built exe.");
                 m = new ReleaseManifest { Version = version, Sha = sha, Size = new FileInfo(exe).Length, Notes = notes ?? "", Commit = commit ?? "", Publisher = c.Local.Name, Channel = channel, Published = TeamClient.NowMs(), Forced = forced };
                 WriteSigned(c, Path.Combine(staging, "manifest.json"), m);
@@ -289,7 +299,7 @@ namespace StickyPro
             {
                 Set("downloading"); Progress = 0;
                 try { if (File.Exists(staged)) File.Delete(staged); } catch { }
-                string sha = TeamClient.CopyResumable(Path.Combine(c.Root, "releases", version, "AllInOne.exe"), staged, (d, t) => { int p = t > 0 ? (int)(d * 100 / t) : 0; if (p != Progress) { Progress = p; var h = StateChanged; if (h != null) try { h(); } catch { } } }, null);
+                string sha = TeamClient.CopyResumable(PackagePath(c, version), staged, (d, t) => { int p = t > 0 ? (int)(d * 100 / t) : 0; if (p != Progress) { Progress = p; var h = StateChanged; if (h != null) try { h(); } catch { } } }, null);
                 if (!string.Equals(sha, m.Sha, StringComparison.OrdinalIgnoreCase)) { try { File.Delete(staged); } catch { } Set("failed", "Downloaded file does not match the signed checksum: deleted."); return State; }
             }
             Progress = 100; StagedExe = staged; Ready = true; ForcedReady = forced;

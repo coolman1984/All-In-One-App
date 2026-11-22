@@ -3,7 +3,7 @@
 #  2. A real app instance (portable copy in build-test\e2e\app, own data folder) joins the test team, gets a
 #     forced pilot release, installs it through the updater, restarts and reports "updated".
 # The normal All in One must be closed (single instance); this script closes it and starts it again at the end.
-param([switch]$SkipPipeline)
+param([switch]$SkipPipeline, [string]$ShareRoot)   # -ShareRoot: a TEST subfolder on a real share, deleted at the end
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 $root = Split-Path -Parent $PSScriptRoot
@@ -23,7 +23,7 @@ function Ok($v, $m) { if (-not $v) { throw "FAIL: $m" }; Write-Host "  ok  $m" }
 
 $e2e = Join-Path $root 'build-test\e2e'
 if (Test-Path $e2e) { Remove-Item -Recurse -Force $e2e }
-$share = Join-Path $e2e 'share'; $app = Join-Path $e2e 'app'
+$share = if ($ShareRoot) { $ShareRoot } else { Join-Path $e2e 'share' }; $app = Join-Path $e2e 'app'
 New-Item -ItemType Directory -Force $share, $app, (Join-Path $app 'data') | Out-Null
 (T 'Store').GetField('Dir', $static).SetValue($null, (Join-Path $e2e 'admin-data'))
 $admin = [Activator]::CreateInstance((T 'TeamClient'), @([string](Join-Path $e2e 'admin')))
@@ -42,7 +42,7 @@ try {
         Write-Host 'Build & Publish pipeline (takes a few minutes)...'
         $say = [Action[string]] { param($s) Write-Host "    $s" }
         $rel = Call 'TeamPublish' 'BuildAndPublish' @($admin, $root, 'dev', 'E2E pipeline release', $false, $false, $say)
-        Ok ($rel.Version.Length -gt 0 -and (Test-Path (Join-Path $share "releases\$($rel.Version)\AllInOne.exe"))) "pipeline published $($rel.Version) in $([int]$sw.Elapsed.TotalSeconds) s"
+        Ok ($rel.Version.Length -gt 0 -and (Test-Path (Join-Path $share "releases\$($rel.Version)\AllInOne.bin"))) "pipeline published $($rel.Version) in $([int]$sw.Elapsed.TotalSeconds) s"
     }
 
     Write-Host 'Real app update (about 3 minutes)...'
@@ -86,6 +86,7 @@ finally {
     foreach ($p in Get-Process AllInOne -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$e2e*" }) { try { $p.Kill() } catch {} }
     try { Call 'Releases' 'DeleteKey' @($admin) } catch {}; try { Call 'TeamSecurity' 'DeleteDeviceKey' @($admin) } catch {}; if ($pc) { try { Call 'TeamSecurity' 'DeleteDeviceKey' @($pc) } catch {} }
     Start-Sleep 1
+    if ($ShareRoot) { Remove-Item -Recurse -Force $ShareRoot -ErrorAction SilentlyContinue }
     if (-not (Get-Process AllInOne -ErrorAction SilentlyContinue)) { Start-Process (Join-Path $root 'AllInOne.exe') }
 }
 

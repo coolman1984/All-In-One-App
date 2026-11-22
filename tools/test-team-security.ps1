@@ -1,6 +1,7 @@
 # Admin / user security tests: identities, approval, signed default-deny policy, encryption, revocation,
 # suspend / block / terminate, admin authentication, and remote assistance (approval, view vs control,
 # timeout, stop, revoke mid-session, forged files). Temporary folders and temporary keys only.
+param([string]$ShareRoot)   # optional: a TEST subfolder on a real share (created and deleted by this script)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 $root = Split-Path -Parent $PSScriptRoot
@@ -23,7 +24,7 @@ function SetStatic([string]$type, [string]$field, $value) { (T $type).GetField($
 $fixture = Join-Path $root ('build-test\sec-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force $fixture | Out-Null
 SetStatic 'Store' 'Dir' $fixture
-$share = Join-Path $fixture 'share'
+$share = if ($ShareRoot) { $ShareRoot } else { Join-Path $fixture 'share' }
 $clients = @()
 function Client([string]$name) {
     $c = [Activator]::CreateInstance((T 'TeamClient'), @([string](Join-Path $fixture $name)))
@@ -221,6 +222,7 @@ try {
 finally {
     foreach ($x in $clients) { try { Call 'Releases' 'DeleteKey' @($x) } catch {}; try { Call 'TeamSecurity' 'DeleteDeviceKey' @($x) } catch {} }
     Remove-Item -Recurse -Force $fixture -ErrorAction SilentlyContinue
+    if ($ShareRoot) { Remove-Item -Recurse -Force $ShareRoot -ErrorAction SilentlyContinue }
 }
 
 

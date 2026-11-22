@@ -1,6 +1,7 @@
 # Team chat + update distribution tests. Uses ONLY temporary folders as the "shared folder" (never S:\ or any
 # production share) and a temporary signing key that is deleted at the end.
 # Needs build-test\StickyNotesPro.test.exe (tools\test-build.ps1).
+param([string]$ShareRoot)   # optional: a TEST subfolder on a real share (created and deleted by this script)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 $root = Split-Path -Parent $PSScriptRoot
@@ -28,7 +29,7 @@ $fixture = Join-Path $root ('build-test\team-' + [guid]::NewGuid().ToString('N')
 New-Item -ItemType Directory -Force $fixture | Out-Null
 $store = T 'Store'
 $store.GetField('Dir', $static).SetValue($null, $fixture)
-$share = Join-Path $fixture 'share'
+$share = if ($ShareRoot) { $ShareRoot } else { Join-Path $fixture 'share' }
 function Client([string]$name) {
     $c = [Activator]::CreateInstance((T 'TeamClient'), @([string](Join-Path $fixture $name)))
     $c.Local.Name = $name; $c.Local.KeyContainer = 'AIO-Test-' + [guid]::NewGuid().ToString('N'); $c.Local.DeviceKeyContainer = 'AIO-TestDev-' + [guid]::NewGuid().ToString('N'); $c.SaveLocal()
@@ -165,7 +166,7 @@ try {
     $s = Check $C $cDir
     Assert ($s -eq 'staged' -and (Get-FileHash $staged -Algorithm SHA256).Hash.ToLower() -eq $rel2.Sha) 'interrupted download resumed and verified'
 
-    $relExe = Join-Path $share "releases\$($rel2.Version)\AllInOne.exe"; $good = [IO.File]::ReadAllBytes($relExe)
+    $relExe = Join-Path $share "releases\$($rel2.Version)\AllInOne.bin"; $good = [IO.File]::ReadAllBytes($relExe)
     $bad = [byte[]]$good.Clone(); $bad[5000] = $bad[5000] -bxor 1; [IO.File]::WriteAllBytes($relExe, $bad)
     $dDir = Join-Path $fixture 'D-updates'
     $s = Check $B $dDir
@@ -239,6 +240,7 @@ try {
 finally {
     foreach ($x in $A, $B, $C) { try { Call 'Releases' 'DeleteKey' @($x) } catch {}; try { Call 'TeamSecurity' 'DeleteDeviceKey' @($x) } catch {} }
     Remove-Item -Recurse -Force $fixture -ErrorAction SilentlyContinue
+    if ($ShareRoot) { Remove-Item -Recurse -Force $ShareRoot -ErrorAction SilentlyContinue }
 }
 
 
