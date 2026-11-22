@@ -1,0 +1,26 @@
+name: Windows checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows regression checks
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build and run Windows tests
+        shell: powershell
+        run: |
+          .\tools\test-all.ps1 -Hosted
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
