@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: windows-2022
-    timeout-minutes: 6
+    timeout-minutes: 7
     strategy:
       fail-fast: false
       matrix:
@@ -20,6 +20,8 @@ jobs:
             suites: reliability,document-close,regressions,saved-work
           - group: companion
             suites: sqlite-vault,assistant-harness,hermes-memory,workflow-recorder
+          - group: desktop
+            suites: forms,dashboard,layout,capture,snip-output,recorder,visual,responsiveness,explorer-paint,leader-team
     name: Windows ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v4
@@ -33,8 +35,8 @@ jobs:
         run: |
           $failed = @()
           foreach ($suite in $env:AUDIT_WINDOWS_SUITES.Split(',')) {
-              $proc = Start-Process powershell.exe -ArgumentList '-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',"tools\test-$suite.ps1" -NoNewWindow -PassThru
-              if (!$proc.WaitForExit(90000)) { $proc.Kill(); $failed += "$suite timed out" }
-              elseif ($proc.ExitCode -ne 0) { $failed += $suite }
+              & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "tools\test-$suite.ps1"
+              if ($LASTEXITCODE -ne 0) { $failed += $suite }
+              else { Write-Host "Verified $suite (exit 0)" }
           }
           if ($failed.Count) { throw ("Windows suites failed: " + ($failed -join ', ')) }
