@@ -88,6 +88,7 @@ Format: what happened -> cause (proven) -> rule.
 - .NET HttpWebRequest ignores HTTPS_PROXY. -> Set `req.Proxy = new WebProxy(env)` + Tls12 (npm registry check 8 s).
 
 ## Windows / UI
+- Excel COM registration can be present while `Excel.Application` activation fails with `0x80080005`. Run a standalone activation without a workbook or app assembly to check the host before attributing an Office fixture failure to the app.
 - A saved Markdown Split view tried to set its divider before docking and prevented the page from opening. Wait until
   both panels fit before positioning the divider. Exercise saved modes through the main window as well as standalone controls.
 - **Explorer could leave blank rows above the first filename.** Shrinking a scrolled virtual ListView from 80

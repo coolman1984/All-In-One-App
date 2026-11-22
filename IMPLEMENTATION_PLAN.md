@@ -243,6 +243,12 @@ Fixed saved-work hazards and workflow bugs found on `cbed099`. See the [review m
 - **Back up the live vault.** Use SQLite's backup API for a committed snapshot instead of copying the active journal files. Floating cards track the most recent external application and check the clipboard and target before sending paste.
 - **Customer acceptance.** Live NASCA files, real provider and keyboard behavior, and hands-on use on the customer's desktop remain acceptance checks.
 
+### Working source verification · November 22, 2026
+
+GitHub main at `46328ef` is the working source for the project checkout. The Windows build succeeded and 21 of 22 suites passed. A standalone Excel COM activation on the test host reproduced the live Office suite failure with `0x80080005`. Interactive Office validation remains open. See the [sync history](HISTORY.md#2026-11-22--github-main-sync-and-test-runner-fix).
+
+---
+
 ## 3. File Map (Modular, Low-Bloat Structure)
 
 | File | Type | Phase | Responsibility |

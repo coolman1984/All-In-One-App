@@ -6,7 +6,8 @@ Newest first. One entry per task: date, what was asked, what was done, proof, wh
 
 - Asked to push, merge and sync with GitHub main. Fetched twelve upstream commits, pushed the Windows GitHub workflow documentation and agent-conversation test fix, and merged them into main at 6bc581e. Local main matched the live GitHub branch.
 - On source based on GitHub main at c3bd675, the native test build completed and the agent-conversation suite printed its success message and exited zero. The publishing diff and local references were checked.
-- The local app changes remain available for a separate merge decision because they conflict with the documented automation policy.
+- Follow-up on November 22. The owner selected GitHub main as the working source. Switched the project checkout to main at `46328ef` and preserved the earlier local snapshot and merge attempt.
+- The native Windows build succeeded and 21 of 22 suites completed successfully on `46328ef`. The live Office COM suite stopped at Excel activation with `0x80080005`. A standalone Excel activation reproduced the failure without loading the app. Interactive Office validation remains open.
 
 ## 2026-11-22 — Completed scheduled work and connected workflow recording
 
