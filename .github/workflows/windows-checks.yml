@@ -22,5 +22,5 @@ jobs:
       - name: Build and run Windows tests
         shell: powershell
         run: |
-          .\tools\test-all.ps1 -Hosted
+          throw 'Temporary deliberate failure to verify the main merge gate'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
