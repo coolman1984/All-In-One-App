@@ -18,7 +18,7 @@ namespace StickyPro
     static partial class ApiTools
     {
         static readonly JavaScriptSerializer Js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 100 };
-        public static readonly string[] Pages = { "dashboard", "tasks", "notes", "prompts", "clips", "agents", "terminals", "explorer", "markdown", "browser", "documents", "accounts", "snip", "chrome", "power", "system", "cards", "activity", "tagged", "shortcuts" };
+        public static readonly string[] Pages = { "dashboard", "tasks", "notes", "prompts", "clips", "agents", "team", "terminals", "explorer", "markdown", "browser", "documents", "accounts", "snip", "chrome", "power", "system", "cards", "activity", "tagged", "shortcuts" };
 
         // ---------- Schema ----------
         static List<Dictionary<string, object>> builtInSchema;

@@ -32,4 +32,4 @@ Never generate brittle coordinate macros (`click(412, 380)`). Upgrade every reco
    - Executable Dynamic Tool in `data\assistant\tools\<name>.json` (registered immediately in MCP without rebuilding `AllInOne.exe`).
 4. **Verify Before Completion:** Dry-run or test on a disposable copy, verify actual output files/SQL rows/COM cleanup (zero stray Office processes), and optionally attach to `CronEngine` or `HEARTBEAT.md`.
 
-Use **Build last** after saving a recording to start the build through the configured provider. When a tool is verified on disposable inputs, use its registered name and arguments in **Scheduled jobs**.
+Use **Build workflow** after saving a recording to start the build through the configured provider. When a tool is verified on disposable inputs, use its registered name and arguments in **Scheduled jobs**.

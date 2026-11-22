@@ -64,6 +64,18 @@ namespace StickyPro
         public List<string> Handled = new List<string>();                                  // messages already routed to my agents
         public List<string> FailedVersions = new List<string>();                           // updates that failed and were rolled back
         public string InstalledVersion = "";
+
+        internal TeamLocal WithMembership(TeamInfo team, string folder, string name, long joined)
+        {
+            var next = (TeamLocal)MemberwiseClone();
+            if (next.TeamId != team.TeamId) { next.PolicySeq = 0; next.ChannelsSeq = 0; next.HandledTerminate = 0; }
+            next.Share = folder;
+            next.PinnedKey = team.ReleaseKey;
+            next.TeamId = team.TeamId;
+            next.Name = name;
+            next.Joined = joined;
+            return next;
+        }
     }
 
     // One view row of a room: the message after edits, deletes, reactions and pins are applied.
@@ -223,20 +235,28 @@ namespace StickyPro
             Raise();
         }
 
-        public void Join(string folder)
+        public void Join(string folder) { Join(folder, Local.Name); }
+
+        internal void Join(string folder, string name)
         {
             folder = Path.GetFullPath(folder.Trim());
             var t = ReadJson<TeamInfo>(Path.Combine(folder, "team.json"));
             if (t == null) throw new InvalidOperationException("No team in this folder (team.json is missing). Ask the admin for the team folder, or create a team.");
             if (!string.IsNullOrEmpty(Local.PinnedKey) && Local.TeamId == t.TeamId && Local.PinnedKey != t.ReleaseKey)
                 throw new InvalidOperationException("The team's release key changed since you joined. This can mean tampering; ask the admin before joining again.");
-            if (Local.TeamId != t.TeamId) { Local.PolicySeq = 0; Local.ChannelsSeq = 0; Local.HandledTerminate = 0; }
-            Local.Share = folder; Local.PinnedKey = t.ReleaseKey; Local.TeamId = t.TeamId; Local.Joined = NowMs(); SaveLocal();
-            // Signed join request: the admin approves it after comparing the device code.
             string pub = TeamSecurity.EnsureDeviceKey(this);
-            string data = ToJson(new TeamJoin { Id = Me, Name = Local.Name, Machine = Environment.MachineName, User = Environment.UserName, PublicKey = pub, Ts = NowMs() });
+            long joined = NowMs();
+            string data = ToJson(new TeamJoin { Id = Me, Name = name, Machine = Environment.MachineName, User = Environment.UserName, PublicKey = pub, Ts = joined });
             WriteAtomic(Path.Combine(folder, "joins", SafeId(Me) + ".json"), ToJson(new Dictionary<string, object> { { "data", data }, { "sig", TeamSecurity.SignDevice(this, data) } }));
-            Audit("join-request", Local.Name + " " + TeamSecurity.Fingerprint(pub));
+
+            // A failed share or local write must leave the previous membership active.
+            lock (gate)
+            {
+                var next = Local.WithMembership(t, folder, name, joined);
+                WriteAtomic(Path.Combine(LocalDir, "local.json"), ToJson(next));
+                Local = next;
+            }
+            Audit("join-request", name + " " + TeamSecurity.Fingerprint(pub));
             Raise();
         }
         public void Leave() { Local.Share = ""; SaveLocal(); Raise(); }
@@ -788,11 +808,12 @@ namespace StickyPro
         static TeamClient me;
         public static TeamClient Me { get { if (me == null) me = new TeamClient(Path.Combine(Store.Dir, "team")); return me; } }
         public static bool Started;
+        internal static bool SetupInProgress;
         public static void StartIfConfigured()
         {
             try
             {
-                if (!Me.Configured || Started) return;
+                if (SetupInProgress || !Me.Configured || Started) return;
                 Started = true;
                 Releases.Attach(Me);
                 TeamAgents.Attach(Me);

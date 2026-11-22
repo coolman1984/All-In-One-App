@@ -29,28 +29,38 @@ namespace StickyPro
         TeamMsg replyTo;
         readonly ToolTip tips = new ToolTip();
         readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer { Interval = 400 };
-        bool dirty = true;
+        int dirty = 1;
 
         public TeamPage()
         {
             Dock = DockStyle.Fill; BackColor = Ui.Bg;
             BuildSetup(); BuildMain();
             Controls.Add(main); Controls.Add(setup);
-            refresh.Tick += delegate { if (dirty && Visible) { dirty = false; RefreshAll(); } };
+            refresh.Tick += delegate
+            {
+                if (TeamNet.SetupInProgress || !Visible) return;
+                if (!setup.Enabled) setup.Enabled = true;
+                if (Interlocked.Exchange(ref dirty, 0) != 0) RefreshAll();
+            };
             refresh.Start();
             c.Changed += MarkDirty;
             Releases.StateChanged += MarkDirty;
-            ShowRightView();
+            if (TeamNet.SetupInProgress) { main.Visible = false; setup.Enabled = false; } else ShowRightView();
         }
-        void MarkDirty() { dirty = true; }
+        void MarkDirty() { Interlocked.Exchange(ref dirty, 1); }
         protected override void Dispose(bool disposing) { if (disposing) { c.Changed -= MarkDirty; Releases.StateChanged -= MarkDirty; refresh.Dispose(); } base.Dispose(disposing); }
-        protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); c.ActiveRoom = Visible && c.Reachable ? room : ""; if (Visible) { dirty = true; c.Wake.Set(); } }
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            c.ActiveRoom = !TeamNet.SetupInProgress && Visible && main != null && main.Visible ? room : "";
+            if (Visible) { MarkDirty(); c.Wake.Set(); }
+        }
 
         Panel waiting; Label waitingText;
-        void ShowRightView()
+        void ShowRightView(string membershipStatus = null)
         {
             bool ok = c.Configured;
-            string status = ok && c.Reachable ? c.MyStatus : "approved";
+            string status = membershipStatus ?? (ok && c.Reachable ? c.MyStatus : "approved");
             bool approved = status == "approved";
             setup.Visible = !ok; main.Visible = ok && approved;
             if (waiting == null)
@@ -65,7 +75,7 @@ namespace StickyPro
             if (ok && !approved)
                 waitingText.Text = status == "pending" ? "Waiting for the admin to approve this PC.\n\nYour device code: " + c.DeviceCode + "\nTell the admin this code so they can check it is really you." :
                     status == "suspended" ? "Your team access is paused by the admin." : status == "blocked" ? "This PC is blocked from the team by the admin." : "Your team access was removed by the admin.";
-            if (ok) { TeamNet.StartIfConfigured(); dirty = true; }
+            if (ok) { c.ActiveRoom = Visible && approved ? room : ""; TeamNet.StartIfConfigured(); MarkDirty(); }
         }
         public static string AskText(IWin32Window owner, string caption, string prompt, string value)
         {
@@ -89,51 +99,92 @@ namespace StickyPro
             var t = new Label { Text = "Team", Font = Ui.Big, Dock = DockStyle.Top, Height = Ui.S(44) };
             var info = new Label
             {
-                Dock = DockStyle.Top, Height = Ui.S(110), ForeColor = Ui.Muted,
-                Text = "Chat, share big files and work with AI agents together, and get every new All in One version automatically.\n" +
-                       "Everyone uses one shared network folder (no server, no open ports). Pick the team folder below.\n" +
-                       "Join: the admin already created the team there.   Create: you become the admin (you publish new versions)."
+                Dock = DockStyle.Top, Height = Ui.S(58), ForeColor = Ui.Muted,
+                Text = "Join with the shared folder your admin gave you. Create a team if you will manage it."
             };
             var folderRow = new Panel { Dock = DockStyle.Top, Height = Ui.S(36) };
             var folder = new TextBox { Dock = DockStyle.Fill, Text = string.IsNullOrEmpty(c.Local.Share) ? @"S:\Public_Folder\AllInOneTeam" : c.Local.Share };
             var browse = Ui.Btn("Browse...", null); browse.Dock = DockStyle.Right;
-            browse.Click += delegate { using (var d = new FolderBrowserDialog { SelectedPath = Directory.Exists(folder.Text) ? folder.Text : "" }) if (d.ShowDialog(FindForm()) == DialogResult.OK) folder.Text = d.SelectedPath; };
+            browse.Click += delegate { using (var d = new FolderBrowserDialog { SelectedPath = !DriveCache.IsSlowPath(folder.Text) && Directory.Exists(folder.Text) ? folder.Text : "" }) if (d.ShowDialog(FindForm()) == DialogResult.OK) folder.Text = d.SelectedPath; };
             folderRow.Controls.Add(folder); folderRow.Controls.Add(browse);
             var nameRow = new Panel { Dock = DockStyle.Top, Height = Ui.S(36) };
             var name = new TextBox { Dock = DockStyle.Fill, Text = c.Local.Name };
             nameRow.Controls.Add(name); nameRow.Controls.Add(new Label { Text = "Your name", Dock = DockStyle.Left, Width = Ui.S(110), TextAlign = ContentAlignment.MiddleLeft });
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(48), Padding = new Padding(0, Ui.S(8), 0, 0) };
             var result = new Label { Dock = DockStyle.Top, Height = Ui.S(60), ForeColor = Ui.Muted };
-            Action<Action> attempt = a =>
+            Func<string, Action<string, string>, System.Threading.Tasks.Task> attempt = async (progress, joinOrCreate) =>
             {
+                if (TeamNet.SetupInProgress) return;
+                string displayName = name.Text.Trim();
+                if (displayName.Length == 0) { result.ForeColor = Ui.Danger; result.Text = "Type your name first."; return; }
+                string path = folder.Text.Trim();
+                TeamNet.SetupInProgress = true;
+                folderRow.Enabled = nameRow.Enabled = buttons.Enabled = false;
+                result.ForeColor = Ui.Muted;
+                result.Text = progress;
+                string status = null;
                 try
                 {
-                    if (name.Text.Trim().Length == 0) throw new InvalidOperationException("Type your name first.");
-                    c.Local.Name = name.Text.Trim(); c.SaveLocal();
-                    a(); ShowRightView();
+                    status = await System.Threading.Tasks.Task.Run(() =>
+                    {
+                        joinOrCreate(path, displayName);
+                        return c.Reachable ? c.MyStatus : "approved";
+                    });
                 }
-                catch (Exception ex) { result.ForeColor = Ui.Danger; result.Text = ex.Message; }
+                catch (Exception ex)
+                {
+                    if (!IsDisposed) { result.ForeColor = Ui.Danger; result.Text = ex.Message; }
+                }
+                finally
+                {
+                    TeamNet.SetupInProgress = false;
+                    if (!IsDisposed) folderRow.Enabled = nameRow.Enabled = buttons.Enabled = true;
+                }
+                if (status != null && !IsDisposed) ShowRightView(status);
             };
-            buttons.Controls.Add(Ui.Btn("Join team", delegate { attempt(() => c.Join(folder.Text)); }, true));
-            buttons.Controls.Add(Ui.Btn("Create team (I am the admin)", delegate
+            buttons.Controls.Add(Ui.Btn("Join team", async delegate { await attempt("Sending join request…", c.Join); }, true));
+            buttons.Controls.Add(Ui.Btn("Create team", async delegate
             {
+                if (TeamNet.SetupInProgress) return;
                 if (MessageBox.Show(FindForm(), "Create a new team in\n" + folder.Text + "\n\nThis creates the team files there and makes this PC the admin that approves people and publishes app updates.", "Team", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
                 string p1 = AdminConsole.PromptSecret(FindForm(), "Admin passphrase", "Choose the admin passphrase (8+ characters). It is asked before admin actions; it is not stored anywhere in clear.");
                 if (p1 == null) return;
                 string p2 = AdminConsole.PromptSecret(FindForm(), "Admin passphrase", "Type it again");
                 if (p1 != p2) { result.ForeColor = Ui.Danger; result.Text = "The two passphrases differ."; return; }
-                attempt(() => { Directory.CreateDirectory(folder.Text); c.Create(folder.Text, "All in One team", p1); });
+                await attempt("Creating the team…", (path, displayName) =>
+                {
+                    c.Local.Name = displayName;
+                    c.SaveLocal();
+                    Directory.CreateDirectory(path);
+                    c.Create(path, "All in One team", p1);
+                });
             }));
-            buttons.Controls.Add(Ui.Btn("Test folder", delegate
+
+            var testFolder = Ui.Btn("Test folder", null);
+            folder.TextChanged += delegate { result.Text = ""; };
+            testFolder.Click += async delegate
             {
+                if (TeamNet.SetupInProgress) return;
+                string path = folder.Text.Trim();
+                testFolder.Enabled = false;
+                result.ForeColor = Ui.Muted;
+                result.Text = "Checking the folder…";
                 try
                 {
-                    if (!Directory.Exists(folder.Text)) throw new DirectoryNotFoundException("Folder not found or not reachable.");
-                    bool team = File.Exists(Path.Combine(folder.Text, "team.json"));
-                    result.ForeColor = Ui.Text; result.Text = "Reachable. " + (team ? "A team exists here: use Join." : "No team here yet: the admin uses Create.");
+                    bool? team = await System.Threading.Tasks.Task.Run<bool?>(() =>
+                        Directory.Exists(path) ? (bool?)File.Exists(Path.Combine(path, "team.json")) : null);
+                    if (IsDisposed || TeamNet.SetupInProgress || folder.Text.Trim() != path) return;
+                    result.ForeColor = team.HasValue ? Ui.Text : Ui.Danger;
+                    result.Text = team == true ? "Team found. Choose Join team." :
+                        team == false ? "No team here yet. An admin can create one." : "Folder is missing or unreachable.";
                 }
-                catch (Exception ex) { result.ForeColor = Ui.Danger; result.Text = ex.Message; }
-            }));
+                catch (Exception ex)
+                {
+                    if (!IsDisposed && !TeamNet.SetupInProgress && folder.Text.Trim() == path) { result.ForeColor = Ui.Danger; result.Text = ex.Message; }
+                }
+                finally { if (!IsDisposed) testFolder.Enabled = true; }
+            };
+            buttons.Controls.Add(testFolder);
             setup.Controls.Add(result); setup.Controls.Add(buttons); setup.Controls.Add(nameRow); setup.Controls.Add(new Panel { Dock = DockStyle.Top, Height = Ui.S(8) });
             setup.Controls.Add(folderRow); setup.Controls.Add(new Label { Text = "Team folder", Dock = DockStyle.Top, Height = Ui.S(24) });
             setup.Controls.Add(info); setup.Controls.Add(t);
@@ -252,7 +303,7 @@ namespace StickyPro
             room = id; lastKey = ""; SetReply(null);
             c.ActiveRoom = room; c.Wake.Set();
             if (updates.Visible) ToggleCenter();
-            dirty = true; RefreshAll();
+            MarkDirty(); RefreshAll();
             input.Focus();
         }
 
@@ -376,13 +427,13 @@ namespace StickyPro
             var m = c.Post(room, "text", text, x => { if (reply != null) x.ReplyTo = reply.Id; });
             TeamAgents.Consider(m);   // my own message may call my own agent
             input.Clear(); SetReply(null);
-            dirty = true;
+            MarkDirty();
         }
         void Info(string text)
         {
             List<AgentMsg> l; if (!localInfo.TryGetValue(room, out l)) localInfo[room] = l = new List<AgentMsg>();
             l.Add(new AgentMsg { Role = "info", Text = text, Time = DateTime.Now.Ticks });
-            lastKey = ""; dirty = true;
+            lastKey = ""; MarkDirty();
         }
         void SetReply(TeamMsg m)
         {
@@ -401,10 +452,10 @@ namespace StickyPro
             {
                 foreach (var f in list)
                 {
-                    try { c.SendFile(target, f, (d, t) => { transferText = "Sending " + Path.GetFileName(f) + "  " + (t > 0 ? d * 100 / t : 0) + "%"; dirty = true; }, null); }
-                    catch (Exception ex) { transferText = "Not sent: " + Path.GetFileName(f) + " - " + ex.Message + " (it resumes automatically)"; dirty = true; continue; }
+                    try { c.SendFile(target, f, (d, t) => { transferText = "Sending " + Path.GetFileName(f) + "  " + (t > 0 ? d * 100 / t : 0) + "%"; MarkDirty(); }, null); }
+                    catch (Exception ex) { transferText = "Not sent: " + Path.GetFileName(f) + " - " + ex.Message + " (it resumes automatically)"; MarkDirty(); continue; }
                 }
-                transferText = null; dirty = true;
+                transferText = null; MarkDirty();
             });
         }
         void Download(TeamMsg m, bool open)
@@ -415,11 +466,11 @@ namespace StickyPro
             {
                 try
                 {
-                    string path = c.Download(m, folder, (d, t) => { transferText = "Downloading " + m.FileName + "  " + (t > 0 ? d * 100 / t : 0) + "%"; dirty = true; }, null);
-                    transferText = "Saved " + path; dirty = true;
+                    string path = c.Download(m, folder, (d, t) => { transferText = "Downloading " + m.FileName + "  " + (t > 0 ? d * 100 / t : 0) + "%"; MarkDirty(); }, null);
+                    transferText = "Saved " + path; MarkDirty();
                     if (open) System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
                 }
-                catch (Exception ex) { transferText = "Download failed: " + ex.Message; dirty = true; }
+                catch (Exception ex) { transferText = "Download failed: " + ex.Message; MarkDirty(); }
             });
         }
         void ReportProblem()
@@ -539,7 +590,7 @@ namespace StickyPro
             {
                 string id = d.Id;
                 var item = new ToolStripMenuItem(d.Name + "   @" + c.Handle(id)) { Checked = c.Local.MyAgents.Contains(id) };
-                item.Click += delegate { if (!c.Local.MyAgents.Remove(id)) c.Local.MyAgents.Add(id); c.SaveLocal(); c.Heartbeat(true); dirty = true; };
+                item.Click += delegate { if (!c.Local.MyAgents.Remove(id)) c.Local.MyAgents.Add(id); c.SaveLocal(); c.Heartbeat(true); MarkDirty(); };
                 menu.Items.Add(item);
             }
             menu.Items.Add(new ToolStripSeparator());
@@ -548,7 +599,7 @@ namespace StickyPro
             {
                 string k = mode[0];
                 var item = new ToolStripMenuItem(mode[1]) { Checked = TeamAgents.Mode(c, room) == k };
-                item.Click += delegate { c.Local.AgentMode[room] = k; c.SaveLocal(); dirty = true; };
+                item.Click += delegate { c.Local.AgentMode[room] = k; c.SaveLocal(); MarkDirty(); };
                 menu.Items.Add(item);
             }
             menu.Closed += delegate { BeginInvoke(new Action(menu.Dispose)); };
@@ -602,7 +653,7 @@ namespace StickyPro
             head.Controls.Add(back);
             upSummary = new Label { Dock = DockStyle.Top, Height = Ui.S(64), UseMnemonic = false };
             var userBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(42) };
-            userBar.Controls.Add(Ui.Btn("Check for updates now", delegate { ThreadPool.QueueUserWorkItem(delegate { try { Releases.Check(c, Application.ExecutablePath, Releases.UpdatesDir, Install.IsDevCopy); } catch (Exception ex) { App.Log("Check: " + ex.Message); } dirty = true; }); }));
+            userBar.Controls.Add(Ui.Btn("Check for updates now", delegate { ThreadPool.QueueUserWorkItem(delegate { try { Releases.Check(c, Application.ExecutablePath, Releases.UpdatesDir, Install.IsDevCopy); } catch (Exception ex) { App.Log("Check: " + ex.Message); } MarkDirty(); }); }));
             installBtn = Ui.Btn("Restart and update now", delegate { if (!Releases.InstallNow()) App.I.Status("No update is ready yet."); }, true);
             userBar.Controls.Add(installBtn);
             adminBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(42) };
@@ -631,7 +682,7 @@ namespace StickyPro
             bool show = !updates.Visible;
             updates.Visible = show; chatArea.Visible = !show;
             centerBtn.Text = show ? "Chat" : "Update center";
-            dirty = true; RefreshAll();
+            MarkDirty(); RefreshAll();
         }
         void AdminDo(string cmd)
         {
@@ -640,7 +691,7 @@ namespace StickyPro
             try { answer = TeamAdmin.Handle(c, cmd, q => MessageBox.Show(FindForm(), q, "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes); }
             catch (Exception ex) { answer = ex.Message; }
             if (answer != null) MessageBox.Show(FindForm(), answer, "Update center");
-            dirty = true;
+            MarkDirty();
         }
         void RefreshUpdates()
         {
@@ -688,7 +739,7 @@ namespace StickyPro
                 Releases.ChangeChannels(c, x => { foreach (var d in sel) { x.PilotDevices.Remove(d.Id); if (!allIn) x.PilotDevices.Add(d.Id); } }, "pilot devices");
             }
             catch (Exception ex) { MessageBox.Show(FindForm(), ex.Message, "Pilot PCs"); }
-            dirty = true;
+            MarkDirty();
         }
 
         void BuildPublishDialog()
@@ -716,7 +767,7 @@ namespace StickyPro
                         try { TeamPublish.BuildAndPublish(c, s, ch, n, ft, fc, say); say("Done. PCs on " + ch + " update within a few minutes; watch the Computers list."); }
                         catch (Exception ex) { say("STOPPED: " + ex.Message); }
                         try { f.BeginInvoke(new Action(() => go.Enabled = true)); } catch { }
-                        dirty = true;
+                        MarkDirty();
                     });
                 };
                 pad.Controls.Add(log); pad.Controls.Add(go);

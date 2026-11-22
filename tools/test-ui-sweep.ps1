@@ -181,7 +181,7 @@ function Use-SampleContent($form, [string]$route) {
         $editor.Text = "# Sample hosts file`r`n127.0.0.1 localhost`r`n::1       localhost"
     }
 }
-$routes = 'dashboard,tasks,notes,prompts,clips,agents,terminals,explorer,markdown,browser,documents,accounts,snip,chrome,chrome:extensions,power/0,power/1,power/2,power/3,system:procs,system:startup,system:drives/0,system:drives/1,system:drives/2,system:uninstall,cards,activity,tagged,shortcuts/0,shortcuts/1,shortcuts/2,shortcuts/3,settings'.Split(',')
+$routes = 'dashboard,tasks,notes,prompts,clips,agents,team,terminals,explorer,markdown,browser,documents,accounts,snip,chrome,chrome:extensions,power/0,power/1,power/2,power/3,system:procs,system:startup,system:drives/0,system:drives/1,system:drives/2,system:uninstall,cards,activity,tagged,shortcuts/0,shortcuts/1,shortcuts/2,shortcuts/3,settings'.Split(',')
 $pages = $routes | Where-Object { $_ -notin 'settings','power/2' }
 $sheets = @()
 foreach ($look in $Looks) {
@@ -196,6 +196,13 @@ foreach ($look in $Looks) {
     foreach ($size in $Sizes) {
         $w, $h = $size.Split('x') | ForEach-Object { [int]$_ }
         $form = [Activator]::CreateInstance($asm.GetType('StickyPro.MainForm'), $true)
+        $coveredPages = $routes | ForEach-Object { ($_ -split '[:/]')[0] }
+        $apiPages = $asm.GetType('StickyPro.ApiTools').GetField('Pages').GetValue($null)
+        $navPages = @($form.NavPages | ForEach-Object { $_.Key }) + 'shortcuts'
+        $missingSweep = @($navPages | Where-Object { $_ -notin $coveredPages })
+        $missingApi = @($navPages | Where-Object { $_ -notin $apiPages })
+        if ($missingSweep.Count) { $errors.Add("Missing sweep routes: " + ($missingSweep -join ', ')) }
+        if ($missingApi.Count) { $errors.Add("Missing API pages: " + ($missingApi -join ', ')) }
         $form.Size = [Drawing.Size]::new($w, $h)
         Prepare-Chrome $form
         Offscreen $form

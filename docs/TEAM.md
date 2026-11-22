@@ -88,7 +88,7 @@ PC, under `publish.lock`, signed, and replaced atomically. A release folder appe
 
 ### Admin, first time
 1. Open **Team**. Team folder: `S:\Public_Folder\AllInOneTeam` (any folder everyone can read and write). Type your name.
-2. Click **Test folder**, then **Create team (I am the admin)**. This PC gets the release key (kept in the Windows key store of your account, never in the share).
+2. Click **Test folder**, then **Create team**. This PC gets the release key (kept in the Windows key store of your account, never in the share).
 3. Give users the exe once (or the team folder path). They open **Team** > **Join team**.
 
 ### Admin, every release: Build -> Test -> Publish -> Monitor

@@ -16,7 +16,7 @@
 
 - The single authoritative technical roadmap and agent handoff spec is root [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Read it before continuing work and always update progress there (not elsewhere).
 - **Zero-Bloat & Self-Contained Single-EXE Rule:** Native C# 5 / .NET 4.8 + built-in Windows `winsqlite3.dll` only. Every external tool needed by desktop features (WebView2 DLLs, `marked.umd.js`, `ChatSlides.pptx`, real standalone `ffmpeg.exe.gz` — NEVER a `.shim` stub!) must be embedded inside `AllInOne.exe` so any user on a clean Windows PC double-clicks `AllInOne.exe` and everything works with zero extra installs.
-- **GitHub `main` Sync Rule:** After every verified milestone/phase (when working tree is stable and tests pass), commit the verified changes and push/sync to GitHub `origin/main` so the repository stays continuously up to date.
+- **GitHub `main` Sync Rule:** After every verified milestone/phase (when working tree is stable and tests pass), open a pull request to `main`. Same-repository collaborator pull requests merge automatically after the required Windows check passes. Fetch and fast-forward local `main` after GitHub merges.
 - **Anti-AI-Slop UI Craft:** Whenever creating HTML pages, Live Canvas dashboards, or web visuals, read and apply [skills/anti-slop-web-design/SKILL.md](skills/anti-slop-web-design/SKILL.md) (studio visual direction, OKLCH palettes, spring-physics animations, interactive SVG diagrams, minimal scannable text, mandatory critique pass).
 - Use [skills/workflow-to-automation/SKILL.md](skills/workflow-to-automation/SKILL.md) and [skills/proactive-companion/SKILL.md](skills/proactive-companion/SKILL.md) for automation recording, memory, cron, and proactive companion features.
 

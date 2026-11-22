@@ -21,7 +21,7 @@ Turn **All in One** into an ultra-fast, native Windows desktop workspace where t
 ### Non-Negotiable Rules
 1. **Closed Corporate Network & Open Automation:** Runs inside an isolated corporate/factory local intranet behind a strict enterprise firewall. **NEVER** add MCP ACL lock-downs, confirmation prompts, Assistant restrictions, or `MdWeb`/`Mail` HTML sanitizers, and **NEVER** ask the owner to close them.
 2. **Zero-Bloat & Self-Contained Single-EXE Budget:** Native **C# 5 / .NET Framework 4.8** (`csc.exe`, `/platform:x64`) + built-in Windows **`winsqlite3.dll`** ONLY. Every user-facing feature must work immediately when double-clicking `AllInOne.exe` on a clean PC with **zero extra installs** (verify all 6 embedded resources including real standalone `ffmpeg.exe.gz` — NEVER a Scoop `.shim` stub! — plus WebView2 DLLs, `marked.umd.js`, `ChatSlides.pptx`, and zero runtime dependency on Python/Node/Vector DBs).
-3. **Automatic Documentation & GitHub `main` Sync:** Every agent MUST update `IMPLEMENTATION_PLAN.md`, `HISTORY.md`, `LESSONS.md`, relevant `skills/*/SKILL.md`, and `docs/architecture-visual.html` automatically, AND `git commit` + `git push origin main` after every verified phase/milestone so GitHub `main` always stays synced.
+3. **Automatic Documentation & GitHub `main` Sync:** Every agent MUST update `IMPLEMENTATION_PLAN.md`, `HISTORY.md`, `LESSONS.md`, relevant `skills/*/SKILL.md`, and `docs/architecture-visual.html` automatically, and open a pull request to `main` after each verified milestone. GitHub automatically merges same-repository collaborator pull requests when the required Windows check passes. Fast-forward local `main` after the merge.
 4. **C# 5 Compiler Guard:** NO `$""` string interpolation, NO `?.` null-conditional, NO `out var`, NO `=>` expression-bodied members, NO `nameof`, NO tuples, NO pattern matching.
 5. **Anti-AI-Slop UI Craft:** Every generated HTML/Dashboard/Canvas MUST follow [skills/anti-slop-web-design/SKILL.md](skills/anti-slop-web-design/SKILL.md) (committed studio aesthetic, OKLCH palettes, custom interactive SVG/Canvas, spring-physics animations, minimal scannable text, mandatory critique pass).
 
@@ -253,9 +253,9 @@ The Windows release built from `314926d` is running with the existing profile. A
 
 The next local release fixes Cline status in Accounts. The installed app showed the active Cline Pass login and the full Windows test run passed. See the [Cline Accounts release record](HISTORY.md#2026-11-22--accounts-reflects-cline-cli-sign-in).
 
-### App cleanup, reliability and automatic merge · planned
+### App cleanup, reliability and automatic merge · approved
 
-The [repair plan](docs/plans/app-cleanup-and-reliability.html) is ready for owner approval. The `ec5dbc7` baseline captured 132 screenshots. Manual review found clutter in Home and Agents, and Team is missing from the visual sweep and the local API navigation list. After approval, set up required Windows checks and automatic merges, repair saved-work and workflow defects, simplify the UI in batches, then verify the release on this PC.
+The owner approved the [repair plan](docs/plans/app-cleanup-and-reliability.html). GitHub requires the Windows regression check and automatically merges eligible pull requests after it passes. Team is covered by the sweep and local API. The cleanup revises Home, Agents, Assistant, Accounts and Team, and the workflow repairs handle failed Team joins, browser keyboard stalls and recording errors.
 
 ---
 

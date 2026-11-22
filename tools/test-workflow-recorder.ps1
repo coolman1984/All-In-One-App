@@ -293,6 +293,18 @@ try {
         Assert ($null -ne $asstPanel) 'MainForm.SetAssistant(true) did not create AssistantPanel.'
         $recBtn = $asstPanel.GetType().GetField('btnRec', $instance).GetValue($asstPanel)
         Assert ($null -ne $recBtn) 'AssistantPanel.btnRec is missing.'
+        $dir = $storeType.GetField('Dir', $static)
+        $originalDir = $dir.GetValue($null)
+        $blocked = Join-Path $workDir 'blocked-recording'
+        $assistantStorage = Join-Path $blocked 'assistant'
+        [void][IO.Directory]::CreateDirectory($assistantStorage)
+        [IO.File]::WriteAllText((Join-Path $assistantStorage 'recordings'), 'Block the recording folder.')
+        try {
+            $dir.SetValue($null, $blocked)
+            $asstPanel.ToggleRecording()
+            Assert ($asstPanel.StatusText -like 'Could not start recording.*') 'Assistant hid the recording start error.'
+            Assert (-not $recType.GetProperty('IsRecording', $static).GetValue($null, $null)) 'Blocked recording started anyway.'
+        } finally { $dir.SetValue($null, $originalDir) }
     } finally {
         $mf.GetType().GetField('Exiting', $instance).SetValue($mf, $true)
         $mf.Dispose()

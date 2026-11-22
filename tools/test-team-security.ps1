@@ -1,11 +1,11 @@
 # Admin / user security tests: identities, approval, signed default-deny policy, encryption, revocation,
 # suspend / block / terminate, admin authentication, and remote assistance (approval, view vs control,
 # timeout, stop, revoke mid-session, forged files). Temporary folders and temporary keys only.
-param([string]$ShareRoot)   # optional: a TEST subfolder on a real share (created and deleted by this script)
+param([string]$ShareRoot, [string]$AssemblyPath)   # optional: a TEST subfolder on a real share (created and deleted by this script)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 $root = Split-Path -Parent $PSScriptRoot
-$built = Join-Path $root 'build-test\StickyNotesPro.test.exe'
+$built = if ($AssemblyPath) { (Resolve-Path -LiteralPath $AssemblyPath).Path } else { Join-Path $root 'build-test\StickyNotesPro.test.exe' }
 if (-not (Test-Path $built)) { & (Join-Path $PSScriptRoot 'test-build.ps1') | Out-Null }
 $assembly = [Reflection.Assembly]::LoadFile($built)
 $static = [Reflection.BindingFlags]'Public,NonPublic,Static'
@@ -66,6 +66,23 @@ try {
     Assert ($B.Approved -and @($B.Rooms() | ForEach-Object Id) -contains 'general') 'approved PC gets the default rooms'
     $epoch = Call 'TeamSecurity' 'LatestEpoch' @($A, 'general')
     Assert ($null -eq (Call 'TeamSecurity' 'RoomKey' @($D, 'general', $epoch))) 'pending PC holds no room key'
+
+    Write-Host 'Failed join'
+    $blockedShare = Join-Path $fixture 'blocked-share'
+    New-Item -ItemType Directory -Path $blockedShare | Out-Null
+    $teamInfo = Join-Path $blockedShare 'team.json'
+    Set-Content -LiteralPath $teamInfo -Value '{"TeamId":"blocked-team","ReleaseKey":"blocked-key"}' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $blockedShare 'joins') -Value 'This file prevents writing a join request.'
+    $newClient = Client 'New PC'
+    foreach ($client in $newClient, $B) {
+        $localFile = Join-Path $client.LocalDir 'local.json'
+        $before = Get-Content -LiteralPath $localFile -Raw
+        $activeShare = $client.Root
+        $errorOnJoin = Throws { $client.Join($blockedShare) }
+        Assert ($errorOnJoin -is [IO.IOException]) 'a failed shared write reaches the caller'
+        Assert ($client.Root -eq $activeShare -and ($client.Configured -eq ($activeShare -ne ''))) 'failed join keeps the active membership'
+        Assert ((Get-Content -LiteralPath $localFile -Raw) -ceq $before) 'failed join keeps the saved membership unchanged'
+    }
 
     Write-Host 'Encryption and signatures'
     $secret = 'TOP-SECRET-' + [guid]::NewGuid().ToString('N')

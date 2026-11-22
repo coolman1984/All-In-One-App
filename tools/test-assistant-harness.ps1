@@ -262,10 +262,13 @@ if ($msg.Contains('autonomous desktop companion') -and $msg.Contains('Current pa
     # Firing Report after panel Dispose must be safe
     $harness.GetMethod('Report', $static).Invoke($null, @('Post-dispose check'))
 
-    # 4. 20-page live PageContext() + page view hooks
+    # 4. Live PageContext() + page view hooks
     try {
         $allPages = $apiTools.GetField('Pages', $static).GetValue($null)
-        Assert ($allPages.Length -eq 20) ('Expected 20 pages in ApiTools.Pages, got ' + $allPages.Length)
+        $expectedPages = @($main.NavPages | ForEach-Object { $_.Key }) + 'shortcuts'
+        $pageDifferences = @(Compare-Object $expectedPages $allPages)
+        Assert ($pageDifferences.Count -eq 0) 'The local API and desktop navigation disagree about available pages.'
+        Assert ($allPages -contains 'team') 'Team is missing from the local API.'
         foreach ($pageKey in $allPages) {
             $main.ShowPage($pageKey)
             $pctx = $main.PageContext()
@@ -312,4 +315,4 @@ if ($msg.Contains('autonomous desktop companion') -and $msg.Contains('Current pa
     try { [IO.Directory]::Delete($fixture, $true) } catch { }
 }
 
-Write-Host 'ASSISTANT HARNESS OK: wrapping, MCP CLI wiring, isolated storage + legacy reload, ChatHistory separation, Solo/Council/Leader panel, 20-page PageContext, document MCP schema'
+Write-Host 'ASSISTANT HARNESS OK: wrapping, MCP CLI wiring, isolated storage + legacy reload, ChatHistory separation, Solo/Council/Leader panel, PageContext, document MCP schema'

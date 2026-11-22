@@ -492,7 +492,7 @@ namespace StickyPro
                     if (l == null) continue;
                     if (l.Panes == null) l.Panes = new List<string>();
                     if (l.Saved == null) l.Saved = new List<AgentWorkspace>();
-                    if (!LayoutPicker.Items.Any(x => x[0] == l.Layout)) l.Layout = "2";
+                    if (!LayoutPicker.Items.Contains(l.Layout)) l.Layout = "2";
                     if (candidate != file) lock (fileLock) recoveredFiles.Add(file);
                     return l;
                 } catch (Exception ex) { App.Log("Read chat layout: " + ex.Message); }
@@ -1363,15 +1363,7 @@ namespace StickyPro
                 TextRenderer.DrawText(g, EmptyText, Ui.Big, new Rectangle(0, ClientSize.Height / 2 - Ui.S(40), ClientSize.Width, Ui.S(60)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak);
                 return;
             }
-            if (items.Count == 0 && Working == null)
-            {
-                var r = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
-                string who = chat.Council ? "the model council (" + chat.Members.Count(x => !x.Off) + " members)" : chat.Agents.Count == 0 ? "an agent" : string.Join(" + ", chat.Agents.Select(AgentStore.NameOf));
-                TextRenderer.DrawText(g, "New chat with " + who, Ui.Big, new Rectangle(0, r.Height / 2 - Ui.S(40), r.Width, Ui.S(30)), Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
-                TextRenderer.DrawText(g, "Folder: " + (chat.Folder.Length > 0 ? chat.Folder : "(choose one in the header)") + "\nType below. Enter sends, Shift+Enter makes a new line.", Ui.Small,
-                    new Rectangle(Ui.S(20), r.Height / 2 - Ui.S(4), r.Width - Ui.S(40), Math.Max(Ui.S(40), r.Height / 2)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak | TextFormatFlags.PathEllipsis);
-                return;
-            }
+            if (items.Count == 0 && Working == null) return;
             var clip = e.ClipRectangle;
             links.RemoveAll(l => l.R.IntersectsWith(new Rectangle(clip.X, clip.Y - oy, clip.Width, clip.Height)));
             for (int i = FirstAt(clip.Top - oy); i < items.Count; i++)
@@ -1629,10 +1621,11 @@ namespace StickyPro
             input.GotFocus += delegate { inputCard.Invalidate(); input.Visible = true; };
             input.LostFocus += delegate { inputCard.Invalidate(); };
             // Placeholder (cue banners do not work on multi-line boxes): a label inside the box, hidden while there is text.
-            var hintLabel = new Label { Text = "Message   (Enter send, / commands, @name one agent)", AutoSize = false, Dock = DockStyle.Fill, ForeColor = Ui.Muted, BackColor = Ui.Card, Font = Ui.Base, Cursor = Cursors.IBeam, UseMnemonic = false };
+            var hintLabel = new Label { Text = "Message", AutoSize = false, Dock = DockStyle.Fill, ForeColor = Ui.Muted, BackColor = Ui.Card, Font = Ui.Base, Cursor = Cursors.IBeam, UseMnemonic = false };
             hintLabel.Click += delegate { input.Focus(); };
             input.Controls.Add(hintLabel);
             input.AccessibleName = "Chat message";
+            input.AccessibleDescription = "Enter sends. Shift+Enter adds a line. Type / for commands or @ to choose an agent.";
             input.GotFocus += delegate { hintLabel.Visible = false; };
             input.LostFocus += delegate { hintLabel.Visible = input.TextLength == 0; };
             input.TextChanged += delegate {
@@ -3148,48 +3141,10 @@ namespace StickyPro
         }
     }
 
-    // Small pane-layout picker for the Agents bar.
-    class LayoutPicker : Control
+    static class LayoutPicker
     {
-        public static readonly string[][] Items = { new[] { "1", "1", "1" }, new[] { "2", "2", "1" }, new[] { "3", "3", "1" }, new[] { "4", "4", "1" }, new[] { "6", "6", "1" }, new[] { "2x2", "2", "2" }, new[] { "3x2", "3", "2" } };
-        public string Value = "2";
-        public event Action Changed;
-        int hot = -1;
-        public LayoutPicker()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-            Size = new Size(Items.Length * Ui.S(40) + Ui.S(4), Ui.S(32)); Margin = new Padding(Ui.S(4), Ui.S(2), Ui.S(10), 0); Cursor = Cursors.Hand;
-        }
-        Rectangle Cell(int i) { return new Rectangle(Ui.S(2) + i * Ui.S(40), Ui.S(2), Ui.S(36), Ui.S(28)); }
+        public static readonly string[] Items = { "1", "2", "3", "4", "6", "2x2", "3x2" };
         public static int Count(string id) { return id == "2x2" ? 4 : id == "3x2" ? 6 : int.Parse(id); }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics; g.Clear(Parent != null ? Parent.BackColor : Ui.Bg); g.SmoothingMode = SmoothingMode.AntiAlias;
-            for (int i = 0; i < Items.Length; i++)
-            {
-                var r = Cell(i); bool sel = Items[i][0] == Value;
-                using (var path = Ui.Round(r, Ui.S(6)))
-                {
-                    using (var b = new SolidBrush(sel ? Ui.SelBg : i == hot ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                    using (var p = new Pen(sel ? Ui.Accent : Ui.Line)) g.DrawPath(p, path);
-                }
-                int cols = int.Parse(Items[i][1]), rows = int.Parse(Items[i][2]);
-                var grid = new Rectangle(r.X + Ui.S(6), r.Y + Ui.S(6), r.Width - Ui.S(12), r.Height - Ui.S(12));
-                for (int y = 0; y < rows; y++)
-                    for (int x = 0; x < cols; x++)
-                    {
-                        int x0 = grid.X + grid.Width * x / cols, x1 = grid.X + grid.Width * (x + 1) / cols, y0 = grid.Y + grid.Height * y / rows, y1 = grid.Y + grid.Height * (y + 1) / rows;
-                        using (var b = new SolidBrush(sel ? Ui.Accent : Ui.Mix(Ui.Muted, Ui.Card, 0.45))) g.FillRectangle(b, x0, y0, Math.Max(1, x1 - x0 - 1), Math.Max(1, y1 - y0 - 1));
-                    }
-            }
-        }
-        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); int h = -1; for (int i = 0; i < Items.Length; i++) if (Cell(i).Contains(e.Location)) h = i; if (h != hot) { hot = h; Invalidate(); } }
-        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hot = -1; Invalidate(); }
-        protected override void OnMouseUp(MouseEventArgs e)
-        {
-            base.OnMouseUp(e);
-            for (int i = 0; i < Items.Length; i++) if (Cell(i).Contains(e.Location) && Items[i][0] != Value) { Value = Items[i][0]; Invalidate(); var h = Changed; if (h != null) h(); }
-        }
     }
 
     // ---------------------------------------------------------------------------------------------------
@@ -3200,7 +3155,7 @@ namespace StickyPro
         readonly List<ChatPane> panes = new List<ChatPane>();
         readonly TableLayoutPanel grid;
         readonly ChatHistory history;
-        readonly LayoutPicker picker;
+        readonly Button layoutButton;
         readonly TextBox broadcast;
         readonly Label info;
         AgentLayout layout;
@@ -3219,42 +3174,25 @@ namespace StickyPro
 
             var bar = MainForm.Bar();
             bar.Controls.Add(MainForm.Heading("Agents"));
-            picker = new LayoutPicker();
-            picker.Changed += delegate { layout.Layout = picker.Value; Arrange(); SaveLayout(); };
-            bar.Controls.Add(picker);
             bar.Controls.Add(Ui.Btn("New chat", delegate { NewChatIn(active ?? panes.FirstOrDefault()); }, true));
-            bar.Controls.Add(Ui.Btn("Model council", delegate { var p = active ?? panes.FirstOrDefault(); if (p == null) return; if (!p.IsEmpty) { p = EmptyPaneOr(p); if (!p.IsEmpty) NewChatIn(p); } p.EditCouncil(); }));
-            bar.Controls.Add(Ui.Btn("Leader team", delegate { var p = active ?? panes.FirstOrDefault(); if (p != null) p.OpenLeaderTeam(); }));
+            layoutButton = Ui.Btn("Layout", delegate { ShowLayouts(); });
+            bar.Controls.Add(layoutButton);
             bar.Controls.Add(Ui.Btn("Workspaces", delegate { WorkspaceMenu(); }));
-            Button setsBtn = null;
-            setsBtn = Ui.Btn("Folder sets", delegate { FolderSets.ShowMenu(setsBtn, new Point(0, setsBtn.Height), () => panes.Take(Visible_).Select(p => p.Chat != null ? p.Chat.Folder : "").ToList(), OpenSet, 6, "Agents"); });
-            bar.Controls.Add(setsBtn);
-            bar.Controls.Add(Ui.Btn("Chats", delegate { layout.HistoryOff = !layout.HistoryOff; SaveLayout(); PerformLayout(); }));
-            bar.Controls.Add(Ui.Btn("History", delegate { ShowHistory(); }));
-            bar.Controls.Add(Ui.Btn("Updates", delegate { CliUpdates.Show(FindForm()); }));
+            bar.Controls.Add(Ui.Btn("Chats", delegate { ToggleHistory(); }));
+            Button more = null;
+            more = Ui.Btn("More", delegate { ShowActions(more); });
+            ((FluentButton)layoutButton).Glyph = "\uE70D";
+            ((FluentButton)more).Glyph = "\uE70D";
+            bar.Controls.Add(more);
             bar.Controls.Add(Ui.Btn("Stop all", delegate { foreach (var p in panes) if (p.Busy) p.Stop(); }));
-            // Chat text size: one button (menu: larger, smaller, reset); Ctrl + / Ctrl - / Ctrl 0 and Ctrl+wheel also work.
-            var size = Ui.Btn("Text 100%", null);
-            ((FluentButton)size).Glyph = null;
-            size.Click += delegate
-            {
-                var zm = Ui.Menu(); Ui.ThemeMenu(zm);
-                zm.Items.Add("Larger   Ctrl +", null, delegate { ChatView.SetZoom(ChatView.Zoom + 0.1f); });
-                zm.Items.Add("Smaller   Ctrl -", null, delegate { ChatView.SetZoom(ChatView.Zoom - 0.1f); });
-                zm.Items.Add("Reset to 100%   Ctrl 0", null, delegate { ChatView.SetZoom(1f); });
-                foreach (var pct in new[] { 90, 110, 125, 150 }) { float z = pct / 100f; zm.Items.Add(pct + "%", null, delegate { ChatView.SetZoom(z); }); }
-                zm.Show(size, new Point(0, size.Height));
-            };
-            bar.Controls.Add(size);
-            Action showSize = () => size.Text = "Text " + Math.Round(ChatView.Zoom * 100) + "%";
-            showSize(); ChatView.ZoomChanged += showSize; Disposed += delegate { ChatView.ZoomChanged -= showSize; };
-            var tips = new ToolTip(); Disposed += delegate { tips.Dispose(); };
-            tips.SetToolTip(size, "Chat text size (also Ctrl + / Ctrl - / Ctrl 0 and Ctrl+mouse wheel)");
             info = new Label { AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(Ui.S(6), Ui.S(9), 0, 0) };
             bar.Controls.Add(info);
             limitsLabel = new Label { AutoSize = true, Font = Ui.Small, Margin = new Padding(Ui.S(14), Ui.S(9), 0, 0), Cursor = Cursors.Hand, Text = "Limits: reading..." };
             limitsLabel.Click += delegate { using (var d = new LimitsDialog()) d.ShowDialog(FindForm()); };
-            new ToolTip().SetToolTip(limitsLabel, "5-hour and weekly usage limits of the agent CLIs. Click for details.");
+            var tips = new ToolTip();
+            Disposed += delegate { tips.Dispose(); };
+            tips.SetToolTip(limitsLabel, "5-hour and weekly usage limits of the agent CLIs. Click for details.");
+            tips.SetToolTip(layoutButton, "Choose a pane layout");
             bar.Controls.Add(limitsLabel);
             AgentLimits.Updated += ShowLimits;
             limitsTimer.Tick += delegate { if (Visible) AgentLimits.Refresh(false); };
@@ -3282,6 +3220,68 @@ namespace StickyPro
             Ui.Theme(this);
         }
         bool historyGripDragging;
+
+        void ShowLayouts()
+        {
+            if (layout == null) return;
+            var menu = Ui.Menu();
+            foreach (var id in LayoutPicker.Items)
+            {
+                string selected = id;
+                int count = LayoutPicker.Count(id);
+                string label = count == 1 ? "One pane" : id.Contains("x") ? id.Replace("x", " × ") + " grid" : count + " side by side";
+                menu.Items.Add(new ToolStripMenuItem(label, null, delegate
+                {
+                    if (layout.Layout == selected) return;
+                    layout.Layout = selected;
+                    Arrange();
+                    SaveLayout();
+                }) { Checked = layout.Layout == id });
+            }
+            menu.Show(layoutButton, new Point(0, layoutButton.Height));
+        }
+
+        void ToggleHistory()
+        {
+            if (ClientSize.Width < Ui.S(1000)) { ShowHistory(); return; }
+            layout.HistoryOff = !layout.HistoryOff;
+            SaveLayout();
+            PerformLayout();
+        }
+
+        void ShowActions(Button anchor)
+        {
+            var menu = Ui.Menu();
+            menu.Items.Add("Model council", null, delegate
+            {
+                var p = active ?? panes.FirstOrDefault();
+                if (p == null) return;
+                if (!p.IsEmpty) { p = EmptyPaneOr(p); if (!p.IsEmpty) NewChatIn(p); }
+                p.EditCouncil();
+            });
+            menu.Items.Add("Leader team", null, delegate
+            {
+                var p = active ?? panes.FirstOrDefault();
+                if (p != null) p.OpenLeaderTeam();
+            });
+            menu.Items.Add("Folder sets", null, delegate
+            {
+                FolderSets.ShowMenu(anchor, new Point(0, anchor.Height), () => panes.Take(Visible_).Select(p => p.Chat != null ? p.Chat.Folder : "").ToList(), OpenSet, 6, "Agents");
+            });
+            menu.Items.Add("Chat history", null, delegate { ShowHistory(); });
+            menu.Items.Add("Agent CLI updates", null, delegate { CliUpdates.Show(FindForm()); });
+            var size = new ToolStripMenuItem("Chat text size · " + Math.Round(ChatView.Zoom * 100) + "%");
+            size.DropDownItems.Add("Larger   Ctrl +", null, delegate { ChatView.SetZoom(ChatView.Zoom + 0.1f); });
+            size.DropDownItems.Add("Smaller   Ctrl -", null, delegate { ChatView.SetZoom(ChatView.Zoom - 0.1f); });
+            size.DropDownItems.Add("Reset to 100%   Ctrl 0", null, delegate { ChatView.SetZoom(1f); });
+            foreach (var pct in new[] { 90, 110, 125, 150 })
+            {
+                float zoom = pct / 100f;
+                size.DropDownItems.Add(pct + "%", null, delegate { ChatView.SetZoom(zoom); });
+            }
+            menu.Items.Add(size);
+            menu.Show(anchor, new Point(0, anchor.Height));
+        }
 
         // Visible grip in every gap between panes (drag it to resize, double-click for equal sizes).
         void PaintDividers(object s, PaintEventArgs e)
@@ -3327,8 +3327,6 @@ namespace StickyPro
             {
                 started = true;
                 layout = AgentStore.LoadLayout();
-                picker.Value = LayoutPicker.Items.Any(i => i[0] == layout.Layout) ? layout.Layout : "2";
-                picker.Invalidate();
                 Arrange();
                 AgentStore.LoadAll(() =>
                 {
@@ -3366,6 +3364,8 @@ namespace StickyPro
         {
             string l = layout.Layout;
             int count = LayoutPicker.Count(l);
+            layoutButton.Text = count == 1 ? "1 pane" : l.Contains("x") ? l.Replace("x", " × ") + " panes" : count + " panes";
+            layoutButton.AccessibleName = "Pane layout: " + layoutButton.Text;
             while (panes.Count < count)
             {
                 var p = new ChatPane(Blank(panes.Count)) { Margin = new Padding(Ui.S(6)) };   // 12 px gap = grab zone for the divider
@@ -3415,8 +3415,8 @@ namespace StickyPro
         void UpdateInfo()
         {
             int busy = panes.Take(Visible_).Count(p => p.Busy);
-            int chats = AgentStore.Chats.Count(c => !AssistantHarness.IsAssistant(c) && c.Messages.Count > 0);
-            info.Text = (busy > 0 ? busy + " working  ·  " : "") + chats + " saved chats";
+            info.Text = busy > 0 ? busy + " working" : "";
+            info.Visible = busy > 0;
         }
 
         // ---------- draggable dividers between panes ----------
@@ -3506,7 +3506,6 @@ namespace StickyPro
         {
             if (panes.Any(p => p.Busy)) { App.I.Status("Wait for the agents to finish (or Stop all) before opening a workspace."); return; }
             layout.Layout = w.Layout; layout.ColW = (w.ColW ?? new List<float>()).ToList(); layout.RowH = (w.RowH ?? new List<float>()).ToList();
-            picker.Value = layout.Layout; picker.Invalidate();
             Arrange();
             for (int i = 0; i < panes.Count && i < LayoutPicker.Count(w.Layout); i++)
             {
@@ -3522,7 +3521,6 @@ namespace StickyPro
         {
             int n = Math.Max(1, Math.Min(6, s.Folders.Count));
             layout.Layout = n <= 4 ? n.ToString() : "6"; layout.ColW = new List<float>(); layout.RowH = new List<float>();
-            picker.Value = layout.Layout; picker.Invalidate();
             Arrange();
             int skipped = 0;
             for (int i = 0; i < n && i < panes.Count; i++)
@@ -3544,7 +3542,6 @@ namespace StickyPro
             if (list.Count == 0) { MessageBox.Show(FindForm(), "None of the folders of \"" + s.Name + "\" exist on this PC.", "Folder sets"); return; }
             layout.Layout = list.Count <= 4 ? list.Count.ToString() : "6";
             layout.ColW = new List<float>(); layout.RowH = new List<float>();
-            picker.Value = layout.Layout; picker.Invalidate();
             Arrange();
             for (int i = 0; i < list.Count && i < panes.Count; i++)
             {

@@ -170,7 +170,7 @@ move selected, notes, remove from list (files are never deleted).
 
 Open **Scheduled jobs** from **Tasks & reminders** or the Windows tray to create, edit, enable, run and retry a routine. A routine can run an Assistant prompt or saved skill, a registered tool with JSON arguments, or an alert. The app displays the latest status, result and error. It evaluates schedules while it is running in the tray. An Assistant routine needs an available configured provider.
 
-In the Assistant, record a workflow, stop it, then choose **Build last** to ask the provider to convert the saved recording into a reusable skill and tool. Use the recorded tool name in **Scheduled jobs** to run it again.
+In the Assistant, record a workflow, stop it, then choose **Build workflow** to ask the provider to convert the saved recording into a reusable skill and tool. Use the recorded tool name in **Scheduled jobs** to run it again.
 
 ## Data
 Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic `.bak` copy of each file, plus:
