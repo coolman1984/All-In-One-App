@@ -1,4 +1,4 @@
-name: Verify layout and release packaging on Windows
+name: Verify standalone release and recording on Windows
 
 on:
   push:
@@ -9,38 +9,52 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  package:
     runs-on: windows-2022
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
-      - name: Run layout fixture within native screen bounds
+      - name: Download the verified Windows encoder
         shell: powershell
         run: |
-          .\tools\test-build.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File tools\test-layout.ps1
-          exit $LASTEXITCODE
-      - name: Verify portable packaging if a native encoder is installed
-        shell: powershell
-        run: |
-          $command = Get-Command ffmpeg.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-          $encoder = if ($command) { Get-Item -LiteralPath $command.Source }
-          if ((!$encoder -or $encoder.Length -lt 1MB) -and $env:ChocolateyInstall) {
-              $encoder = Get-ChildItem (Join-Path $env:ChocolateyInstall 'lib\ffmpeg\tools') -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue | Where-Object Length -GT 1MB | Select-Object -First 1
-          }
-          if (!$encoder) { Write-Host 'A native encoder is unavailable on this runner.'; exit 0 }
+          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-audit.zip'
+          $unpacked = Join-Path $env:RUNNER_TEMP 'ffmpeg-audit'
+          & curl.exe --fail --silent --show-error --location --retry 2 --max-time 90 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' --output $archive
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg download failed.' }
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne 'b9bbbb3acece000cbeec994f856649354e52c773807841e78908374b24d658fd') { throw 'Unexpected download checksum.' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $unpacked
+          $encoder = Get-ChildItem -LiteralPath $unpacked -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          if (!$encoder) { throw 'No encoder in verified archive.' }
           $null = New-Item tools\bundle -ItemType Directory -Force
           Copy-Item -LiteralPath $encoder.FullName -Destination tools\bundle\ffmpeg.exe
+      - name: Build and validate both embedded packages
+        shell: powershell
+        run: |
           & .\tools\make-dist.ps1
-          $exe = Join-Path $PWD.Path 'dist\AllInOne.exe'
-          $app = [Reflection.Assembly]::LoadFile($exe)
-          if ($app.GetManifestResourceNames().Count -ne 6) { throw 'Wrong number of embedded resources' }
-          $compressed = $app.GetManifestResourceStream('tools.ffmpeg.exe.gz')
-          $plain = [IO.Compression.GZipStream]::new($compressed, [IO.Compression.CompressionMode]::Decompress)
+          & .\build.ps1
           $hash = [Security.Cryptography.SHA256]::Create()
           try {
-              $actual = [BitConverter]::ToString($hash.ComputeHash($plain)).Replace('-', '')
-              if ($actual -ne (Get-FileHash tools\bundle\ffmpeg.exe).Hash) { throw 'Bundled encoder differs from verified input' }
-          } finally { $hash.Dispose(); $plain.Dispose() }
-          Write-Host 'PORTABLE PACKAGE OK: all six resources and matching FFmpeg bytes'
+              $expected = (Get-FileHash tools\bundle\ffmpeg.exe).Hash
+              foreach ($path in 'dist\AllInOne.exe', 'AllInOne.exe') {
+                  $exe = Join-Path $PWD.Path $path
+                  $app = [Reflection.Assembly]::LoadFile($exe)
+                  if ($app.GetManifestResourceNames().Count -ne 6) { throw "Wrong resource count for $path" }
+                  $stream = [IO.Compression.GZipStream]::new($app.GetManifestResourceStream('tools.ffmpeg.exe.gz'), [IO.Compression.CompressionMode]::Decompress)
+                  try { $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '') }
+                  finally { $stream.Dispose() }
+                  if ($actual -ne $expected) { throw "Bundled encoder differs from verified input in $path" }
+              }
+          } finally { $hash.Dispose() }
+          Write-Host 'PACKAGING OK: both executables contain six resources and the verified encoder'
+      - name: Unpack the embedded encoder and verify a short desktop recording
+        shell: powershell
+        run: |
+          $app = [Reflection.Assembly]::LoadFile((Join-Path $PWD.Path 'dist\AllInOne.exe'))
+          $encoder = $app.GetType('StickyPro.Bundled').GetMethod('Tool').Invoke($null, @('ffmpeg.exe'))
+          if (!$encoder) { throw 'Could not unpack the embedded encoder.' }
+          $clip = Join-Path $env:RUNNER_TEMP 'audit-recording.mp4'
+          & $encoder -hide_banner -loglevel error -f gdigrab -framerate 5 -video_size 320x240 -i desktop -t 1 -c:v libx264 -pix_fmt yuv420p $clip
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $clip -PathType Leaf)) { throw 'Desktop encode failed.' }
+          & $encoder -hide_banner -loglevel error -i $clip -f null NUL
+          if ($LASTEXITCODE -ne 0) { throw 'The saved MP4 could not be decoded.' }
+          Write-Host 'RECORDING OK: embedded encoder captured and decoded a desktop MP4'
