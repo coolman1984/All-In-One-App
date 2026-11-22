@@ -45,6 +45,21 @@ Base revision `cbed099`. The earlier November 20 measurements above describe the
 | Schedules and data vault | Saved schedules survive unreadable or malformed files. Invalid times fail validation. One broken job cannot stop the rest. The vault retries failed initialization and skips files that change during extraction. | Native vault and memory suites passed. Invalid and corrupt schedules and CSV refresh were also checked in isolation. |
 | Workflow recording and release | Finalization reconstructs a damaged event log and surfaces save errors. Queued events stay with their original recording. Both release scripts reject missing or unsuitable encoders and embed the same verified artifact. | The native workflow and recorder suites passed. Both release executables had six embedded resources. The embedded encoder recorded and decoded a desktop MP4. Live recorder controls and keyboard and mouse hooks still need customer desktop verification. |
 
-Open product gap. Scheduled jobs can notify after their pre-check. No running handler currently executes their stored prompt or skill. The current pass also leaves live Office/NASCA, WebView2 clipping, provider account fallback, floating-card paste and clean-PC playback for their native checks.
+At the time of this repair pass, scheduled jobs only notified. The workflow completion below records the later implementation.
 
 Verification records: [Windows regression suites](https://github.com/coolman1984/All-In-One-App/actions/runs/44983887686), [layout fixture](https://github.com/coolman1984/All-In-One-App/actions/runs/44984052358), and [packaging and encoding](https://github.com/coolman1984/All-In-One-App/actions/runs/44984180068).
+
+
+## Workflow completion
+
+| Prior gap | Delivered |
+|---|---|
+| Schedules notified without executing | The timer dispatches Assistant prompts, saved skills or registered tools. The Scheduled jobs window exposes state, results and retries. |
+| Recordings stopped at a draft | Build last sends the latest saved recording through the configured Assistant to create and verify a reusable tool and skill. |
+| Unavailable agent looked successful | Real provider failures surface as failures. Explicit test simulations are labeled. |
+| Live backups copied database journal files | The backup includes an independent SQLite snapshot. Restore parks unfinished scheduled work for review. |
+| Floating cards lost the last paste target | Cards track the last external foreground window and verify the target and clipboard before sending paste. |
+
+Customer checks still include protected Office files, two-tab WebView2 clipping, live provider credentials and site behavior, and real keyboard and floating-card behavior.
+
+The [Windows workflow verification](https://github.com/coolman1984/All-In-One-App/actions/runs/44986545611) passed 12 suites, including the real scheduler clock, a local Assistant fixture, duplicate and retry handling, and backup of an open vault.

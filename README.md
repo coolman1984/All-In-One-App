@@ -166,6 +166,12 @@ export to CSV, open file / folder, tag file.
 Urgent / Review / Important (plus your own categories), add files or folders, drag and drop, search, select all,
 move selected, notes, remove from list (files are never deleted).
 
+## Scheduled jobs and recorded workflows
+
+Open **Scheduled jobs** from **Tasks & reminders** or the Windows tray to create, edit, enable, run and retry a routine. A routine can run an Assistant prompt or saved skill, a registered tool with JSON arguments, or an alert. The app displays the latest status, result and error. It evaluates schedules while it is running in the tray. An Assistant routine needs an available configured provider.
+
+In the Assistant, record a workflow, stop it, then choose **Build last** to ask the provider to convert the saved recording into a reusable skill and tool. Use the recorded tool name in **Scheduled jobs** to run it again.
+
 ## Data
 Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic `.bak` copy of each file, plus:
 - `data\vault.db` — native Windows SQLite (`winsqlite3.dll`, WAL mode + FTS5) storing auto-extracted Office/PDF tables (including NASCA DRM via COM), `session_fts`, `step_events`, and `alert_dedup`.
@@ -174,8 +180,8 @@ Saved in the `data` folder next to the exe (JSON + PNG images) with an automatic
 
 ## Interface and reliability
 - Main-window pages are created on first use and keep their state when you switch away. Unused tools do not allocate controls or start their page services. Closing windows no longer forces full garbage collection or empties the process working set.
-- Backups include nested data such as agent chats, layouts, and saved file backups. Restore validates the main JSON files before swapping folders, retains the previous folder beside the data folder, and recovers interrupted folder swaps on startup. Linked folders/files and overlapping destinations are rejected; temporary save files and internal restore staging folders are excluded.
-- Moving the data folder requires an empty destination and successful saves first. Restart immediately after the copy. The active session continues to write to the old folder, and the next start reads the new copy. Edits made in between stay in the old folder.
+- Backups include nested data such as agent chats and layouts, and a consistent vault snapshot even when the vault is open. Restore marks unfinished scheduled runs for review, validates the main JSON files before swapping folders, retains the previous folder beside the data folder, and recovers interrupted folder swaps on startup. Linked folders/files and overlapping destinations are rejected; temporary save files and internal restore staging folders are excluded.
+- Choose an empty destination for the data folder. The next launch copies the final saved data and switches the app to the new folder. The original folder remains available.
 - Agent-chat saves coalesce in order on a background worker, retain a previous-file backup, and finish before normal exit or backup. Deleting a chat cancels its queued saves.
 - Recurring tasks jump directly past overdue occurrences, handle weekends and date limits, and keep the original month-day anchor when skipping missed months.
 - Rounded buttons and inputs, keyboard focus feedback, and consistent light/dark controls. Windows 11 supplies rounded window corners where supported.

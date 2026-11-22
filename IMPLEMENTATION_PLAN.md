@@ -77,7 +77,7 @@ Turn **All in One** into an ultra-fast, native Windows desktop workspace where t
 - Navigation MCP tools (`open_page`, `document_open`, `document_switch`, `document_save`, `explorer_open`, `browser_open`, `markdown_open`, `terminal_open`) flip screens live and call `AssistantHarness.Report(...)`.
 
 ### Layer 3: Live Office COM Control + Background NASCA-Safe Extractor (`src/OfficeCom.cs`, `src/OfficeEdit.cs`)
-- **Status:** Phase 2 IN PROGRESS.
+- **Status:** Implemented. Customer Office/NASCA acceptance still requires the corporate Windows environment.
 - **Why COM:** Corporate files are **NASCA DRM** encrypted on disk (`<## NASCA` header). Calling Office via `COM` lets authorized Excel/Word/PowerPoint decrypt in RAM transparently.
 - **Live Controls (operate on `OfficeEdit.ComApp` / `OfficeEdit.ComDoc`):**
   - Excel: `excel_info`, `excel_read` (single bulk `UsedRange.Value2` call; handle 1-based `object[,]` and single-cell scalar), `excel_write` (bulk 2D array; supports `=` formulas), `excel_formula`, `excel_sheet_add`, `excel_format` (RGB `#RRGGBB` → OLE BGR int, bold, number format, AutoFit).
@@ -92,7 +92,7 @@ Turn **All in One** into an ultra-fast, native Windows desktop workspace where t
   - PDF → hidden `Word.Application` with `ConfirmConversions=false` AND PDF warning suppression (`DisableConvertPdfWarning` / strict STA timeout killing only the spawned hidden PID if a modal stalls) + clean fallback for image-only PDFs via `Snip.cs` Windows OCR.
 
 ### Layer 4: Native Windows `SQLite Vault` + Hermes/OpenClaw/DeepSeek Persistence (`src/SqliteVault.cs`, `src/AgentMemory.cs`, `src/CronEngine.cs`)
-- **Status:** Phase 3 NEXT.
+- **Status:** Implemented. Scheduled action execution is now part of the workflow completion pass.
 - **Zero-Dependency P/Invoke (`src/SqliteVault.cs`):**
   - Loads `C:\Windows\System32\winsqlite3.dll` (verified present on Windows 10/11, 0 KB exe overhead).
   - Database file: `<Store.Dir>\vault.db` (default `I:\ALL In One\data\vault.db` — persists permanently, automatically included in Backups & Move Data Folder).
@@ -235,14 +235,13 @@ A user on a clean 64-bit Windows 10/11 PC MUST be able to copy `AllInOne.exe`, d
 
 Fixed saved-work hazards and workflow bugs found on `cbed099`. See the [review matrix](docs/customer-audit.md#november-22-repair-pass) for code, checks and remaining Windows coverage. Data relocation now copies after the previous process exits and commits the new location only after the copy succeeds. Startup and job scheduling surface unreadable saved data. Release builds require a validated standalone FFmpeg binary.
 
-The scheduler evaluates local conditions and publishes notifications. The current code has no subscriber that executes stored job prompts or skills automatically. End-to-end scheduling claims require that implementation plus verification.
+### Workflow completion · November 22, 2026
 
-### Completing the workflow
-
-1. Give saved schedules an execution path. Send a prompt or saved playbook through the existing Assistant provider. Execute a registered tool directly when a model is unnecessary.
-2. Store each job's latest run state and output. Commit the queued state before launch, serialize desktop workflows, and surface interrupted work on the next start.
-3. Add a Scheduled jobs window for creating, enabling, running and checking routines. Keep the existing scheduler tool interface and stop on an idle pre-check.
-4. Verify saved schedules through a local provider fixture and through the already registered SQL tool path. Test duplicate attempts, interrupted runs, and missing providers without opening production files.
+- **Schedules have an execution path.** `cron_manage` and the Scheduled jobs window run a configured Assistant prompt or saved skill, or send arguments directly to a registered dynamic tool. Alert-only jobs retain their behavior. The app must be running in the Windows tray.
+- **Run state is durable.** Write the queue entry before starting, then hold one scheduled action at a time. Save the latest output and failure details, and allow explicit retries. Restart resumes queued entries and reports an interrupted in-flight run. Restoring an older backup disables any unfinished runs saved in it until reviewed.
+- **Recording connects to execution.** Build last sends the latest successfully saved recording to the configured Assistant to build and verify a reusable skill and tool. A saved tool can be scheduled from Tasks & reminders or the tray. The provider must be configured and available. Subagents report actual provider failures and label explicit simulations.
+- **Back up the live vault.** Use SQLite's backup API for a committed snapshot instead of copying the active journal files. Floating cards track the most recent external application and check the clipboard and target before sending paste.
+- **Customer acceptance.** Live NASCA files, real provider and keyboard behavior, and hands-on use on the customer's desktop remain acceptance checks.
 
 ## 3. File Map (Modular, Low-Bloat Structure)
 

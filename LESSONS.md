@@ -18,6 +18,10 @@ Format: what happened -> cause (proven) -> rule.
 - Terminal history previously joined pane commands into one display string. Keep the original pane records for replay and treat older summaries as display text.
 - A label docked inside a multiline edit control covers the native caret. Hide it as soon as the editor receives focus, including when the draft is empty.
 
+- A saved schedule needs recorded execution state as well as an alert. Write the queued state first, and mark an in-flight action interrupted when startup finds it. When restoring an older backup, leave unfinished jobs disabled until reviewed so the backup cannot replay them.
+- Copying an active `vault.db` alongside its journal files can miss committed data or capture different points in time. Use the SQLite backup API and verify a committed WAL row in the copied database.
+- Treat a missing provider and a nonzero exit as failures. Fixtures that intentionally simulate a run declare that in the result.
+
 ## Performance
 - **Transcript hit-testing scanned every preceding row.** Binary-search cached row bounds and visit only the viewport during painting. Benchmark near the end of a long transcript to exercise the previous worst case.
 - **Ctrl+A took about 10 seconds with 20,000 clipboard rows.** WinForms updated selection state for every row, and the

@@ -27,7 +27,7 @@ Run the app's tests under Windows PowerShell. The build targets .NET Framework a
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-all.ps1
 ```
 
-Use temporary fixtures for saved chats, settings, folders and attachments. For a deferred data move, edit the source after choosing the target and verify the restarted app uses that edit. Keep the source available for recovery. The provider tests use local stand-ins. Record live provider behavior separately when it has been exercised.
+Use temporary fixtures for saved chats, settings, folders and attachments. Run `tools/test-scheduled-jobs.ps1` for the real clock, local Assistant subprocess, direct SQL tool, result states and duplicate prevention. Keep the fixture provider isolated from real credentials. Check live SQLite snapshots with `tools/test-sqlite-vault.ps1`. For a deferred data move, edit the source after choosing the target and verify the restarted app uses that edit. Keep the source available for recovery. The provider tests use local stand-ins. Record live provider behavior separately when it has been exercised.
 
 For a UI regression, test the state that triggers it. Restore a saved Split view during startup, shrink Explorer while it is scrolled, or focus an empty chat composer. Benchmark the same fixture and operation before and after a performance change. A row lookup timing measures lookup cost. Whole-app CPU, memory and responsiveness require their own measurements.
 

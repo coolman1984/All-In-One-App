@@ -2,6 +2,13 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — Completed scheduled work and connected workflow recording
+
+- Built the missing execution path identified in the reliability review. Scheduled jobs can run an Assistant prompt or skill, call a registered tool directly, or notify. The new window exposes controls, latest result and retry. Restart recovers the queue and backup restore disables unfinished runs for review.
+- Connected the latest saved recording to the Assistant's build action, treated unavailable subagents as failures, took consistent SQLite snapshots during backup, and improved the floating-card paste target check.
+- [Windows verification](https://github.com/coolman1984/All-In-One-App/actions/runs/44986545611) built with the native .NET Framework compiler and passed 12 suites. The scheduled fixture used the real timer, an isolated Assistant subprocess, a registered SQL tool, duplicates, retries and backup recovery. The vault fixture proved that an active WAL's committed data reached an independent backup. Five additional local execution and snapshot assertions passed under Mono.
+- Live Office/NASCA, two-tab WebView2, provider credentials, and real keyboard and floating-card interactions remain customer desktop acceptance checks. No live scheduled task was created for the user.
+
 ## 2026-11-22 — Deep reliability review and repairs
 
 - Reviewed the source at `cbed099` along app startup, saved work, Office and browser handoffs, agent turns, the vault, schedules, recording and packaging. The current findings and remaining Windows checks are in the [customer audit](docs/customer-audit.md).

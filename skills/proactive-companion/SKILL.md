@@ -21,6 +21,9 @@ Transform **الـ Agent العام** from a passive Q&A box into an active, goa
 - **Standing Routines (`cron/jobs.json`):** Recurring user schedules (e.g., daily 08:00 factory report ingestion + dashboard refresh).
 - **Dynamic Follow-Ups (`Self-Scheduling`):** One-shot timers set autonomously by the companion mid-task (e.g., *"Check in 15 minutes whether the new Excel export arrived and rebuild the comparison chart"*).
 
+- Configure an Assistant prompt or saved skill for a model-driven routine. Use a registered tool directly when the operation is deterministic. Keep pre-checks local and inspect the persisted run state and result.
+- On normal restart, resume only queued work. After restoring a backup, review unfinished work before retrying it.
+
 ## 4. Visual-First Live Communication Channel (`Browser` Canvas)
 - Whenever explaining architecture, data logic, multi-step workflows, report comparisons, or technical trade-offs to the owner, **do NOT dump walls of paragraphs in the narrow chat pane**.
 - Instead, render a crisp, studio-grade interactive visual page into the embedded `Browser` via `canvas_update` (following `skills/anti-slop-web-design/SKILL.md`: interactive SVG schematics, animated step tracks, minimal Egyptian Arabic captions, Obsidian Dark + Warm Drafting Paper dual theme, ZERO AI slop), flip to `Browser`, and send a brief 2–3 line summary in chat.
