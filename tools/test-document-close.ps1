@@ -60,7 +60,9 @@ try {
     }
     $markdown = [Activator]::CreateInstance($assembly.GetType('StickyPro.MarkdownPage', $true), $true)
     try {
-        $markdown.GetType().GetMethod('ShowNote', $private).Invoke($markdown, @($path, "Old`nline", [datetime]::Now, $false, $false))
+        $noteArgs = [object[]]@($path, "Old`nline", [datetime]::Now, $false, $false)
+        for ($i = 0; $i -lt $noteArgs.Length; $i++) { $noteArgs[$i] = $noteArgs[$i].PSObject.BaseObject }
+        $markdown.GetType().GetMethod('ShowNote', $private).Invoke($markdown, $noteArgs)
         $editor = $markdown.GetType().GetField('editor', $private).GetValue($markdown)
         $noteTabs = $markdown.GetType().GetField('tabs', $private).GetValue($markdown)
         Assert ($editor.Text -eq "Old`r`nline") 'An LF note loaded incorrectly in the editor.'

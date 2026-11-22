@@ -466,7 +466,10 @@ namespace StickyPro
             return path;
         }
 
-        public static string MoveMarker(string dir) { return Path.Combine(dir, "pending-data-move.tmp"); }
+        public static string MoveMarker(string dir)
+        {
+            return Path.Combine(dir, string.IsNullOrEmpty(DirOverride) ? "pending-data-move.tmp" : "pending-override-data-move.tmp");
+        }
         public static string MoveError { get; private set; }
 
         // Record the choice now; copy on the next startup after this process has released all writers.

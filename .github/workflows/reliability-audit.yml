@@ -11,7 +11,16 @@ permissions:
 jobs:
   verify:
     runs-on: windows-2022
-    timeout-minutes: 10
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: saved-work
+            suites: reliability,document-close,regressions,saved-work
+          - group: companion
+            suites: sqlite-vault,assistant-harness,hermes-memory,workflow-recorder
+    name: Windows ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v4
       - name: Build with Windows .NET Framework
@@ -19,10 +28,13 @@ jobs:
         run: .\tools\test-build.ps1
       - name: Run Windows regression fixtures
         shell: powershell
+        env:
+          AUDIT_WINDOWS_SUITES: ${{ matrix.suites }}
         run: |
           $failed = @()
-          foreach ($suite in 'reliability', 'document-close', 'regressions', 'sqlite-vault') {
-              & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "tools\test-$suite.ps1"
-              if ($LASTEXITCODE -ne 0) { $failed += $suite }
+          foreach ($suite in $env:AUDIT_WINDOWS_SUITES.Split(',')) {
+              $proc = Start-Process powershell.exe -ArgumentList '-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',"tools\test-$suite.ps1" -NoNewWindow -PassThru
+              if (!$proc.WaitForExit(90000)) { $proc.Kill(); $failed += "$suite timed out" }
+              elseif ($proc.ExitCode -ne 0) { $failed += $suite }
           }
           if ($failed.Count) { throw ("Windows suites failed: " + ($failed -join ', ')) }
