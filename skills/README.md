@@ -4,6 +4,8 @@ Use [All in One maintenance](all-in-one-maintenance/SKILL.md) for app developmen
 
 Use [Plan page](plan-page/SKILL.md) before a large or risky change: write the plan as a short blog-style page, get the owner's approval, then build.
 
+Use [GitHub on this Windows PC](github-transfer-windows/SKILL.md) for GitHub transfers, pull requests and live sync checks.
+
 ## Companion, Automation & Design Craft Skills
 
 | Skill | Use it for |

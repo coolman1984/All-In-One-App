@@ -2,6 +2,12 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — GitHub main sync and test-runner fix
+
+- Asked to push, merge and sync with GitHub main. Fetched twelve upstream commits and prepared the Windows GitHub workflow documentation and agent-conversation test fix.
+- On source based on GitHub main at c3bd675, the native test build completed and the agent-conversation suite printed its success message and exited zero. The publishing diff and local references were checked.
+- The local app changes remain available for a separate merge decision because they conflict with the documented automation policy.
+
 ## 2026-11-22 — Completed scheduled work and connected workflow recording
 
 - Built the missing execution path identified in the reliability review. Scheduled jobs can run an Assistant prompt or skill, call a registered tool directly, or notify. The new window exposes controls, latest result and retry. Restart recovers the queue and backup restore disables unfinished runs for review.
