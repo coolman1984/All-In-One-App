@@ -15,7 +15,7 @@ using System.Windows.Forms;
 namespace StickyPro
 {
     // Tools the app offers to AI agents (MCP) and scripts (App API). Each returns JSON text.
-    static class ApiTools
+    static partial class ApiTools
     {
         static readonly JavaScriptSerializer Js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 100 };
         public static readonly string[] Pages = { "dashboard", "tasks", "notes", "prompts", "clips", "agents", "terminals", "explorer", "markdown", "browser", "documents", "accounts", "snip", "chrome", "power", "system", "cards", "activity", "tagged", "shortcuts" };
@@ -211,6 +211,7 @@ namespace StickyPro
             l.Add(T("sessions_status", "Check spawned subagent status", "Get status, elapsed time, and output of a spawned subagent job (or list recent jobs if jobId is omitted).", true,
                 new[] { "jobId|string|Optional subagent jobId", "limit|integer|Max recent jobs when jobId is omitted (default 20)" }));
 
+            AddBrowserTools(l);
             builtInSchema = l;
             builtInNames = new HashSet<string>(l.Select(t => (string)t["name"]), StringComparer.OrdinalIgnoreCase);
             return l;
@@ -293,6 +294,7 @@ namespace StickyPro
                 case "system_drives": return SystemDrivesTool();
                 case "process_kill": return ProcessKillTool(a);
                 case "browser_cdp": return BrowserCdpTool(a);
+                case "browser_tabs": case "browser_navigate": case "browser_snapshot": case "browser_click": case "browser_hover": case "browser_fill": case "browser_select": case "browser_key": case "browser_scroll": case "browser_wait": case "browser_screenshot": case "browser_pdf": case "browser_upload": case "browser_downloads": case "browser_dialogs": case "browser_console": case "browser_network": case "browser_cookies": case "browser_emulate": case "browser_extract": return BrowserAutoTool(tool, a);
                 case "chrome_bookmarks": return ChromeBookmarksTool(a);
                 case "tagged_list": return TaggedListTool(a);
                 case "tagged_add": return TaggedAddTool(a);

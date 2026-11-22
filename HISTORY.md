@@ -665,3 +665,7 @@ Format: what happened -> cause (proven) -> rule.
 - TeamNet: messages sealed + device-signed, receivers verify sender, permission and key; presence signed; files encrypted; pending / suspended / revoked / blocked states; terminate closes the app; blocked stays disconnected. Team page: passphrase on create, waiting screen with device code, Get remote help, person menu, admin console button, features hidden by policy. Releases: admin actions need unlock; updates only for approved PCs. Policy repair from the last verified copy.
 - Verified: test-team 50/50, test-team-security 61/61, test-team-e2e (real exe: pipeline incl. security suite 69 s; approved real copy updated and reported), off-screen renders of chat, admin console and waiting screen. Not verified: real S:\ share, two physical PCs, real input injection on a second session.
 
+
+## 2026-11-22 - Team on S:\Public_Folder, full automation browser
+- Team tests run on a test folder on S:\Public_Folder (team 50/50, security 61/61, real-app update e2e). The share refuses *.exe (also .ps1, .zip): releases are now stored as AllInOne.bin; old AllInOne.exe releases still read. Test folders deleted after each run.
+- App browser is a full automation browser for agents: 20 new browser_* tools (snapshot refs, trusted click/keys, fill/select/hover/scroll/wait, tabs, screenshot/PDF, upload, downloads, dialogs, console, network, cookies, emulation, extract). Red bar with Stop, element highlight, activity log. tools\test-browser-automation.ps1: 44/44 on the running app. docs\BROWSER-AUTOMATION.md.

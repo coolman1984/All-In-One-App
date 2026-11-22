@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Automation test A</title><meta name="description" content="All in One browser automation test page">
+<style>body{font:15px Segoe UI,sans-serif;margin:20px} .tip{display:none} #hov:hover+.tip{display:inline} #spacer{height:2200px;background:linear-gradient(#fff,#eef)}</style></head>
+<body>
+<h1>Automation test</h1>
+<p id="count">Count: 0</p><p id="trust">trusted: none</p>
+<button id="add" onclick="add(event)">Add one</button>
+<label for="name">Name</label> <input id="name" name="name" placeholder="Your name">
+<label for="color">Color</label> <select id="color"><option value="r">Red</option><option value="g">Green</option><option value="b">Blue</option></select>
+<label><input type="checkbox" id="agree"> Agree to terms</label>
+<button disabled>Disabled one</button>
+<span id="hov">Hover me</span><span class="tip" id="tip">hovered</span>
+<p id="hovstate">hover: no</p>
+<button onclick="document.getElementById('conf').textContent='confirmed: '+confirm('Sure?')">Confirm me</button><p id="conf">confirmed: -</p>
+<input type="file" id="file" multiple onchange="document.getElementById('files').textContent='files: '+[].map.call(this.files,function(f){return f.name}).join(',')"><p id="files">files: -</p>
+<a id="dl" href="#">Download file</a>
+<a href="b.html">Next page</a> <a href="b.html" target="_blank">Open B in new tab</a>
+<table id="t"><tr><th>Item</th><th>Qty</th></tr><tr><td>Bolt</td><td>12</td></tr><tr><td>Nut</td><td>30</td></tr></table>
+<iframe id="fr" style="width:300px;height:80px" srcdoc="<button onclick=&quot;this.textContent='frame clicked'&quot;>Frame button</button>"></iframe>
+<div id="keys">keys: </div>
+<div id="spacer"></div><p id="bottom">Bottom of page</p>
+<script>
+var n=0;function add(e){n++;document.getElementById('count').textContent='Count: '+n;document.getElementById('trust').textContent='trusted: '+e.isTrusted;}
+document.getElementById('hov').addEventListener('mouseenter',function(){document.getElementById('hovstate').textContent='hover: yes';});
+document.getElementById('name').addEventListener('keydown',function(e){document.getElementById('keys').textContent+=e.key+(e.isTrusted?'':'(untrusted)')+' ';});
+var dl=document.getElementById('dl');dl.href=URL.createObjectURL(new Blob(['hello download'],{type:'text/plain'}));dl.setAttribute('download','aio-download-test.txt');
+console.log('hello-console',42);
+setTimeout(function(){ fetch('missing-file.json').catch(function(){}); throw new Error('test-page-error'); },300);
+</script>
+</body></html>

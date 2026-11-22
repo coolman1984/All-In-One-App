@@ -75,9 +75,9 @@ namespace StickyPro
         }
     }
 
-    class BrowserPage : Panel
+    partial class BrowserPage : Panel
     {
-        class Tab { public WebView2 View; public Panel Chip; public Button Title; public string Url = "", Name = "New tab"; public int NavigationRevision; }
+        class Tab { public WebView2 View; public Panel Chip; public Button Title; public string Url = "", Name = "New tab"; public int NavigationRevision; public TabLog Log = new TabLog(); }
 
         readonly List<Tab> tabs = new List<Tab>();
         readonly FlowLayoutPanel tabBar;
@@ -229,6 +229,7 @@ namespace StickyPro
                 core.NavigationStarting += delegate { t.NavigationRevision++; };
                 core.Settings.AreDevToolsEnabled = true;
                 core.Settings.IsStatusBarEnabled = true;
+                AutoAttach(t, core);
                 core.DocumentTitleChanged += delegate { t.Name = core.DocumentTitle; ShowTitle(t); Remember(t); };
                 core.SourceChanged += delegate { t.Url = core.Source; if (t == active) { if (!address.Focused) address.Text = t.Url; UpdateFav(); } SaveTabs(); };
                 core.NewWindowRequested += (s, a) => { a.Handled = true; AddTab(a.Uri, true); };
@@ -490,6 +491,17 @@ namespace StickyPro
             m.Items.Add("Run page scripts now", null, delegate { if (active != null) RunPageScripts(active); });
             m.Items.Add("Page scripts folder", null, delegate { Directory.CreateDirectory(ScriptsDir); WriteSample(); try { Process.Start("explorer.exe", "\"" + ScriptsDir + "\""); } catch { } });
             m.Items.Add("Developer tools (F12)", null, delegate { if (active != null && active.View.CoreWebView2 != null) active.View.CoreWebView2.OpenDevToolsWindow(); });
+            var agents = new ToolStripMenuItem("Let AI agents use this browser") { Checked = !AgentsPaused };
+            agents.Click += delegate { AgentsPaused = !AgentsPaused; Act(AgentsPaused ? "You stopped browser automation." : "You allowed agents to use the browser again."); };
+            m.Items.Add(agents);
+            m.Items.Add("What agents did in this browser...", null, delegate
+            {
+                var lines = ActionLog();
+                string text = lines.Length == 0 ? "No agent has used the browser since the app started." : string.Join("\r\n", lines.Reverse().Take(300));
+                var f = new Form { Text = "Browser: agent activity", Width = Ui.S(640), Height = Ui.S(480), StartPosition = FormStartPosition.CenterParent, ShowIcon = false, MinimizeBox = false };
+                f.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = text, Font = Ui.Base });
+                Ui.Theme(f); f.Show(FindForm());
+            });
             var auto = new ToolStripMenuItem("Allow automation tools (port " + AutomationPort + ", this PC only)") { Checked = Store.Settings.BrowserAutomation };
             auto.Click += delegate
             {
