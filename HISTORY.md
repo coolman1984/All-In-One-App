@@ -2,6 +2,12 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — App cleanup, repairs and automatic merge plan
+
+- Asked to simplify the whole app, repair bugs and broken workflows, and automatically merge verified changes to GitHub main. Wrote the [repair plan](docs/plans/app-cleanup-and-reliability.html) for owner approval.
+- Built a fresh offline UI test executable from `ec5dbc7`. The sweep reported zero errors and zero layout problems across 33 routes and 132 screenshots, with Flow light and Atelier dark at 1100×700 and 1500×900. Manual review found repeated storage information, a clipped dashboard alert, and crowded Agents controls. Team is absent from both the sweep and the local API page list. Confirmed GitHub auto-merge was disabled and main had no branch protection. Rendered the plan in Edge at 1250 px light and 420 px dark with no overflow or broken internal links.
+- App changes, live workflow retests, and GitHub merge automation await plan approval. No executable or repository settings were changed.
+
 ## 2026-11-22 — Accounts reflects Cline CLI sign-in
 
 - The current Cline CLI reported an active Cline Pass login while its legacy secrets file was empty. Accounts now uses the installed CLI package to check provider sign-in and displays only provider labels.

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>خطة إصلاح All in One</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --canvas:#F5F7FC; --paper:#fff; --surface:#edf2fc; --ink:#192236; --muted:#52617a;
+  --line:#cdd7e8; --accent:#2F66F6; --signal:#174bc8;
+  --canvas:oklch(97.6% .008 265); --paper:oklch(100% 0 0); --surface:oklch(96% .018 260);
+  --ink:oklch(25% .045 258); --muted:oklch(45% .05 260); --line:oklch(87% .025 260);
+  --signal:oklch(46% .21 263);
+}
+@media(prefers-color-scheme:dark) {
+  :root {
+    --canvas:#101726; --paper:#182135; --surface:#202d45; --ink:#f3f6ff; --muted:#b5c2d9; --line:#43516c; --signal:#9eb8ff;
+    --canvas:oklch(20% .026 265); --paper:oklch(25% .04 265); --surface:oklch(31% .05 263);
+    --ink:oklch(97% .012 261); --muted:oklch(81% .035 262); --line:oklch(43% .05 260); --signal:oklch(81% .12 263);
+  }
+}
+* { box-sizing:border-box }
+html { scroll-behavior:smooth }
+body { margin:0; background:var(--canvas); color:var(--ink); font:1.05rem/1.8 "Segoe UI",Tahoma,sans-serif }
+main { max-width:70rem; margin:auto; padding:clamp(1rem,4vw,3rem) }
+a { color:var(--signal); text-underline-offset:.22em }
+a:focus-visible { outline:2px solid var(--accent); outline-offset:4px }
+header { border-block-end:1px solid var(--line); padding-block-end:1.7rem }
+header .rev { display:inline-block; padding:.15rem .75rem; border:1px solid var(--line); border-radius:2rem; color:var(--muted); font-size:.85rem }
+h1 { font-size:clamp(2rem,5vw,3.75rem); line-height:1.22; margin:.7rem 0 .55rem; letter-spacing:-.035em }
+h2 { font-size:1.55rem; line-height:1.3; margin:0 0 .65rem }
+h3 { font-size:1.08rem; margin:0 0 .15rem }
+p { margin:.25rem 0 .7rem }
+.intro { color:var(--muted); max-width:47rem }
+.summary { display:grid; grid-template-columns:1.25fr 1fr; gap:.65rem; margin-block:1.4rem }
+.summary article { padding:.8rem 1rem; border:1px solid var(--line); background:var(--paper); border-radius:.6rem }
+.summary article:first-child { border-inline-start:4px solid var(--accent) }
+.summary p { color:var(--muted); margin:0 }
+section { scroll-margin-block:1rem; padding-block:1.3rem; border-block-start:1px solid var(--line) }
+figure { margin:1rem 0 0; background:var(--surface); border-radius:.65rem; padding:.35rem .6rem }
+svg { width:100%; height:auto; display:block; overflow:visible }
+svg text { fill:var(--ink); font-family:inherit; font-size:21px; font-weight:600 }
+svg rect { fill:var(--paper); stroke:var(--line); transition:transform .3s cubic-bezier(.22,1,.36,1),stroke .3s }
+svg a:is(:hover,:focus-visible) rect { stroke:var(--signal); transform:translateY(-4px) }
+svg .arrows { fill:none; stroke:var(--signal); stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
+ol,ul { margin:.5rem 0; padding-inline-start:1.4rem }
+li + li { margin-block-start:.38rem }
+details { border-block-end:1px solid var(--line); padding:.55rem 0 }
+summary { cursor:pointer; color:var(--signal); font-weight:600 }
+small { color:var(--muted); font-size:.88rem }
+.ref { overflow-wrap:anywhere }
+@media(max-width:36rem) {
+  .summary { grid-template-columns:1fr }
+  svg text { font-size:25px }
+}
+@media(prefers-reduced-motion:reduce) {
+  html { scroll-behavior:auto }
+  svg rect { transition:none }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <span class="rev">خطة الإصلاح · النسخة ١</span>
+  <h1>إصلاح وتنضيف <bdi>All in One</bdi></h1>
+  <p class="intro">بتفتح <bdi>Agents</bdi> عشان تبعت رسالة. في النافذة الضيقة بتقابل صفّين أزرار، ونفس تعليمات الكتابة متكررة في كل جزء. وفي الصفحة الرئيسية مساحة القرص ظاهرة فوق وجوّه الصفحة، ومعاها تنبيه مقطوع. المطلوب إن كل شاشة تخلّيك تلاقي اللي جاي تعمله وتكمّله بسهولة.</p>
+</header>
+<div class="summary" aria-label="ملخص الخطة">
+  <article><h3>الإجراء المهم قدامك</h3><p>عنوان واضح وزر أساسي. التفاصيل والأدوات الأقل استخدامًا في مكان معروف.</p></article>
+  <article><h3>العطل يتصلّح ويتجرّب</h3><p>نسجّل خطوات تكراره ونشغّل نفس الخطوات بعد الإصلاح.</p></article>
+  <article><h3>شغلك محفوظ</h3><p>نجرّب على نسخ اختبار ونحتفظ بالإصدار السابق وقت التحديث.</p></article>
+  <article><h3>الدمج بعد نجاح الفحص</h3><p>طلبات الإصلاح المعتمدة تندمج تلقائيًا لما اختبارات GitHub تعدّي.</p></article>
+</div>
+<section id="workflow">
+  <h2>من أول المشكلة لحد النسخة الجديدة</h2>
+  <figure aria-label="مراحل الإصلاح">
+    <svg viewBox="0 0 780 106" aria-label="نعيد المشكلة ثم نصلحها ثم نختبرها ثم ندمجها">
+      <path class="arrows" d="M595 53h-25m8-6-8 6 8 6M400 53h-25m8-6-8 6 8 6M205 53h-25m8-6-8 6 8 6"/>
+      <a href="#baseline"><rect x="610" y="24" width="156" height="58" rx="8"/><text x="688" y="61" text-anchor="middle">نعيد المشكلة</text></a>
+      <a href="#repair"><rect x="415" y="24" width="156" height="58" rx="8"/><text x="493" y="61" text-anchor="middle">نصلّح</text></a>
+      <a href="#checks"><rect x="220" y="24" width="156" height="58" rx="8"/><text x="298" y="61" text-anchor="middle">نختبر</text></a>
+      <a href="#merge"><rect x="25" y="24" width="156" height="58" rx="8"/><text x="103" y="61" text-anchor="middle">ندمج</text></a>
+    </svg>
+  </figure>
+</section>
+<section id="baseline">
+  <h2>اللي اتشاف واتأكد</h2>
+  <ul>
+    <li>لقطة <bdi>Home</bdi> على عرض ١١٠٠ فيها مساحة القرص مكررة، والتنبيه بيقطع الكلام. ولقطة <bdi>Agents</bdi> فيها شريط مزدحم وتعليمات مكررة ومساحة كتابة ضيقة.</li>
+    <li>صفحة <bdi>Team</bdi> موجودة في القائمة، وأداة فتح الصفحات كانت بترفضها. الصفحة كمان غايبة عن قائمة الفحص البصري.</li>
+    <li>اختبار الكيبورد في المتصفح وقف مرتين قبل ما يعدّي في إعادة المحاولة. سبب الوقفة لسه محتاج تأكيد. تحديث <bdi>Team</bdi> على مجلد الشركة لسه محتاج تجربة.</li>
+  </ul>
+  <small class="ref"><bdi>src/MainForm.cs:187 · src/ApiTools.cs:21 · tools/test-ui-sweep.ps1:184</bdi></small>
+</section>
+<section id="repair">
+  <h2>إيه اللي هيتغيّر في التطبيق</h2>
+  <ol>
+    <li><strong>الحفظ والرجوع للشغل.</strong> نعيد فتح الملفات والمحادثات بعد الحفظ وإعادة التشغيل. نجرّب رفض الحفظ، واسترجاع نسخة احتياطية، وتشغيل مهمة من غير ما تتكرر بعد الاسترجاع.</li>
+    <li><strong>تصليح الطرق المقطوعة.</strong> نراجع فتح الصفحات بين القائمة والمساعد، وبعدها نجرّب المتصفح، وحفظ صفحة كملاحظة، والمستندات، والحسابات، والتسجيل، والمهام، و<bdi>Team</bdi> من أول خطوة لآخر نتيجة.</li>
+    <li><strong>تنضيف الشكل صفحة صفحة.</strong> نبدأ بـ <bdi>Home</bdi> و<bdi>Agents</bdi> و<bdi>Assistant</bdi>، وبعدها الحسابات والمستندات والمتصفح و<bdi>Team</bdi> وباقي الصفحات. نراجع الألوان والفواصل وأماكن الأزرار في المكوّنات المشتركة الأول.</li>
+  </ol>
+  <details>
+    <summary>أمثلة على اللي هتشوفه</summary>
+    <p>في <bdi>Home</bdi> هتشوف المطلوب منك والتنبيه اللي محتاج تصرّف. في <bdi>Agents</bdi> هتلاقي إرسال وإيقاف وإعادة المحاولة قريبين من مكان الكتابة. في <bdi>Team</bdi> هتعرف هل أنت متصل، منتظر الموافقة، أو محتاج تصلّح اتصال المجلد.</p>
+  </details>
+  <details>
+    <summary>حاجات لازم ناخد بالنا منها</summary>
+    <p>اختصار الكلام يفضل سايب سبب العطل وخطوة التصرف. الأدوات اللي تتنقل من الشريط تفضل في قائمة واضحة، ومعاها اختصاراتها. اختبار شكل صفحة المكتب على بيانات تجريبية يتبعه حفظ وفتح فعلي على ويندوز.</p>
+  </details>
+</section>
+<section id="checks">
+  <h2>إمتى نقول الإصلاح خلص</h2>
+  <ul>
+    <li>تشغيل اختبارات ويندوز الحالية وعددها ٢٤، وإضافة اختبار عملي لكل عطل بيتصلّح. إعادة اختبار الكيبورد خمس مرات متتالية على ملف اختبار.</li>
+    <li>لقطات قبل وبعد لكل صفحة اتغيّرت، وفيها <bdi>Team</bdi>. نراجع الفاتح والداكن عند ١١٠٠ و١٥٠٠ بكسل، ونجرّب التنقّل بالكيبورد والشاشات بالحجم الفعلي لسطح المكتب.</li>
+    <li>نجرب المستندات المحمية وجهازين على مجلد مشترك تجريبي لما البيئة تكون متاحة. نسجّل نتيجة كل تجربة واللي لسه محتاج البيئة دي.</li>
+    <li>نفحص ملف <bdi>EXE</bdi> الواحد والموارد الستة اللي جواه. نجربه الأول ببيانات اختبار، وبعدها نراجعه على نفس الكمبيوتر وعلى بياناتك بعد أخذ نسخة رجوع.</li>
+  </ul>
+</section>
+<section id="merge">
+  <h2>الدمج التلقائي مع <bdi>main</bdi></h2>
+  <p>الإعداد مقفول حاليًا، و<bdi>main</bdi> ما عليهاش فحص إلزامي. نبدأ بإضافة فحص ويندوز صالح للتشغيل على GitHub، ونتأكد إنه بيمرّ لما الإصلاح سليم وبيمنع الدمج لما الاختبار يفشل.</p>
+  <p>بعدها نفعّل الدمج التلقائي لطلبات الإصلاح اللي بنفتحها. GitHub يدمج الطلب لما الفحص المطلوب يعدّي على آخر نسخة من <bdi>main</bdi>. كل مرحلة ناجحة تتدمج وتتزامن لوحدها، ونشر نسخة الشركة يفضل خطوة مستقلة.</p>
+  <small><a href="https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/automatically-merging-a-pull-request">شرح الدمج التلقائي من GitHub</a></small>
+</section>
+<section id="phases">
+  <h2>ترتيب التنفيذ</h2>
+  <ol>
+    <li>فحص GitHub ودمج تلقائي مجرّب، وقائمة بالأعطال اللي نقدر نعيدها.</li>
+    <li>إصلاح حفظ الشغل، وفتح الصفحات، ومسارات العمل المكسورة.</li>
+    <li>تنضيف الشكل ومراجعة كل صفحة على مقاسات وثيمات مختلفة.</li>
+    <li>تشغيل اختبارات كاملة وتجربة النسخة النهائية وتسجيل نتيجتها.</li>
+  </ol>
+  <small>الخطة للمراجعة. التنفيذ يبدأ بعد اعتمادها.</small>
+</section>
+</main>
+</body>
+</html>

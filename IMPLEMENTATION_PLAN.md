@@ -253,6 +253,10 @@ The Windows release built from `314926d` is running with the existing profile. A
 
 The next local release fixes Cline status in Accounts. The installed app showed the active Cline Pass login and the full Windows test run passed. See the [Cline Accounts release record](HISTORY.md#2026-11-22--accounts-reflects-cline-cli-sign-in).
 
+### App cleanup, reliability and automatic merge · planned
+
+The [repair plan](docs/plans/app-cleanup-and-reliability.html) is ready for owner approval. The `ec5dbc7` baseline captured 132 screenshots. Manual review found clutter in Home and Agents, and Team is missing from the visual sweep and the local API navigation list. After approval, set up required Windows checks and automatic merges, repair saved-work and workflow defects, simplify the UI in batches, then verify the release on this PC.
+
 ---
 
 ## 3. File Map (Modular, Low-Bloat Structure)

@@ -3,6 +3,10 @@
 Short, proven lessons. Read before working on the app; add a new one whenever something is learned, fixed or improved.
 Format: what happened -> cause (proven) -> rule.
 
+## Whole-app visual checks
+
+- A zero-error sweep missed crowded Agents controls, a clipped Home alert and the Team page. The fixture checks control geometry against its own route list, so it cannot detect duplicate information or missing routes by itself. Compare the list against live navigation and inspect representative screenshots for clarity.
+
 ## CLI account status
 
 - Cline 3.0.74 can report an active Cline Pass sign-in with an empty legacy secrets file. Use the installed CLI's provider status, expose provider names only, and distinguish an unavailable check from a confirmed sign-out. A configured provider can exist without credentials.
