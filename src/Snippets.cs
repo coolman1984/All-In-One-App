@@ -17,6 +17,7 @@ namespace StickyPro
         static readonly StringBuilder buf = new StringBuilder();
         static IntPtr lastWindow;
         static int generation;
+        static int bufferLimit = 65;
         static List<KeyValuePair<string, Prompt>> triggers = new List<KeyValuePair<string, Prompt>>();
         static readonly uint myPid = (uint)Process.GetCurrentProcess().Id;
 
@@ -29,6 +30,8 @@ namespace StickyPro
                 .Select(p => new KeyValuePair<string, Prompt>(p.Trigger.Trim(), p))
                 .OrderByDescending(k => k.Key.Length)
                 .ToList();
+            bufferLimit = triggers.Count == 0 ? 65 : Math.Max(65, triggers[0].Key.Length + 1);
+            buf.Clear(); generation++;
             bool want = Store.Settings.Snippets && triggers.Count > 0;
             if (want && hook == IntPtr.Zero)
             {
@@ -66,8 +69,10 @@ namespace StickyPro
             IntPtr foreground = Native.GetForegroundWindow();
             if (foreground != lastWindow) { buf.Clear(); lastWindow = foreground; }
             uint vk = k.vkCode;
-            if (vk == 0x10 || vk == 0xA0 || vk == 0xA1 || vk == 0x14) return; // Shift / CapsLock alone
-            if (Native.Down(0x11) || Native.Down(0x12) || Native.Down(0x5B) || Native.Down(0x5C)) { buf.Clear(); return; }
+            if (vk == 0x10 || vk == 0x11 || vk == 0x12 || vk == 0x14 || (vk >= 0xA0 && vk <= 0xA5)) return;
+            bool ctrl = Native.Down(0x11), alt = Native.Down(0x12);
+            bool altGr = ctrl && alt && Native.Down(0xA5);
+            if (((ctrl || alt) && !altGr) || Native.Down(0x5B) || Native.Down(0x5C)) { buf.Clear(); return; }
             if (vk == 0x08) { if (buf.Length > 0) buf.Length--; return; }
 
             uint pid;
@@ -76,19 +81,20 @@ namespace StickyPro
 
             var state = new byte[256];
             if (Native.Down(0x10)) state[0x10] = 0x80;
+            if (altGr) { state[0x11] = 0x80; state[0x12] = 0x80; state[0xA5] = 0x80; }
             if ((Native.GetKeyState(0x14) & 1) != 0) state[0x14] = 1;
             var sb = new StringBuilder(8);
             int n = Native.ToUnicodeEx(vk, k.scanCode, state, sb, sb.Capacity, 4 /* keep keyboard state */, Native.GetKeyboardLayout(tid));
-            if (n != 1) { if (n == 0) buf.Clear(); return; }
+            if (n != 1) { buf.Clear(); return; }
             char c = sb[0];
             if (char.IsControl(c)) { buf.Clear(); return; }
             buf.Append(c);
-            if (buf.Length > 64) buf.Remove(0, buf.Length - 64);
+            if (buf.Length > bufferLimit) buf.Remove(0, buf.Length - bufferLimit);
 
             string s = buf.ToString();
             foreach (var t in triggers)
             {
-                if (s.EndsWith(t.Key, StringComparison.Ordinal))
+                if (MatchesTrigger(s, t.Key))
                 {
                     buf.Clear();
                     var p = t.Value;
@@ -101,6 +107,15 @@ namespace StickyPro
                 }
             }
         }
+
+        static bool MatchesTrigger(string buffer, string trigger)
+        {
+            if (!buffer.EndsWith(trigger, StringComparison.Ordinal)) return false;
+            int start = buffer.Length - trigger.Length;
+            return start == 0 || !WordChar(trigger[0]) || !WordChar(buffer[start - 1]);
+        }
+
+        static bool WordChar(char c) { return char.IsLetterOrDigit(c) || c == '_'; }
 
         static void Expand(Prompt p, int len, IntPtr target)
         {

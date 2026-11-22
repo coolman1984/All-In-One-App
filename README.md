@@ -195,4 +195,4 @@ Review checks (leave the running app open): `powershell -NoProfile -ExecutionPol
 Read the authoritative [implementation plan](IMPLEMENTATION_PLAN.md) (plus visual guides [architecture-visual.html](docs/architecture-visual.html) and [implementation-plan.html](docs/implementation-plan.html)) before continuing architecture or companion work. See the [maintenance guide](docs/maintenance.md) for code and test entry points and release checks. The [project instructions](AGENTS.md) explain how to keep the [history](HISTORY.md), [lessons](LESSONS.md) and [skills](skills/README.md) updated with every task.
 
 ## Build
-`powershell -ExecutionPolicy Bypass -File build.ps1` (asks the running copy to save and exit, then rebuilds).
+`powershell -ExecutionPolicy Bypass -File build.ps1` asks the running copy to save and exit, then rebuilds. Place a standalone Windows x64 `ffmpeg.exe` with H.264 and AAC in `tools\bundle`, or put it on the build machine's PATH. The release build and portable package both embed it.

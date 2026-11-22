@@ -50,6 +50,32 @@ try {
     $tabs.CanClose = $null; $tabs.CloseActive()
     Assert ($tabs.Paths.Count -eq 1) 'An allowed close left the tab in the list.'
 
+    $fixture = Join-Path $root ('build-test\markdown-close-' + [Guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($fixture)
+    $path = Join-Path $fixture 'note.md'
+    [IO.File]::WriteAllText($path, "Old`nline")
+    $assembly.GetType('StickyPro.Store').GetField('Dir').SetValue($null, $fixture)
+    foreach ($library in 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll') {
+        [void][Reflection.Assembly]::LoadFrom((Join-Path $root "lib\webview2\$library"))
+    }
+    $markdown = [Activator]::CreateInstance($assembly.GetType('StickyPro.MarkdownPage', $true), $true)
+    try {
+        $markdown.GetType().GetMethod('ShowNote', $private).Invoke($markdown, @($path, "Old`nline", [datetime]::Now, $false, $false))
+        $editor = $markdown.GetType().GetField('editor', $private).GetValue($markdown)
+        $noteTabs = $markdown.GetType().GetField('tabs', $private).GetValue($markdown)
+        Assert ($editor.Text -eq "Old`r`nline") 'An LF note loaded incorrectly in the editor.'
+        $editor.Text = "New`r`nline"
+        $lock = [IO.File]::Open($path, 'Open', 'Read', 'Read')
+        try {
+            $noteTabs.CloseActive()
+            Assert ($noteTabs.Paths.Count -eq 1 -and $markdown.CurrentPath -eq $path) 'Failed save removed the Markdown tab.'
+            Assert ($editor.Text -eq "New`r`nline") 'Failed save lost the Markdown buffer.'
+        } finally { $lock.Dispose() }
+        $noteTabs.CloseActive()
+        Assert ($noteTabs.Paths.Count -eq 0 -and !$markdown.CurrentPath) 'Successful save did not close the final tab.'
+        Assert ([IO.File]::ReadAllText($path) -eq "New`nline") 'Saving an LF note changed its line endings.'
+    } finally { $markdown.Dispose() }
+
     $save = $page.GetType().GetField('saveBtn', $private).GetValue($page)
     Assert (-not $save.Enabled) 'Save was enabled on the empty Documents page.'
     $actions = $page.GetType().GetField('documentActions', $private).GetValue($page)

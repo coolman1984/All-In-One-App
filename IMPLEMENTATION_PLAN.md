@@ -231,6 +231,12 @@ A user on a clean 64-bit Windows 10/11 PC MUST be able to copy `AllInOne.exe`, d
 
 ---
 
+### Reliability review · November 22, 2026
+
+Fixed saved-work hazards and workflow bugs found on `cbed099`. See the [review matrix](docs/customer-audit.md#november-22-repair-pass) for code, checks and remaining Windows coverage. Data relocation now copies after the previous process exits and commits the new location only after the copy succeeds. Startup and job scheduling surface unreadable saved data. Release builds require a validated standalone FFmpeg binary.
+
+The scheduler evaluates local conditions and publishes notifications. The current code has no subscriber that executes stored job prompts or skills automatically. End-to-end scheduling claims require that implementation plus verification.
+
 ## 3. File Map (Modular, Low-Bloat Structure)
 
 | File | Type | Phase | Responsibility |

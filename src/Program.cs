@@ -95,7 +95,10 @@ namespace StickyPro
 
             var showEv = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
             var exitEv = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
-            var app = new App(startup);
+            App app;
+            try { app = new App(startup); }
+            catch (IOException ex) { MessageBox.Show(ex.Message, "All in One could not start", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+            catch (UnauthorizedAccessException ex) { MessageBox.Show(ex.Message, "All in One could not start", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
             if (page != null) app.ShowMain(page);
             try { AppApi.Start(); } catch (Exception ex) { App.Log("App API: " + ex.Message); }
             if (Store.Settings.OverlayOn) Ui.Later(1500, () => { try { Overlay.Set(true); } catch (Exception ex) { App.Log("Overlay: " + ex.Message); } });
@@ -108,7 +111,7 @@ namespace StickyPro
             ThreadPool.RegisterWaitForSingleObject(exitEv, delegate
             {
                 try { app.Sync.BeginInvoke(new Action(() => app.Exit())); } catch { }
-            }, null, -1, true);
+            }, null, -1, false);
 
             Application.Run(app);
             GC.KeepAlive(mutex);

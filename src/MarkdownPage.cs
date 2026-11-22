@@ -138,6 +138,32 @@ namespace StickyPro
             return p ?? all.FirstOrDefault(f => string.Equals(Path.GetFileName(f), Path.GetFileName(withExt), StringComparison.OrdinalIgnoreCase));
         }
 
+        public static string SaveClipping(string vault, string name, string url, string text)
+        {
+            string dir = Path.Combine(vault, "Clippings");
+            Directory.CreateDirectory(dir);
+            string title = name ?? "";
+            foreach (char invalid in Path.GetInvalidFileNameChars()) title = title.Replace(invalid, '-');
+            title = title.Trim();
+            if (title.Length > 80) title = title.Substring(0, 80);
+            title = title.TrimEnd('.', ' ');
+            if (title.Length == 0) title = "page";
+            if (Regex.IsMatch(title, @"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", RegexOptions.IgnoreCase))
+                title = "_" + title;
+            string temp = Path.Combine(dir, ".clipping-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                File.WriteAllText(temp, "---\nsource: " + url + "\nsaved: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "\n---\n\n# " + name + "\n\n" + text, new UTF8Encoding(false));
+                for (int k = 1; ; k++)
+                {
+                    string file = Path.Combine(dir, title + (k == 1 ? "" : " (" + k + ")") + ".md");
+                    try { File.Move(temp, file); return file; }
+                    catch (IOException) { if (!File.Exists(file) && !Directory.Exists(file)) throw; }
+                }
+            }
+            finally { if (File.Exists(temp)) try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+        }
+
         public static string Read(string path) { try { return File.ReadAllText(path, Encoding.UTF8); } catch { return null; } }
         static readonly Dictionary<string, KeyValuePair<DateTime, string>> textCache = new Dictionary<string, KeyValuePair<DateTime, string>>(StringComparer.OrdinalIgnoreCase);
         // Note text for search: read once, again only when the file changed; big files (> 400 KB) are skipped.
@@ -290,8 +316,19 @@ namespace StickyPro
             var tabBar = new Panel { Dock = DockStyle.Top, Height = Ui.S(34) };
             tabs = new EditorTabs { Dock = DockStyle.Fill };
             tabs.SetAll(Store.Settings.MdTabs.Where(File.Exists));
-            tabs.Activated += p => Open(p, true);
-            tabs.AllClosed += p => { if (string.Equals(current, p, StringComparison.OrdinalIgnoreCase)) { Save(); current = null; ShowWelcome(); } };
+            tabs.Activated += p =>
+            {
+                if (current != null && !tabs.Paths.Contains(current, StringComparer.OrdinalIgnoreCase)) ClearClosedNote();
+                Open(p, true);
+            };
+            tabs.CanClose = p =>
+            {
+                if (!string.Equals(current, p, StringComparison.OrdinalIgnoreCase)) return true;
+                if (!Save()) return false;
+                openRevision++;
+                return true;
+            };
+            tabs.AllClosed += p => { if (string.Equals(current, p, StringComparison.OrdinalIgnoreCase)) ClearClosedNote(); };
             tabs.Changed += () => { Store.Settings.MdTabs = tabs.Paths.ToList(); Store.MarkSettings(); };
             var acts = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(Ui.S(4), Ui.S(1), 0, 0) };
             backBtn = Act("", "Back (Alt+Left)", GoBack); fwdBtn = Act("", "Forward (Alt+Right)", GoForward);
@@ -320,7 +357,7 @@ namespace StickyPro
                 if (body.Length > 1800) body = body.Substring(0, 1800) + "...";
                 return Tuple.Create(Path.GetFileNameWithoutExtension(p) + (heading.Length > 0 ? " > " + heading : ""), body);
             };
-            view.TextEdited += t => { editor.Text = t; };   // a tick box clicked in the reader: save it to the file
+            view.TextEdited += t => { editor.Text = EditorLineEndings(t); };   // a tick box clicked in the reader: save it to the file
             editor = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true, AcceptsTab = true, Font = ChatView.Mono, BorderStyle = BorderStyle.None, MaxLength = 0, WordWrap = true };
             editor.KeyDown += (s, e) => { if (e.Control && e.KeyCode == Keys.V && PastePicture()) e.SuppressKeyPress = true; };
             var em = Ui.Menu(true);
@@ -645,18 +682,19 @@ namespace StickyPro
                         (editor.Text != loadedText || loadedText != previousBuffer);
                     if (!Save()) return;
                     if (onSuccess != null) onSuccess();
-                    ShowNote(path, preserveBuffer ? loadedText : text, modified, record);
+                    ShowNote(path, preserveBuffer ? loadedText : text, modified, record, preserveBuffer);
                 })); } catch (InvalidOperationException) { }
             });
         }
 
-        void ShowNote(string path, string text, DateTime modified, bool record)
+        void ShowNote(string path, string text, DateTime modified, bool record, bool preserveLineEnding = false)
         {
             if (record && current != null && !string.Equals(current, path, StringComparison.OrdinalIgnoreCase)) { back.Add(current); fwd.Clear(); }
             current = path;
             Store.Settings.MdLast = path; Store.MarkSettings();
             MetaStore.Touch("md", path);
-            loading = true; editor.Text = text; loading = false; loadedText = text;
+            loading = true; editor.Text = EditorLineEndings(text); loading = false; loadedText = editor.Text;
+            if (!preserveLineEnding) lineEnding = text.Contains("\n") && !text.Contains("\r\n") ? "\n" : "\r\n";
             results.Visible = false; split.Visible = true;
             headingNow = ""; tabs.Show(path);
             title.Text = Crumbs();
@@ -802,12 +840,27 @@ namespace StickyPro
         }
 
         // ---------- files ----------
-        bool Save()
+        string lineEnding = "\r\n";
+        static string EditorLineEndings(string text) { return text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", "\r\n"); }
+
+        public bool Save()
         {
             saveTimer.Stop();
             if (current == null || editor.Text == loadedText) return true;
-            try { File.WriteAllText(current, editor.Text, new UTF8Encoding(false)); loadedText = editor.Text; info.Text = "Saved " + DateTime.Now.ToString("HH:mm:ss") + "   ·   " + current; return true; }
+            string temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(current)), ".markdown-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                string buffer = editor.Text;
+                string text = EditorLineEndings(buffer);
+                if (lineEnding == "\n") text = text.Replace("\r\n", "\n");
+                File.WriteAllText(temp, text, new UTF8Encoding(false));
+                File.Replace(temp, current, null);
+                loadedText = buffer;
+                info.Text = "Saved " + DateTime.Now.ToString("HH:mm:ss") + "   ·   " + current;
+                return true;
+            }
             catch (Exception ex) { info.Text = "Could not save: " + ex.Message; return false; }
+            finally { try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
         }
 
         static string Safe(string name) { foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '-'); return name.Trim(); }
@@ -938,13 +991,23 @@ namespace StickyPro
             if (MessageBox.Show(FindForm(), "Move \"" + Path.GetFileName(p) + "\" to the Recycle Bin?", "Markdown notes", MessageBoxButtons.OKCancel) != DialogResult.OK) return;
             try
             {
+                if (string.Equals(current, p, StringComparison.OrdinalIgnoreCase) && !Save()) return;
                 openRevision++;
                 if (!Leftovers.Recycle(p)) throw new IOException("the file could not be moved to the Recycle Bin");
                 tabs.Close(p);
-            if (string.Equals(current, p, StringComparison.OrdinalIgnoreCase)) { current = null; ShowWelcome(); }
                 MdVault.Index(true);
             }
             catch (Exception ex) { MessageBox.Show(FindForm(), "Could not delete: " + ex.Message, "Markdown notes"); }
+        }
+
+        void ClearClosedNote()
+        {
+            current = null;
+            Store.Settings.MdLast = "";
+            Store.MarkSettings();
+            loading = true; editor.Clear(); loading = false; loadedText = "";
+            info.Text = "";
+            ShowWelcome();
         }
 
         void ShowWelcome()

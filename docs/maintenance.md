@@ -27,7 +27,7 @@ Run the app's tests under Windows PowerShell. The build targets .NET Framework a
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-all.ps1
 ```
 
-Use temporary fixtures for saved chats, settings, folders and attachments. The provider tests use local stand-ins. Record live provider behavior separately when it has been exercised.
+Use temporary fixtures for saved chats, settings, folders and attachments. For a deferred data move, edit the source after choosing the target and verify the restarted app uses that edit. Keep the source available for recovery. The provider tests use local stand-ins. Record live provider behavior separately when it has been exercised.
 
 For a UI regression, test the state that triggers it. Restore a saved Split view during startup, shrink Explorer while it is scrolled, or focus an empty chat composer. Benchmark the same fixture and operation before and after a performance change. A row lookup timing measures lookup cost. Whole-app CPU, memory and responsiveness require their own measurements.
 
@@ -58,7 +58,7 @@ rendering separately when they are in scope.
 
 1. Stage the source and needed resources in an allowlisted release folder. Include build scripts, tests and their fixtures, documentation, and relevant project skills. Exclude generated test data, app data, logs, recordings and credentials.
 2. Extract the source ZIP into a fresh directory, compare included files with the staged source, and run the full suite there. Confirm the tests load the executable built in that extraction.
-3. Build the release from the verified source. Check the resources needed by the features being shipped, including `ChatSlides.pptx` and ffmpeg when distributing the bundled recorder. Smoke-test the exact executable with temporary fixtures.
+3. Build the release from the verified source. Both release scripts use [bundle-ffmpeg.ps1](../tools/bundle-ffmpeg.ps1) to validate a standalone Windows x64 encoder before compiling. Check all six embedded resources and play a saved recording from the exact release executable on a clean Windows PC.
 4. When updating the main executable, keep the previous build available for rollback. Verify the replacement hash and confirm the project's shortcut points to that executable. Record the release filenames, checks and any real-user scenarios still open in [HISTORY.md](../HISTORY.md).
 
 ## Plan large changes as a page

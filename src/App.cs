@@ -51,6 +51,7 @@ namespace StickyPro
             Ui.ApplyLook();
             Ui.SetNoteFont(Store.Settings.NoteFontName, Store.Settings.NoteFontSize);
             BuildTray();
+            if (Store.MoveError != null) Balloon("Data folder move failed", "Using the original folder. " + Store.MoveError);
             if (Store.Settings.KeepAwake) Awake.Set(true);
             try { PopupHider.Apply(); } catch (Exception ex) { Log("Popup hider: " + ex.Message); }
             Ui.Later(30000, () => { try { CliUpdates.AutoCheck(); } catch (Exception ex) { Log("CLI updates: " + ex.Message); } });   // once a day, in the background

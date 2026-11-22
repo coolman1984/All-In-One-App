@@ -289,13 +289,13 @@ namespace StickyPro
 
         void MoveData(Label where)
         {
-            using (var d = new FolderBrowserDialog { Description = "Choose the new data folder. Your data is copied there; the old files stay where they are.", ShowNewFolderButton = true })
+            using (var d = new FolderBrowserDialog { Description = "Choose an empty folder. Your data will be copied there after restart.", ShowNewFolderButton = true })
             {
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 string err = Store.MoveDataTo(d.SelectedPath);
                 if (err != null) { MessageBox.Show(this, "Could not move the data folder: " + err, App.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
                 where.Text = d.SelectedPath + "  (after restart)";
-                if (MessageBox.Show(this, "Your data was copied to:\n" + d.SelectedPath + "\n\nThe app uses it after a restart. Restart now?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                if (MessageBox.Show(this, "Your latest data will be copied to:\n" + d.SelectedPath + "\n\nThe original folder is kept. Restart now?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     App.I.RestartNow();
             }
         }

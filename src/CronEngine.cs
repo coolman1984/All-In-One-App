@@ -135,25 +135,27 @@ namespace StickyPro
 
         static List<CronJob> LoadJobsLocked()
         {
-            try
-            {
-                if (!File.Exists(JobsFile)) return new List<CronJob>();
-                var list = Js.Deserialize<List<CronJob>>(File.ReadAllText(JobsFile, Encoding.UTF8));
-                return list ?? new List<CronJob>();
-            }
-            catch (Exception)
-            {
-                return new List<CronJob>();
-            }
+            string json;
+            try { json = File.ReadAllText(JobsFile, Encoding.UTF8); }
+            catch (FileNotFoundException) { return new List<CronJob>(); }
+            catch (DirectoryNotFoundException) { return new List<CronJob>(); }
+            var jobs = Js.Deserialize<List<CronJob>>(json);
+            if (jobs == null) throw new InvalidDataException("Empty schedule data in " + JobsFile);
+            jobs.RemoveAll(j => j == null);
+            return jobs;
         }
 
         static void SaveJobsLocked(List<CronJob> jobs)
         {
             Directory.CreateDirectory(CronDir);
-            string tmp = JobsFile + ".tmp." + Guid.NewGuid().ToString("N").Substring(0, 6);
-            File.WriteAllText(tmp, Js.Serialize(jobs ?? new List<CronJob>()), Utf8NoBom);
-            if (File.Exists(JobsFile)) File.Replace(tmp, JobsFile, null, true);
-            else File.Move(tmp, JobsFile);
+            string tmp = JobsFile + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(tmp, Js.Serialize(jobs), Utf8NoBom);
+                if (File.Exists(JobsFile)) File.Replace(tmp, JobsFile, null, true);
+                else File.Move(tmp, JobsFile);
+            }
+            finally { try { File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
         }
 
         public static Dictionary<string, object> Manage(
@@ -304,8 +306,11 @@ namespace StickyPro
             {
                 var job = jobs[i];
                 if (job == null || !job.enabled) continue;
-                if (!IsJobDue(job, nowUtc)) continue;
-                results.Add(EvaluateJob(job, false));
+                try
+                {
+                    if (IsJobDue(job, nowUtc)) results.Add(EvaluateJob(job, false));
+                }
+                catch (Exception ex) { App.Log("Cron job " + job.id + ": " + ex.Message); }
             }
             return results;
         }
@@ -804,8 +809,8 @@ namespace StickyPro
 
         static void ValidateSchedule(string sched)
         {
-            if (Regex.IsMatch(sched, @"^every:\d+[smhd]$", RegexOptions.IgnoreCase)) return;
-            if (Regex.IsMatch(sched, @"^daily:\d{1,2}:\d{2}$", RegexOptions.IgnoreCase)) return;
+            TimeSpan time;
+            if (TryInterval(sched, out time) || TryDailyTime(sched, out time)) return;
             if (sched.StartsWith("once:", StringComparison.OrdinalIgnoreCase))
             {
                 DateTime dt;
@@ -822,25 +827,14 @@ namespace StickyPro
             if (!string.IsNullOrWhiteSpace(job.last_run_utc))
                 DateTime.TryParse(job.last_run_utc, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out lastRunUtc);
 
-            var mEvery = Regex.Match(sched, @"^every:(\d+)([smhd])$", RegexOptions.IgnoreCase);
-            if (mEvery.Success)
-            {
-                int n = int.Parse(mEvery.Groups[1].Value, CultureInfo.InvariantCulture);
-                char u = char.ToLowerInvariant(mEvery.Groups[2].Value[0]);
-                TimeSpan interval = u == 's' ? TimeSpan.FromSeconds(Math.Max(10, n))
-                    : u == 'm' ? TimeSpan.FromMinutes(Math.Max(1, n))
-                    : u == 'h' ? TimeSpan.FromHours(Math.Max(1, n))
-                    : TimeSpan.FromDays(Math.Max(1, n));
-                return lastRunUtc == DateTime.MinValue || (nowUtc - lastRunUtc) >= interval;
-            }
+            TimeSpan time;
+            if (TryInterval(sched, out time))
+                return lastRunUtc == DateTime.MinValue || (nowUtc - lastRunUtc) >= time;
 
-            var mDaily = Regex.Match(sched, @"^daily:(\d{1,2}):(\d{2})$", RegexOptions.IgnoreCase);
-            if (mDaily.Success)
+            DateTime nowLocal = nowUtc.ToLocalTime();
+            if (TryDailyTime(sched, out time))
             {
-                int hh = Math.Max(0, Math.Min(23, int.Parse(mDaily.Groups[1].Value, CultureInfo.InvariantCulture)));
-                int mm = Math.Max(0, Math.Min(59, int.Parse(mDaily.Groups[2].Value, CultureInfo.InvariantCulture)));
-                DateTime nowLocal = DateTime.Now;
-                DateTime todayTarget = new DateTime(nowLocal.Year, nowLocal.Month, nowLocal.Day, hh, mm, 0);
+                DateTime todayTarget = nowLocal.Date.Add(time);
                 if (nowLocal < todayTarget) return false;
                 return lastRunUtc == DateTime.MinValue || lastRunUtc.ToLocalTime() < todayTarget;
             }
@@ -849,10 +843,32 @@ namespace StickyPro
             {
                 DateTime target;
                 if (DateTime.TryParse(sched.Substring(5).Trim(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out target))
-                    return DateTime.Now >= target && lastRunUtc == DateTime.MinValue;
+                    return nowLocal >= target && lastRunUtc == DateTime.MinValue;
             }
 
             return false;
+        }
+
+        static bool TryInterval(string schedule, out TimeSpan interval)
+        {
+            interval = TimeSpan.Zero;
+            var match = Regex.Match(schedule, @"^every:([0-9]+)([smhd])$", RegexOptions.IgnoreCase);
+            long count;
+            if (!match.Success || !long.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out count) || count == 0)
+                return false;
+            char unit = char.ToLowerInvariant(match.Groups[2].Value[0]);
+            long ticks = unit == 's' ? TimeSpan.TicksPerSecond : unit == 'm' ? TimeSpan.TicksPerMinute
+                : unit == 'h' ? TimeSpan.TicksPerHour : TimeSpan.TicksPerDay;
+            if (count > TimeSpan.MaxValue.Ticks / ticks) return false;
+            interval = TimeSpan.FromTicks((unit == 's' ? Math.Max(10, count) : count) * ticks);
+            return true;
+        }
+
+        static bool TryDailyTime(string schedule, out TimeSpan time)
+        {
+            time = TimeSpan.Zero;
+            return schedule.StartsWith("daily:", StringComparison.OrdinalIgnoreCase)
+                && TimeSpan.TryParseExact(schedule.Substring(6), new[] { @"h\:mm", @"hh\:mm" }, CultureInfo.InvariantCulture, out time);
         }
 
         static string NormalizePrecheckType(string raw)

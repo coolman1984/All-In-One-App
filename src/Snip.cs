@@ -1114,6 +1114,11 @@ $stream.Dispose()
         public static string FindFfmpeg()
         {
             if (ffmpeg != null && File.Exists(ffmpeg)) return ffmpeg;
+            if (Bundled.Has("ffmpeg.exe"))
+            {
+                string bundled = Bundled.Tool("ffmpeg.exe");
+                if (bundled != null) return ffmpeg = bundled;
+            }
             foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
             {
                 try { var p = Path.Combine(dir.Trim(), "ffmpeg.exe"); if (File.Exists(p)) return ffmpeg = p; } catch { }
@@ -1129,7 +1134,7 @@ $stream.Dispose()
                     }
             }
             catch { }
-            try { var b = Bundled.Tool("ffmpeg.exe"); if (b != null) return ffmpeg = b; } catch { }   // packed inside AllInOne.exe
+            if (!Bundled.Has("ffmpeg.exe")) return ffmpeg = Bundled.Tool("ffmpeg.exe");
             return null;
         }
 

@@ -735,8 +735,21 @@ namespace StickyPro
 
         public void StartNewPrompt() { ShowPage("prompts"); prompts.NewPrompt(); }
         public void UpdatePaused() { if (clips != null) clips.UpdatePaused(); }
-        public void CommitEdits() { if (prompts != null) prompts.Commit(); }
-        public bool ConfirmDocumentClose() { return documents == null || documents.ConfirmCloseEditors(); }
+        public void CommitEdits()
+        {
+            if (prompts != null) prompts.Commit();
+            if (markdown != null) markdown.Save();
+        }
+        public bool ConfirmDocumentClose()
+        {
+            if (markdown != null && !markdown.Save())
+            {
+                ShowPage("markdown");
+                Status("Could not save the Markdown note. Check the file and try again.");
+                return false;
+            }
+            return documents == null || documents.ConfirmCloseEditors();
+        }
 
         public void Status(string text)
         {

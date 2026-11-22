@@ -77,7 +77,7 @@ namespace StickyPro
 
     class BrowserPage : Panel
     {
-        class Tab { public WebView2 View; public Panel Chip; public Button Title; public string Url = "", Name = "New tab"; }
+        class Tab { public WebView2 View; public Panel Chip; public Button Title; public string Url = "", Name = "New tab"; public int NavigationRevision; }
 
         readonly List<Tab> tabs = new List<Tab>();
         readonly FlowLayoutPanel tabBar;
@@ -225,6 +225,8 @@ namespace StickyPro
                 if (t.View.IsDisposed) return;
                 await t.View.EnsureCoreWebView2Async(e);
                 var core = t.View.CoreWebView2;
+                if (IsDisposed || t.View.IsDisposed || core == null) return;
+                core.NavigationStarting += delegate { t.NavigationRevision++; };
                 core.Settings.AreDevToolsEnabled = true;
                 core.Settings.IsStatusBarEnabled = true;
                 core.DocumentTitleChanged += delegate { t.Name = core.DocumentTitle; ShowTitle(t); Remember(t); };
@@ -509,8 +511,9 @@ namespace StickyPro
         async void SendSelection()
         {
             if (active == null || active.View.CoreWebView2 == null) return;
-            string json = await active.View.CoreWebView2.ExecuteScriptAsync("window.getSelection().toString()");
-            string text = Unjson(json);
+            Tab tab = active;
+            string text = Unjson(await ReadPageScript(tab, "window.getSelection().toString()"));
+            if (IsDisposed || active != tab) return;
             if (string.IsNullOrWhiteSpace(text)) { status.Text = "Select some text on the page first."; return; }
             var sm = Ui.Menu(); var send = AppLinks.SendTo(null, text, FindForm());
             while (send.DropDownItems.Count > 0) { var it = send.DropDownItems[0]; send.DropDownItems.RemoveAt(0); sm.Items.Add(it); }
@@ -523,14 +526,36 @@ namespace StickyPro
             if (active == null || active.View.CoreWebView2 == null) return;
             string vault = MdVault.Current;
             if (string.IsNullOrEmpty(vault)) { status.Text = "Add a Markdown vault first (Markdown notes > Vaults)."; return; }
-            string text = Unjson(await active.View.CoreWebView2.ExecuteScriptAsync("(document.querySelector('article,main')||document.body).innerText"));
-            string title = SafeName(active.Name);
-            string dir = Path.Combine(vault, "Clippings"); Directory.CreateDirectory(dir);
-            string file = Path.Combine(dir, title + ".md");
-            for (int k = 2; File.Exists(file); k++) file = Path.Combine(dir, title + " (" + k + ").md");
-            File.WriteAllText(file, "---\nsource: " + active.Url + "\nsaved: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "\n---\n\n# " + active.Name + "\n\n" + (text ?? ""), new System.Text.UTF8Encoding(false));
-            MdVault.Index(true);
-            App.I.OpenMarkdown(file);
+            Tab tab = active;
+            try
+            {
+                string json = await ReadPageScript(tab, "({title: document.title, url: location.href, text: (document.querySelector('article,main') || document.body).innerText})");
+                if (IsDisposed) return;
+                if (json == null) { status.Text = "The page changed before it could be saved. Try again."; return; }
+                var clip = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }
+                    .Deserialize<Dictionary<string, string>>(json);
+                if (clip == null || !clip.ContainsKey("text")) { status.Text = "Could not read this page."; return; }
+                string name = string.IsNullOrWhiteSpace(clip["title"]) ? clip["url"] : clip["title"];
+                string file = MdVault.SaveClipping(vault, name, clip["url"], clip["text"]);
+                MdVault.Index(true);
+                if (active == tab) App.I.OpenMarkdown(file);
+                else status.Text = "Saved to Clippings: " + Path.GetFileName(file);
+            }
+            catch (Exception ex) { if (!IsDisposed) status.Text = "Could not save this page: " + ex.Message; }
+        }
+
+        async Task<string> ReadPageScript(Tab tab, string script)
+        {
+            try
+            {
+                int navigation = tab.NavigationRevision;
+                var core = tab.View.CoreWebView2;
+                string source = core.Source;
+                string json = await core.ExecuteScriptAsync(script);
+                return !IsDisposed && tabs.Contains(tab) && navigation == tab.NavigationRevision
+                    && string.Equals(source, core.Source, StringComparison.Ordinal) ? json : null;
+            }
+            catch (Exception ex) { App.Log("Read browser page: " + ex.Message); return null; }
         }
 
         static string Unjson(string json)

@@ -103,6 +103,8 @@ try {
     $midStatus = Run-Tool 'record_status' @{}
     Assert ([bool]$midStatus['recording'] -and [int]$midStatus['stepCount'] -eq 3) ('record_status expected 3 steps, got: ' + $midStatus['stepCount'])
 
+    # A torn append is replaced from the in-memory steps at stop.
+    [IO.File]::WriteAllText([string]$startRes['eventsFile'], '{partial', $utf8)
     $stopRes = Run-Tool 'record_stop' @{}
     Assert ([bool]$stopRes['ok'] -and (-not [bool]$stopRes['recording']) -and [int]$stopRes['stepCount'] -eq 3) 'record_stop failed.'
     $summaryFile = [string]$stopRes['summaryFile']

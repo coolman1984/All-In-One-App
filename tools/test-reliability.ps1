@@ -110,23 +110,55 @@ Call 'AgentStore' 'Save' @($chat); Call 'AgentStore' 'Delete' @($chat)
 Assert (Call 'AgentStore' 'FlushWrites' @()) 'Agent deletion failed to flush.'
 Assert (-not [IO.File]::Exists($chatPath)) 'A queued save resurrected a deleted chat.'
 
-# Migration must reject stale targets, write the location only after copying, and preserve --data.
+# A deferred move copies the last committed state and leaves the old data in place.
 $source = Join-Path $fixture 'move-source'; $target = Join-Path $fixture 'move-target'
 $config = Join-Path $fixture 'config'
 [IO.Directory]::CreateDirectory($source) | Out-Null
 [IO.Directory]::CreateDirectory($config) | Out-Null
 [IO.File]::WriteAllText((Join-Path $source 'notes.json'), '[]')
+[IO.File]::WriteAllText((Join-Path $source 'removed.txt'), 'old')
 $store.GetField('dataRoot', $static).SetValue($null, $config)
 $store.GetField('Dir', $static).SetValue($null, $source)
-$store.GetField('DirOverride', $static).SetValue($null, $source)
+$store.GetField('DirOverride', $static).SetValue($null, $null)
+$location = Join-Path $config 'data-location.txt'
 $errorText = Call 'Store' 'MoveDataTo' @((Join-Path $source 'nested'))
 Assert ($null -ne $errorText) 'Migration accepted a descendant destination.'
 $errorText = Call 'Store' 'MoveDataTo' @($backup)
 Assert ($null -ne $errorText) 'Migration accepted an occupied destination.'
-Assert (-not [IO.File]::Exists((Join-Path $config 'data-location.txt'))) 'Rejected migration changed the location.'
-$errorText = Call 'Store' 'MoveDataTo' @($target)
-Assert ([string]::IsNullOrEmpty($errorText)) ('Migration failed: ' + $errorText)
-Assert ([IO.File]::Exists((Join-Path $target 'notes.json'))) 'Migration did not copy the data.'
-Assert ([IO.File]::ReadAllText((Join-Path $config 'data-location.txt')) -eq $target) 'Migration did not commit the destination.'
-Assert ($store.GetField('DirOverride', $static).GetValue($null) -eq $target) 'Migration restart would use the old --data folder.'
-Write-Host 'RELIABILITY OK: deep snapshots, lazy pages, recurrence, complete backup/restore, ordered agent saves and deletion'
+Assert (-not [IO.File]::Exists($location)) 'Rejected migration changed the location.'
+
+Assert ($null -eq (Call 'Store' 'MoveDataTo' @($target))) 'Could not schedule the move.'
+[IO.Directory]::CreateDirectory($target) | Out-Null
+[IO.File]::WriteAllText((Join-Path $target 'other.txt'), 'leave it')
+Assert ((Call 'Store' 'ApplyPendingMove' @($source)) -eq $source) 'A now-occupied target replaced the source.'
+Assert ([IO.File]::ReadAllText((Join-Path $target 'other.txt')) -eq 'leave it') 'Migration overwrote an unrelated file.'
+Assert (-not [IO.File]::Exists($location)) 'A failed copy changed the location.'
+[IO.File]::Delete((Join-Path $target 'other.txt'))
+
+Assert ($null -eq (Call 'Store' 'MoveDataTo' @($target))) 'Could not reschedule the move.'
+Assert (-not [IO.File]::Exists($location)) 'Scheduling the move changed the active folder.'
+[IO.File]::WriteAllText((Join-Path $source 'notes.json'), '[{"Text":"after scheduling"}]')
+[IO.File]::WriteAllText((Join-Path $source 'created.txt'), 'new')
+[IO.File]::Delete((Join-Path $source 'removed.txt'))
+Assert ((Call 'Store' 'ApplyPendingMove' @($source)) -eq $target) 'Applying the pending move did not return its target.'
+Assert ([IO.File]::ReadAllText((Join-Path $target 'notes.json')) -like '*after scheduling*') 'Migration missed a late edit.'
+Assert ([IO.File]::Exists((Join-Path $target 'created.txt'))) 'Migration missed a late file creation.'
+Assert (-not [IO.File]::Exists((Join-Path $target 'removed.txt'))) 'Migration copied a deleted file.'
+Assert ([IO.File]::ReadAllText($location) -eq $target) 'Migration did not commit the new location.'
+Assert ([IO.File]::Exists((Join-Path $source 'notes.json'))) 'Migration removed the original data.'
+
+# A locked primary with a readable older backup must never look like an empty or recovered profile.
+$settingsPath = Join-Path $source 'settings.json'
+[IO.File]::WriteAllText($settingsPath, '{"UserName":"newer"}')
+[IO.File]::WriteAllText($settingsPath + '.bak', '{"UserName":"older"}')
+$read = $store.GetMethod('Read', $static).MakeGenericMethod(@($assembly.GetType('StickyPro.Settings')))
+$locked = [IO.File]::Open($settingsPath, 'Open', 'Read', 'None')
+try {
+    $blocked = $false
+    try { $null = $read.Invoke($null, @('settings.json')) } catch { $blocked = $true }
+    Assert $blocked 'A temporarily locked primary was treated as missing or invalid.'
+} finally { $locked.Dispose() }
+Assert ($read.Invoke($null, @('settings.json')).UserName -eq 'newer') 'The primary did not recover after unlocking.'
+[IO.File]::WriteAllText($settingsPath, '{broken')
+Assert ($read.Invoke($null, @('settings.json')).UserName -eq 'older') 'A corrupt primary did not recover from its readable backup.'
+Write-Host 'RELIABILITY OK: snapshots, lazy pages, recurrence, backup/restore, agent saves, deferred migration and locked data'

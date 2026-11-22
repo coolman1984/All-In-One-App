@@ -215,6 +215,7 @@ namespace StickyPro
         public Dictionary<string, string> ViewStacks = new Dictionary<string, string>();   // VS Code style side sections: state per stack
         public List<string> MdTabs = new List<string>();   // Markdown: open note tabs
         public List<string> ViewerTabs = new List<string>();   // Documents page: open files
+        public Dictionary<string, bool> ViewerTabModes = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         public bool ViewerEdit = true;   // Documents page: Excel / Word / PowerPoint open inside the tab for editing
         public bool MdTreeHidden, MdSideHidden;   // Markdown: note tree (Ctrl+B) and side panel (Ctrl+Shift+B) hidden
         public List<string> SearchHistory = new List<string>();   // Ctrl+K: recent searches (newest first)
@@ -313,8 +314,9 @@ namespace StickyPro
         public static void Load()
         {
             Dir = DataFolder();
-            ImgDir = Path.Combine(Dir, "images");
             Backup.ApplyPending(Dir);
+            Dir = ApplyPendingMove(Dir);
+            ImgDir = Path.Combine(Dir, "images");
             Directory.CreateDirectory(Dir);
             Directory.CreateDirectory(ImgDir);
             Notes = Read<List<Note>>("notes.json") ?? new List<Note>();
@@ -404,6 +406,9 @@ namespace StickyPro
             if (s.ViewStacks == null) s.ViewStacks = new Dictionary<string, string>();
             if (s.MdTabs == null) s.MdTabs = new List<string>();
             if (s.ViewerTabs == null) s.ViewerTabs = new List<string>();
+            var tabModes = s.ViewerTabModes;
+            s.ViewerTabModes = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            if (tabModes != null) foreach (var mode in tabModes) s.ViewerTabModes[mode.Key] = mode.Value;
             s.MdVaults.RemoveAll(string.IsNullOrWhiteSpace);
             s.TermHistory.RemoveAll(x => x == null);
             foreach (var x in s.TermHistory) { if (x.Folders == null) x.Folders = new List<string>(); if (x.Kind == null) x.Kind = ""; if (x.Title == null) x.Title = ""; if (x.Command == null) x.Command = ""; if (x.Shell == null) x.Shell = ""; if (x.Layout == null) x.Layout = ""; }
@@ -452,63 +457,119 @@ namespace StickyPro
         public static string DataFolder()
         {
             if (!string.IsNullOrEmpty(DirOverride)) return DirOverride;
-            try
-            {
-                if (File.Exists(LocationFile))
-                {
-                    string p = File.ReadAllText(LocationFile).Trim();
-                    if (p.Length > 0 && Path.IsPathRooted(p)) return p;
-                }
-            }
-            catch (Exception ex) { App.Log("Data folder: " + ex.Message + " - using the default."); }
-            return DefaultDir;
+            string path;
+            try { path = File.ReadAllText(LocationFile).Trim(); }
+            catch (FileNotFoundException) { return DefaultDir; }
+            catch (DirectoryNotFoundException) { return DefaultDir; }
+            if (path.Length == 0) return DefaultDir;
+            if (!Path.IsPathRooted(path)) throw new IOException("Invalid data location in " + LocationFile);
+            return path;
         }
-        // Copies every data file to newDir and points the app there (takes effect after a restart). Old files stay.
+
+        public static string MoveMarker(string dir) { return Path.Combine(dir, "pending-data-move.tmp"); }
+        public static string MoveError { get; private set; }
+
+        // Record the choice now; copy on the next startup after this process has released all writers.
         public static string MoveDataTo(string newDir)
         {
             try
             {
                 newDir = Path.GetFullPath(newDir);
-                DataFiles.CheckSeparate(Dir, newDir);
-                if (Directory.Exists(newDir) && Directory.EnumerateFileSystemEntries(newDir).Any())
-                    return "Choose an empty destination folder to avoid replacing existing data.";
-                SaveNow(); FlushWrites();
-                if (Pending) return "Current changes could not be saved. The data folder was not changed.";
-                if (!AgentStore.FlushWrites()) return "Agent chats could not be saved. The data folder was not changed.";
-                DataFiles.CopyTree(Dir, newDir);
-                if (string.Equals(newDir.TrimEnd('\\'), DefaultDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) { if (File.Exists(LocationFile)) File.Delete(LocationFile); }
-                else
-                {
-                    string temporary = LocationFile + ".tmp";
-                    File.WriteAllText(temporary, newDir, new UTF8Encoding(false));
-                    if (File.Exists(LocationFile)) File.Replace(temporary, LocationFile, LocationFile + ".bak", true);
-                    else File.Move(temporary, LocationFile);
-                }
-                if (!string.IsNullOrEmpty(DirOverride)) DirOverride = newDir;
+                CheckMoveTarget(Dir, newDir);
+                if (Directory.Exists(Path.Combine(Dir, "restore-pending")))
+                    return "Finish the pending backup restore before moving the data folder.";
+                WritePointer(MoveMarker(Dir), newDir);
                 return null;
             }
             catch (Exception ex) { return ex.Message; }
         }
 
+        static void CheckMoveTarget(string source, string target)
+        {
+            DataFiles.CheckSeparate(source, target);
+            if (new DirectoryInfo(target).Parent == null || File.Exists(target) ||
+                (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any()))
+                throw new IOException("Choose an empty destination folder to avoid replacing existing data.");
+        }
+
+        static void WritePointer(string path, string value, string backup = null)
+        {
+            string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temp, value, new UTF8Encoding(false));
+                if (File.Exists(path)) File.Replace(temp, path, backup, true);
+                else File.Move(temp, path);
+            }
+            finally { try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+        }
+
+        static string ApplyPendingMove(string source)
+        {
+            MoveError = null;
+            string marker = MoveMarker(source);
+            string stage = null;
+            try
+            {
+                string target;
+                try { target = File.ReadAllText(marker); }
+                catch (FileNotFoundException) { return source; }
+                catch (DirectoryNotFoundException) { return source; }
+                target = Path.GetFullPath(target);
+                CheckMoveTarget(source, target);
+                target = target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                stage = target + ".move-stage-" + Guid.NewGuid().ToString("N");
+                DataFiles.CopyTree(source, stage);
+                if (Directory.Exists(target)) Directory.Delete(target, false);
+                Directory.Move(stage, target);
+                stage = null;
+                if (string.IsNullOrEmpty(DirOverride)) WritePointer(LocationFile, target, LocationFile + ".bak");
+                else DirOverride = target;
+                try { File.Delete(marker); } catch (IOException ex) { App.Log("Move marker: " + ex.Message); }
+                catch (UnauthorizedAccessException ex) { App.Log("Move marker: " + ex.Message); }
+                return target;
+            }
+            catch (Exception ex)
+            {
+                MoveError = ex.Message;
+                try { File.Delete(marker); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                App.Log("Data move failed: " + MoveError);
+                return source;
+            }
+            finally
+            {
+                if (stage != null && Directory.Exists(stage))
+                    try { Directory.Delete(stage, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
         static T Read<T>(string name) where T : class
         {
-            string p = Path.Combine(Dir, name);
-            foreach (string file in new[] { p, p + ".bak" })
+            string path = Path.Combine(Dir, name);
+            bool invalid = false;
+            foreach (string file in new[] { path, path + ".bak" })
             {
+                string json;
+                try { json = File.ReadAllText(file, Encoding.UTF8); }
+                catch (FileNotFoundException) { continue; }
+                catch (IOException ex) { throw new IOException("Could not open " + file + ". Close other programs using it and reopen All in One.", ex); }
+                catch (UnauthorizedAccessException ex) { throw new IOException("Could not read " + file + ". Check the folder permissions and reopen All in One.", ex); }
+
                 try
                 {
-                    if (File.Exists(file))
-                    {
-                        var o = Js().Deserialize<T>(File.ReadAllText(file, Encoding.UTF8));
-                        if (o != null) { if (file != p) recovered.Add(name); return o; }
-                    }
+                    var data = Js().Deserialize<T>(json);
+                    if (data == null) throw new InvalidDataException("Empty data.");
+                    if (file != path) recovered.Add(name);
+                    return data;
                 }
                 catch (Exception ex)
                 {
-                    App.Log("Could not read " + file + ": " + ex.Message);
+                    invalid = true;
+                    App.Log("Invalid data in " + file + ": " + ex.Message);
                     try { File.Copy(file, file + ".broken-" + DateTime.Now.ToString("yyyyMMddHHmmss"), true); } catch { }
                 }
             }
+            if (invalid) throw new IOException("No readable copy of " + path + ". Restore it from a backup and reopen All in One.");
             return null;
         }
 

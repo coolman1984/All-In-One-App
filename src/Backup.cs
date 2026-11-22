@@ -80,6 +80,7 @@ namespace StickyPro
         public static void Stage(string from, string dir)
         {
             DataFiles.CheckSeparate(from, dir);
+            if (File.Exists(Store.MoveMarker(dir))) throw new IOException("Finish the pending data-folder move before restoring a backup.");
             string pending = Path.Combine(dir, "restore-pending");
             if (Directory.Exists(pending)) throw new IOException("A restore is already pending. Restart before choosing another backup.");
             string stage = dir.TrimEnd('\\', '/') + ".restore-stage-" + Stamp();

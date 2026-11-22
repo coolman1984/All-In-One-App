@@ -1577,7 +1577,8 @@ namespace StickyPro
         readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer { Interval = 400 };
 
         public bool Busy { get { return runAgent != null || councilBusy; } }
-        string netRetry; readonly HashSet<string> retried = new HashSet<string>();   // one automatic retry per agent per message
+        bool stopRequested;
+        readonly HashSet<string> retried = new HashSet<string>();   // one automatic retry per agent per message
         readonly HashSet<string> fallbackTried = new HashSet<string>();              // one account/model fallback per agent per message
         string fallbackAccountOverride, fallbackModelOverride;
         readonly List<AgentRun> councilRuns = new List<AgentRun>();
@@ -1950,7 +1951,7 @@ namespace StickyPro
 
         public void SetChat(AgentChat chat)
         {
-            if (Busy) Stop();
+            DetachTurn();
             if (checkpoint.Enabled) { checkpoint.Stop(); AgentStore.Save(Chat); }
             ResetTeamDesk();
             findBar.Visible = false; findText.Clear(); findCount.Text = ""; lastFind = "";
@@ -2257,7 +2258,7 @@ namespace StickyPro
             AgentStore.Save(c);
             MetaStore.Touch("folders", c.Folder);
             queue.Clear();
-            retried.Clear(); netRetry = null;
+            retried.Clear();
             fallbackTried.Clear(); fallbackAccountOverride = null; fallbackModelOverride = null;
             foreach (var a in who) queue.Enqueue(a);
             AgentStore.Busy.Add(c.Id);
@@ -2308,9 +2309,10 @@ namespace StickyPro
             if (fallbackAccountOverride != null) { r.AccountOverride = fallbackAccountOverride; fallbackAccountOverride = null; }
             if (fallbackModelOverride != null) { r.ModelOverride = fallbackModelOverride; fallbackModelOverride = null; }
             r.Attach = LatestFiles();
-            r.Usage += u => Ui0(() => OnUsage(u));
+            r.Usage += u => Ui0(() => { if (r == run) OnUsage(u); });
             runAgent = id; run = r;
-            bool gotText = false;
+            stopRequested = false;
+            bool gotText = false, networkFailure = false;
             string lastErr = null;
             int stepSeq = 0;
             int turnIdx = Chat != null && Chat.Messages != null ? Chat.Messages.Count : 0;
@@ -2334,7 +2336,7 @@ namespace StickyPro
                 if (kind == "error") lastErr = text;
                 Add(kind == "text" ? "agent" : kind, id, text);
                 if (kind == "text" && Chat.Messages.Count > 0) Chat.Messages[Chat.Messages.Count - 1].Model = r.UsedLabel;
-                if (text != null && (text.Contains("routing discovery timed out") || text.Contains("account/read failed"))) netRetry = id;
+                if (kind == "error" && text != null && (text.Contains("routing discovery timed out") || text.Contains("account/read failed"))) networkFailure = true;
                 if (AgentModels.IsModelGone(text)) ModelGone(id, null, text);
                 else if (text != null && (text.Contains("headless mode cannot prompt") || text.Contains("--dangerously-skip-permissions")))
                     Add("info", "", AgentStore.NameOf(id) + " is not allowed to run commands in " + (Chat.Mode == "ask" ? "Ask" : "Edit") + " mode. To let it, click the mode chip in the header and choose Full auto (only in folders you trust).");
@@ -2342,19 +2344,18 @@ namespace StickyPro
             r.Exited += code => Ui0(() =>
             {
                 if (r != run) return;
-                Chat.Seen[r.ActiveSessionKey] = Chat.Messages.Count;
+                if (gotText) Chat.Seen[r.ActiveSessionKey] = Chat.Messages.Count;
                 string usedAccount = r.Account ?? "";
                 string usedModel = r.ModelOverride;
                 if (string.IsNullOrEmpty(usedModel) && Chat.Models != null) Chat.Models.TryGetValue(id, out usedModel);
                 run = null; runAgent = null;
                 AgentStore.Save(Chat);
-                if (!gotText && !string.IsNullOrEmpty(lastErr) && AgentFallback.IsRetryableError(lastErr) && !fallbackTried.Contains(id))
+                if (!stopRequested && !gotText && !string.IsNullOrEmpty(lastErr) && AgentFallback.IsRetryableError(lastErr) && !fallbackTried.Contains(id))
                 {
                     string nextAcc, nextModel;
                     if (AgentFallback.PickAlternate(def, Chat, usedAccount, usedModel, out nextAcc, out nextModel))
                     {
                         fallbackTried.Add(id);
-                        netRetry = null;
                         fallbackAccountOverride = nextAcc;
                         fallbackModelOverride = nextModel;
                         string targetDesc = nextAcc != null ? ("account \"" + (nextAcc.Length == 0 ? "CLI default" : nextAcc) + "\"") : ("model \"" + nextModel + "\"");
@@ -2365,9 +2366,8 @@ namespace StickyPro
                         return;
                     }
                 }
-                if (netRetry == id && !retried.Contains(id))
+                if (!stopRequested && !gotText && networkFailure && retried.Add(id))
                 {
-                    retried.Add(id); netRetry = null;
                     Add("info", "", AgentStore.NameOf(id) + " could not reach its server in time. Trying once more...");
                     var rest = queue.ToList(); queue.Clear(); queue.Enqueue(id); foreach (var q in rest) queue.Enqueue(q);
                 }
@@ -2484,7 +2484,7 @@ namespace StickyPro
             var answer = new StringBuilder();
             bool failed = false;
             r.Attach = LatestFiles();
-            r.Usage += u => Ui0(() => OnUsage(u));
+            r.Usage += u => Ui0(() => { if (councilRuns.Contains(r)) OnUsage(u); });
             councilRuns.Add(r);
             if (worker != null) { worker.Run = r; worker.ClearLive(); r.PlainLine = worker.LiveLine; }
             r.Event += (kind, t) => Ui0(() =>
@@ -2603,10 +2603,31 @@ namespace StickyPro
                 return;
             }
             queue.Clear();
+            stopRequested = true;
             var r = run;
             if (r != null) ThreadPool.QueueUserWorkItem(delegate { r.Stop(); });
             else Done();
         }
+        void DetachTurn(bool waitForStop = false)
+        {
+            if (!Busy) return;
+            var runs = councilRuns.ToList();
+            if (run != null) runs.Add(run);
+            run = null; runAgent = null;
+            councilRuns.Clear();
+            councilBusy = false;
+            queue.Clear();
+            tick.Stop();
+            view.Working = null;
+            view.LastTool = null;
+            if (Chat != null) { AgentStore.Busy.Remove(Chat.Id); AgentStore.Save(Chat); }
+            foreach (var agent in runs)
+            {
+                if (waitForStop) { try { agent.Stop(); } catch { } }
+                else ThreadPool.QueueUserWorkItem(delegate { try { agent.Stop(); } catch { } });
+            }
+        }
+
         void Ui0(Action a) { try { if (!IsDisposed && IsHandleCreated) BeginInvoke(a); } catch { } }
 
         public void FocusInput() { input.Focus(); }
@@ -2616,7 +2637,14 @@ namespace StickyPro
         public string LastAnswer { get { var m = Chat == null ? null : Chat.Messages.LastOrDefault(x => x.Role == "agent"); return m == null ? "" : m.Text; } }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { if (checkpoint.Enabled) AgentStore.Save(Chat); checkpoint.Dispose(); ResetTeamDesk(); tick.Dispose(); var r = run; if (r != null) { queue.Clear(); try { r.Stop(); } catch { } } foreach (var cr in councilRuns.ToList()) try { cr.Stop(); } catch { } }
+            if (disposing)
+            {
+                DetachTurn(true);
+                if (checkpoint.Enabled) AgentStore.Save(Chat);
+                checkpoint.Dispose();
+                ResetTeamDesk();
+                tick.Dispose();
+            }
             base.Dispose(disposing);
         }
 
@@ -2714,7 +2742,7 @@ namespace StickyPro
             m.Items.Add("Duplicate this chat (same setup, no messages)", null, delegate
             {
                 var c = AgentStore.CopyThrough(Chat, 0);
-                if (page != null) { var p = page.EmptyPaneOr(this); p.SetChat(c); } else if (!Busy) SetChat(c);
+                if (page != null) { var p = page.EmptyPaneOr(this); if (!p.Busy) p.SetChat(c); } else if (!Busy) SetChat(c);
             });
             if (Directory.Exists(Chat.Folder)) { string cf = Chat.Folder; m.Items.Add("Open a terminal in the folder", null, delegate { Term.Open(cf, ""); }); }
             m.Items.Add("Clear the messages (keep the setup)", null, delegate { if (Busy) return; if (MessageBox.Show(FindForm(), "Clear all messages of this chat?", "Agents", MessageBoxButtons.OKCancel) != DialogResult.OK) return; Chat.Messages.Clear(); Chat.BranchPrefix = 0; Chat.Seen.Clear(); Chat.Sessions.Clear(); view.SetChat(Chat); AgentStore.Save(Chat); RaiseChanged(); });

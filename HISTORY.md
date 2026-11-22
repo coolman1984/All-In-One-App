@@ -2,6 +2,13 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — Deep reliability review and repairs
+
+- Reviewed the source at `cbed099` along app startup, saved work, Office and browser handoffs, agent turns, the vault, schedules, recording and packaging. The current findings and remaining Windows checks are in the [customer audit](docs/customer-audit.md).
+- Changes cover deferred data-folder moves, locked data protection, Markdown close and LF preservation, explicit document preview, same-name document saves, source-correct clippings, chat switches and retries, invalid schedules, stale document extraction, workflow event recovery and standalone FFmpeg validation.
+- The full source compiled in C# 5 against .NET Framework 4.8 reference assemblies. Ten isolated regression checks passed under Mono with system SQLite. All 29 PowerShell scripts parsed and two packaging checks rejected missing and invalid encoders. Native Windows integration, Office/NASCA, WebView2, live providers, keyboard layouts and clean-PC recording remain separate verification work.
+- The full Windows runner now includes the five extra companion, Office, vault, memory and workflow suites. No customer data or released executable was modified.
+
 ## 2026-11-21 — Autonomous Assistant Companion ("الـ Agent العام") — All 4 Phases (100%) complete, self-contained AllInOne.exe built & synced to GitHub main
 
 - Asked to plan and execute all 4 phases in order in root `IMPLEMENTATION_PLAN.md`, embed studio-grade Anti-AI-Slop design skills, add a Visual-First Live Communication Canvas in `Browser`, add 2 new Light+Dark app themes (`Atelier` & `Nordic`) with a full visual screenshot audit, implement the Show-Me-Once workflow recorder and all remaining Zero-Exit PC MCP tools, build and verify self-contained zero-install `AllInOne.exe`, and keep GitHub `origin/main` synced after every verified milestone.

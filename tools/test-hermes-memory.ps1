@@ -224,6 +224,11 @@ try {
     Assert ($picked -and ($null -ne $pickArgs[4] -or $pickArgs[5] -eq 'sonnet')) 'AgentFallback.PickAlternate did not select alternate account or fallback model.'
 
     # 8. Proactive CronEngine (create, list, 0-token pre-check, [SILENT], HEARTBEAT_OK, FileSystemWatcher)
+    foreach ($invalidSchedule in 'daily:25:80', 'every:99999999999999999999999d', 'every:0m') {
+        $rejected = $false
+        try { $null = Run-Tool 'cron_manage' @{ action = 'create'; schedule = $invalidSchedule } } catch { $rejected = $true }
+        Assert $rejected ('Invalid schedule was accepted: ' + $invalidSchedule)
+    }
     $watchDir = [IO.Directory]::CreateDirectory((Join-Path $workDir 'watched-reports')).FullName
     $cronCreate = Run-Tool 'cron_manage' @{
         action = 'create'

@@ -25,7 +25,7 @@ namespace StickyPro
         readonly List<Button> documentActions = new List<Button>();
         static bool EditMode { get { return Store.Settings.ViewerEdit; } }
         // A file opened with an explicit choice (Explorer: preview / edit) keeps it; others follow Edit mode.
-        readonly Dictionary<string, bool> chosen = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, bool> chosen = Store.Settings.ViewerTabModes;
         bool EditFor(string path) { bool e; return chosen.TryGetValue(path, out e) ? e : EditMode; }
         string current;
         const int MaxLive = 6;   // previewers kept alive; older tabs reopen when you go back to them
@@ -45,8 +45,8 @@ namespace StickyPro
                 OfficeEdit editor;
                 if (current != null && edits.TryGetValue(current, out editor))
                 {
-                    info.ForeColor = editor.Save() ? Ui.Muted : Ui.Warning;
-                    info.Text = editor.Error ?? (current + "   ·   saved");
+                    string error;
+                    SaveDocument(current, out error);
                 }
             });
             Tip(saveBtn, "Save the file (Ctrl+S inside the document does the same)");
@@ -61,6 +61,7 @@ namespace StickyPro
 
             tabs = new EditorTabs { Dock = DockStyle.Top, EmptyText = "No open documents  ·  Ctrl+O opens one" };
             tabs.SetAll(Store.Settings.ViewerTabs.Where(File.Exists));
+            foreach (var path in chosen.Keys.Where(p => !tabs.Paths.Contains(p, StringComparer.OrdinalIgnoreCase)).ToList()) chosen.Remove(path);
             tabs.Activated += p => Show(p);
             tabs.CanClose = p => DropEdit(p, true);
             tabs.AllClosed += p => { Drop(p); current = null; ShowEmpty(); };
@@ -153,9 +154,9 @@ namespace StickyPro
             OfficeEdit editor;
             if (!edits.TryGetValue(target, out editor))
             {
-                var pair = edits.FirstOrDefault(kv => string.Equals(Path.GetFileName(kv.Key), target, StringComparison.OrdinalIgnoreCase));
-                editor = pair.Value;
-                if (editor != null) target = pair.Key;
+                var matches = edits.Where(kv => string.Equals(Path.GetFileName(kv.Key), target, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+                if (matches.Count > 1) { error = "Multiple edited documents match. Pass the full path: " + target; return false; }
+                if (matches.Count == 1) { target = matches[0].Key; editor = matches[0].Value; }
             }
             if (editor == null) { error = "Document is not open in Edit mode: " + target; return false; }
             bool ok = editor.Save();
@@ -177,6 +178,7 @@ namespace StickyPro
             {
                 if (!edit.Value && !DropEdit(path, true)) return;
                 chosen[path] = edit.Value;
+                Store.MarkSettings();
             }
             string ext = Path.GetExtension(path).ToLowerInvariant();
             if (ext == ".eml" || ext == ".msg" || ext == ".mysingle" || ext == ".htm" || ext == ".html" || ext == ".mht") { App.I.OpenInBrowser(path); return; }
@@ -303,6 +305,6 @@ namespace StickyPro
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
-        protected override void Dispose(bool disposing) { if (disposing) { foreach (var k in edits.Keys.ToList()) DropEdit(k, false); foreach (var k in views.Keys.ToList()) Drop(k); } base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { foreach (var k in edits.Keys.ToList()) DropEdit(k, false); foreach (var k in views.Keys.ToList()) DropView(k); } base.Dispose(disposing); }
     }
 }

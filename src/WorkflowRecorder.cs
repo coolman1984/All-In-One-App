@@ -29,8 +29,8 @@ namespace StickyPro
 
         public static event Action StateChanged;
 
-        static bool recording;
-        static string currentId = "";
+        static volatile bool recording;
+        static volatile string currentId = "";
         static string currentTitle = "";
         static string currentNotes = "";
         static string currentFolder = "";
@@ -127,7 +127,8 @@ namespace StickyPro
         {
             if (IsRecording)
             {
-                try { Stop(); } catch { }
+                var previous = Stop();
+                if (!true.Equals(previous["ok"])) return previous;
             }
 
             string cleanTitle = string.IsNullOrWhiteSpace(title) ? "Workflow Demonstration" : title.Trim();
@@ -144,7 +145,6 @@ namespace StickyPro
 
             lock (syncLock)
             {
-                recording = true;
                 currentId = id;
                 currentTitle = cleanTitle;
                 currentNotes = cleanNotes;
@@ -157,6 +157,7 @@ namespace StickyPro
                 lastKeyX = -1;
                 lastKeyY = -1;
                 WriteMetadataLocked("recording", null);
+                recording = true;
             }
 
             StartHooks();
@@ -181,7 +182,7 @@ namespace StickyPro
         {
             StopHooks();
 
-            string id, title, notes, folder, eventsFile, summaryFile, summaryMd;
+            string id, title, notes, folder, eventsFile, summaryFile, summaryMd, saveError = null;
             DateTime startUtc, stopUtc = DateTime.UtcNow;
             List<Dictionary<string, object>> stepsCopy;
 
@@ -215,18 +216,27 @@ namespace StickyPro
                 lastRecordingId = id;
                 stepsCopy = new List<Dictionary<string, object>>(currentSteps);
 
-                WriteMetadataLocked("completed", stopUtc);
                 summaryMd = BuildSummaryMarkdown(id, title, notes, startUtc, stopUtc, stepsCopy);
                 summaryFile = Path.Combine(folder, "summary.md");
-                try { File.WriteAllText(summaryFile, summaryMd, new UTF8Encoding(false)); } catch { }
+                try
+                {
+                    // Rewrite from memory so a failed append cannot silently remove a recorded step.
+                    string eventsTemp = eventsFile + ".tmp";
+                    File.WriteAllLines(eventsTemp, stepsCopy.Select(step => Js.Serialize(step)), new UTF8Encoding(false));
+                    if (File.Exists(eventsFile)) File.Replace(eventsTemp, eventsFile, null);
+                    else File.Move(eventsTemp, eventsFile);
+                    File.WriteAllText(summaryFile, summaryMd, new UTF8Encoding(false));
+                    WriteMetadataLocked("completed", stopUtc);
+                }
+                catch (Exception ex) { saveError = ex.Message; App.Log("Save workflow " + id + ": " + saveError); }
             }
 
-            AssistantHarness.Report("Saved recording " + id + " (" + stepsCopy.Count + " steps)");
+            AssistantHarness.Report(saveError == null ? "Saved recording " + id + " (" + stepsCopy.Count + " steps)" : "Could not finish saving recording " + id + ": " + saveError);
             RaiseStateChanged();
 
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
-                { "ok", true },
+                { "ok", saveError == null },
                 { "recording", false },
                 { "id", id },
                 { "title", title },
@@ -241,6 +251,8 @@ namespace StickyPro
                 { "summary", summaryMd },
                 { "events", stepsCopy }
             };
+            if (saveError != null) result["error"] = saveError;
+            return result;
         }
 
         public static Dictionary<string, object> Status()
@@ -287,7 +299,12 @@ namespace StickyPro
 
         public static Dictionary<string, object> RecordStep(string kind, int x, int y, string button, string keys, string detail)
         {
-            if (!IsRecording)
+            return RecordStep(kind, x, y, button, keys, detail, CurrentId);
+        }
+
+        static Dictionary<string, object> RecordStep(string kind, int x, int y, string button, string keys, string detail, string recordingId)
+        {
+            if (recordingId == null || !IsRecording)
             {
                 return new Dictionary<string, object>
                 {
@@ -297,13 +314,13 @@ namespace StickyPro
             }
 
             string cleanKind = string.IsNullOrWhiteSpace(kind) ? "click" : kind.Trim().ToLowerInvariant();
-            Dictionary<string, object> uia = UiaEngine.InspectAtPoint(x, y);
+            var uia = x < 0 || y < 0 ? new Dictionary<string, object>() : UiaEngine.InspectAtPoint(x, y);
             Dictionary<string, string> appCtx = ReadAppContext(detail);
 
             Dictionary<string, object> stepObj;
             lock (syncLock)
             {
-                if (!recording)
+                if (!recording || currentId != recordingId)
                 {
                     return new Dictionary<string, object>
                     {
@@ -417,7 +434,7 @@ namespace StickyPro
             }
 
             var detail = ReadRecordingFolder(folder, true);
-            detail["ok"] = true;
+            detail["ok"] = !detail.ContainsKey("error");
             return detail;
         }
 
@@ -443,7 +460,7 @@ namespace StickyPro
 
                 string eventsFile = Path.Combine(folder, "events.jsonl");
                 var events = new List<Dictionary<string, object>>();
-                if (File.Exists(eventsFile))
+                if (includeEvents && File.Exists(eventsFile))
                 {
                     foreach (var line in File.ReadAllLines(eventsFile, Encoding.UTF8))
                     {
@@ -456,7 +473,7 @@ namespace StickyPro
                         catch { }
                     }
                 }
-                res["stepCount"] = events.Count;
+                if (includeEvents || !res.ContainsKey("stepCount")) res["stepCount"] = events.Count;
                 res["eventsFile"] = eventsFile;
 
                 string summaryFile = Path.Combine(folder, "summary.md");
@@ -566,10 +583,10 @@ namespace StickyPro
                     {
                         MSLLHOOKSTRUCT ms = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
                         int cx = ms.pt.X, cy = ms.pt.Y;
-                        string b = btn;
+                        string b = btn, id = currentId;
                         ThreadPool.QueueUserWorkItem(delegate
                         {
-                            try { RecordStep("click", cx, cy, b, "", ""); } catch { }
+                            try { RecordStep("click", cx, cy, b, "", "", id); } catch { }
                         });
                     }
                     catch { }
@@ -595,9 +612,10 @@ namespace StickyPro
                             bool alt = Native.Down(0x12);
                             bool shift = Native.Down(0x10);
                             Point pt = Cursor.Position;
+                            string id = currentId;
                             ThreadPool.QueueUserWorkItem(delegate
                             {
-                                try { HandleHookKey(vk, ctrl, alt, shift, pt.X, pt.Y); } catch { }
+                                try { HandleHookKey(vk, ctrl, alt, shift, pt.X, pt.Y, id); } catch { }
                             });
                         }
                     }
@@ -615,7 +633,7 @@ namespace StickyPro
                 || k == Keys.LWin || k == Keys.RWin;
         }
 
-        static void HandleHookKey(Keys vk, bool ctrl, bool alt, bool shift, int x, int y)
+        static void HandleHookKey(Keys vk, bool ctrl, bool alt, bool shift, int x, int y, string recordingId)
         {
             if (!IsRecording) return;
 
@@ -634,15 +652,16 @@ namespace StickyPro
 
                 lock (syncLock)
                 {
+                    if (!recording || currentId != recordingId) return;
                     FlushKeyBufferLocked();
                 }
-                RecordStep("key", x, y, "", combo, "");
+                RecordStep("key", x, y, "", combo, "", recordingId);
                 return;
             }
 
             lock (syncLock)
             {
-                if (!recording) return;
+                if (!recording || currentId != recordingId) return;
                 if (lastKeyX < 0) { lastKeyX = x; lastKeyY = y; }
                 if (vk == Keys.Back)
                 {
@@ -860,22 +879,22 @@ namespace StickyPro
 
         static void WriteMetadataLocked(string status, DateTime? stoppedUtc)
         {
-            try
+            var meta = new Dictionary<string, object>
             {
-                var meta = new Dictionary<string, object>
-                {
-                    { "id", currentId },
-                    { "title", currentTitle },
-                    { "notes", currentNotes },
-                    { "status", status },
-                    { "stepCount", currentSteps.Count },
-                    { "startedAt", startedUtc.ToString("o", CultureInfo.InvariantCulture) },
-                    { "stoppedAt", stoppedUtc.HasValue ? stoppedUtc.Value.ToString("o", CultureInfo.InvariantCulture) : "" },
-                    { "folder", currentFolder }
-                };
-                File.WriteAllText(Path.Combine(currentFolder, "recording.json"), Js.Serialize(meta), new UTF8Encoding(false));
-            }
-            catch { }
+                { "id", currentId },
+                { "title", currentTitle },
+                { "notes", currentNotes },
+                { "status", status },
+                { "stepCount", currentSteps.Count },
+                { "startedAt", startedUtc.ToString("o", CultureInfo.InvariantCulture) },
+                { "stoppedAt", stoppedUtc.HasValue ? stoppedUtc.Value.ToString("o", CultureInfo.InvariantCulture) : "" },
+                { "folder", currentFolder }
+            };
+            string file = Path.Combine(currentFolder, "recording.json");
+            string temp = file + ".tmp";
+            File.WriteAllText(temp, Js.Serialize(meta), new UTF8Encoding(false));
+            if (File.Exists(file)) File.Replace(temp, file, null);
+            else File.Move(temp, file);
         }
 
         static string BuildSummaryMarkdown(string id, string title, string notes, DateTime startUtc, DateTime stopUtc, List<Dictionary<string, object>> steps)

@@ -31,3 +31,18 @@
 4. Test recording on a clean machine and verify playback. Test the two save-related fixes with denied writes and a deferred restart before release.
 
 No app behavior or release package was changed by this audit. The earlier tests in project history belong to their recorded revisions and builds.
+
+## November 22 repair pass
+
+Base revision `cbed099`. The earlier November 20 measurements above describe the then-current executable.
+
+| Area | Repaired behavior | Verification |
+|---|---|---|
+| Startup and data relocation | A temporarily unreadable primary blocks startup before it can be overwritten. Corruption can recover from a readable backup. A data move copies the final state on the next launch, refuses occupied targets, and retains the source. | Isolated locked and corrupt inputs, late file edits, adds and deletes, and a target that became occupied. |
+| Markdown and Office handoffs | Failed saves veto Markdown close and normal rebuild or exit. LF files keep their line endings. The shared Documents action opens a preview, the tab remembers its choice, and ambiguous save names require a path. | Native Windows fixture cases added for Markdown. Live Office, protected files and both viewer entry points require Windows testing. |
+| Browser clipping | The title, URL and text come from one page. Re-navigation cancels the capture. Equal titles receive distinct filenames and the reserved Windows device names are escaped. | Isolated clipping file checks passed. Test two real browser tabs and a navigation during capture on Windows. |
+| Chats and typing | Chat switches detach old callbacks. A failed agent attempt retains the question for retry. Stopping prevents retry. Snippets respect a leading word boundary and distinguish AltGr from shortcuts. | Source compiled. The native controls, provider stop and retry and actual keyboard layouts need live checks. |
+| Schedules and data vault | Saved schedules survive unreadable or malformed files. Invalid times fail validation. One broken job cannot stop the rest. The vault retries failed initialization and skips files that change during extraction. | Invalid schedule and corrupt-file checks passed. CSV refresh and cache checks passed against system SQLite. |
+| Workflow recording and release | Finalization reconstructs a damaged event log and surfaces save errors. Queued events stay with their original recording. Both release scripts reject missing or unsuitable encoders and embed the same verified artifact. | A damaged event log was recovered in isolation. Native hooks, MP4 recording and the package still require a Windows run. |
+
+Open product gap. Scheduled jobs can notify after their pre-check. No running handler currently executes their stored prompt or skill. The current pass also leaves live Office/NASCA, WebView2 clipping, provider account fallback, floating-card paste and clean-PC playback for their native checks.

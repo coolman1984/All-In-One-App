@@ -204,26 +204,34 @@ namespace StickyPro
         public static string Tool(string name)
         {
             string path = Path.Combine(Dir, name);
-            long want = -1;
             using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("tools." + name + ".gz"))
             {
                 if (s == null) return File.Exists(path) ? path : null;
-                want = s.Length;
                 string marker = path + ".packed-size";
-                if (File.Exists(path) && File.Exists(marker) && File.ReadAllText(marker).Trim() == want.ToString()) return path;
+                string temp = path + "." + Guid.NewGuid().ToString("N") + ".part";
                 try
                 {
+                    var footer = new byte[8];
+                    s.Seek(-footer.Length, SeekOrigin.End);
+                    if (s.Read(footer, 0, footer.Length) != footer.Length) throw new InvalidDataException("Invalid bundled resource.");
+                    s.Position = 0;
+                    long fileSize = BitConverter.ToUInt32(footer, 4);
+                    string version = s.Length + ":" + Convert.ToBase64String(footer);
+                    if (File.Exists(path) && new FileInfo(path).Length == fileSize &&
+                        File.Exists(marker) && File.ReadAllText(marker) == version) return path;
+
                     Directory.CreateDirectory(Dir);
-                    string tmp = path + ".part";
-                    App.I.Status("Unpacking " + name + " (first use)...");
+                    if (App.I != null) App.I.Status("Unpacking " + name + " (first use)...");
                     using (var gz = new System.IO.Compression.GZipStream(s, System.IO.Compression.CompressionMode.Decompress))
-                    using (var o = File.Create(tmp)) gz.CopyTo(o);
-                    if (File.Exists(path)) File.Delete(path);
-                    File.Move(tmp, path);
-                    File.WriteAllText(marker, want.ToString());
+                    using (var output = File.Create(temp)) gz.CopyTo(output);
+                    if (new FileInfo(temp).Length != fileSize) throw new InvalidDataException("Incomplete bundled resource.");
+                    if (File.Exists(path)) File.Replace(temp, path, null);
+                    else File.Move(temp, path);
+                    File.WriteAllText(marker, version);
                     return path;
                 }
-                catch (Exception ex) { App.Log("Unpack " + name + ": " + ex.Message); return File.Exists(path) ? path : null; }
+                catch (Exception ex) { App.Log("Unpack " + name + ": " + ex.Message); return null; }
+                finally { try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
             }
         }
     }

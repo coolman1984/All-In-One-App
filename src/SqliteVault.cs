@@ -228,14 +228,21 @@ namespace StickyPro
             dbHandle = h;
             openPath = target;
 
-            ExecLocked(
-                "PRAGMA journal_mode=WAL;\n" +
-                "PRAGMA synchronous=NORMAL;\n" +
-                "PRAGMA temp_store=MEMORY;\n" +
-                "PRAGMA busy_timeout=5000;\n" +
-                "PRAGMA foreign_keys=ON;");
-
-            InitSchemaLocked();
+            try
+            {
+                ExecLocked(
+                    "PRAGMA journal_mode=WAL;\n" +
+                    "PRAGMA synchronous=NORMAL;\n" +
+                    "PRAGMA temp_store=MEMORY;\n" +
+                    "PRAGMA busy_timeout=5000;\n" +
+                    "PRAGMA foreign_keys=ON;");
+                InitSchemaLocked();
+            }
+            catch
+            {
+                CloseLocked();
+                throw;
+            }
         }
 
         static void InitSchemaLocked()
@@ -578,10 +585,16 @@ namespace StickyPro
                 };
             }
 
-            doc.Path = normPath;
-            doc.FileSize = size;
-            doc.ModifiedTicks = modTicks;
-            return IngestDoc(doc);
+            lock (dbLock)
+            {
+                fi.Refresh();
+                if (!fi.Exists || fi.Length != size || fi.LastWriteTimeUtc.Ticks != modTicks)
+                    return new Dictionary<string, object> { { "path", normPath }, { "error", "The document changed during extraction. Try again." }, { "cached", false } };
+                doc.Path = normPath;
+                doc.FileSize = size;
+                doc.ModifiedTicks = modTicks;
+                return IngestDoc(doc);
+            }
         }
 
         public static void QueueExtract(string path)

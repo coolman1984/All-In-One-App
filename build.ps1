@@ -17,13 +17,19 @@ $refs += ('/r:' + (Join-Path $wv 'Microsoft.Web.WebView2.Core.dll')), ('/r:' + (
 foreach ($n in 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll') { $refs += '/resource:' + (Join-Path $wv $n) + ',webview2.' + $n }
 $refs += '/resource:' + (Join-Path (Split-Path $wv) 'markdown\marked.umd.js') + ',md.marked.js'
 
+. (Join-Path $here 'tools\bundle-ffmpeg.ps1')
+$res = "/resource:$(Get-BundledFfmpeg $here),tools.ffmpeg.exe.gz"
+
 # Ask a running copy (new or old name) to save and exit so the exe can be replaced.
 foreach ($name in 'AllInOne', 'StickyNotesPro') {
-    $running = Get-Process $name -ErrorAction SilentlyContinue
+    $path = if ($name -eq 'AllInOne') { $exe } else { $old }
+    $running = Get-Process $name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $path }
     if ($running) {
-        $path = if ($name -eq 'AllInOne') { $exe } else { $old }
-        if (Test-Path $path) { Start-Process $path -ArgumentList '--exit' -Wait }
+        Start-Process $path -ArgumentList '--exit' -Wait
         $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+        if (Get-Process $name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $path }) {
+            throw 'The running app could not exit. Save your work and close it before rebuilding.'
+        }
     }
 }
 
@@ -31,37 +37,10 @@ foreach ($name in 'AllInOne', 'StickyNotesPro') {
 $tmp = Join-Path $here 'icon_tool.tmp.exe'
 & $csc /nologo /target:winexe /out:$tmp $refs $src
 if ($LASTEXITCODE -ne 0) { throw 'Build failed (icon step).' }
-Start-Process $tmp -ArgumentList '--make-icon',"`"$ico`"" -Wait
-Remove-Item $tmp -Force
-
-# Tools packed inside the exe for PCs that do not have them (unpacked on first use to %LocalAppData%\AllInOne\tools):
-# ffmpeg for screen recording. Source: tools\bundle\ffmpeg.exe, else the ffmpeg on this PC. Compressed once, then cached.
-$res = @()
-$ff = Join-Path $here 'tools\bundle\ffmpeg.exe'
-if (-not (Test-Path $ff)) { $c = Get-Command ffmpeg -ErrorAction SilentlyContinue; if ($c) { $ff = $c.Source } }
-if ($ff -and (Test-Path $ff)) {
-    # Dereference Scoop .shim stubs (e.g. scoop\shims\ffmpeg.exe -> scoop\apps\ffmpeg\current\bin\ffmpeg.exe).
-    $shim = [IO.Path]::ChangeExtension($ff, '.shim')
-    if (Test-Path $shim) {
-        $m = Select-String -Path $shim -Pattern '^\s*path\s*=\s*"?([^"\r\n]+)"?' | Select-Object -First 1
-        if ($m -and (Test-Path $m.Matches[0].Groups[1].Value)) { $ff = $m.Matches[0].Groups[1].Value }
-    }
-}
-if (Test-Path $ff) {
-    $cache = Join-Path $here 'build-cache'; New-Item -ItemType Directory -Force $cache | Out-Null
-    $gz = Join-Path $cache 'ffmpeg.exe.gz'
-    if (-not (Test-Path $gz) -or (Get-Item $gz).Length -lt 1MB -or (Get-Item $gz).LastWriteTimeUtc -lt (Get-Item $ff).LastWriteTimeUtc) {
-        Write-Host "Packing ffmpeg into the exe (first time only)..."
-        $tmpGz = $gz + '.tmp'
-        $in = [IO.File]::OpenRead($ff); $out = [IO.File]::Create($tmpGz)
-        try {
-            $z = New-Object IO.Compression.GZipStream($out, [IO.Compression.CompressionLevel]::Optimal)
-            try { $in.CopyTo($z) } finally { $z.Dispose() }
-        } finally { $out.Dispose(); $in.Dispose() }
-        Move-Item -LiteralPath $tmpGz -Destination $gz -Force
-    }
-    $res += "/resource:$gz,tools.ffmpeg.exe.gz"
-} else { Write-Host "ffmpeg not found: building without it (screen recording then needs ffmpeg on the PC)." }
+try {
+    $iconProcess = Start-Process $tmp -ArgumentList '--make-icon',"`"$ico`"" -Wait -PassThru
+    if ($iconProcess.ExitCode -ne 0) { throw 'Icon generation failed.' }
+} finally { Remove-Item -LiteralPath $tmp -Force }
 
 & $csc /nologo /target:winexe /optimize+ /platform:x64 /out:$exe /win32icon:$ico $refs $res $src
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }

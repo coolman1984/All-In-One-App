@@ -75,11 +75,15 @@ namespace StickyPro
             {
                 if (filling) return;
                 var c = chats.SelectedItem as ChatItem;
-                if (c != null && pane != null && pane.Chat != c.Chat && !pane.Busy)
+                if (c == null || pane == null || pane.Chat == c.Chat) return;
+                if (pane.Busy)
                 {
-                    pane.SetChat(c.Chat);
-                    UpdateModeBar();
+                    FillChats();
+                    if (App.I != null) App.I.Status("The assistant is still working. Stop it first.");
+                    return;
                 }
+                pane.SetChat(c.Chat);
+                UpdateModeBar();
             };
             var fresh = Ui.Btn("New", delegate { NewChat(); }); fresh.Dock = DockStyle.Right;
             var close = Ui.Btn("✕", delegate { main.SetAssistant(false); }); ((FluentButton)close).Glyph = null; close.Dock = DockStyle.Right; close.Width = Ui.S(36); close.AutoSize = false;
@@ -234,7 +238,7 @@ namespace StickyPro
                 UpdateRecButton();
                 string recId = res != null && res.ContainsKey("id") ? Convert.ToString(res["id"], CultureInfo.InvariantCulture) : "";
                 string steps = res != null && res.ContainsKey("stepCount") ? Convert.ToString(res["stepCount"], CultureInfo.InvariantCulture) : "0";
-                if (pane != null && !string.IsNullOrEmpty(recId))
+                if (pane != null && res != null && true.Equals(res["ok"]) && !string.IsNullOrEmpty(recId))
                 {
                     pane.InsertText("Inspect my recorded workflow `" + recId + "` (" + steps + " steps) using `record_list(id=\"" + recId + "\")`, generalize the steps to native COM/SQL/CDP/UIA primitives following `skills/workflow-to-automation/SKILL.md`, and compile it into a reusable `SKILL.md` (`skill_manage`) and Dynamic Tool (`tool_create`).");
                     pane.FocusInput();
@@ -273,7 +277,9 @@ namespace StickyPro
         {
             if (IsDisposed || statusBar == null || main == null) return;
             statusBar.ForeColor = Ui.Muted;
-            statusBar.Text = "Seeing: " + DescribeContext(main.PageContext());
+            var context = main.PageContext();
+            statusBar.Text = "Seeing: " + DescribeContext(context);
+            tips.SetToolTip(statusBar, CtxStr(context, "page") == "documents" ? CtxStr(context, "documents_current") : "");
         }
 
         static string DescribeContext(Dictionary<string, object> ctx)
@@ -464,7 +470,10 @@ namespace StickyPro
                     string note = CtxStr(ctx, "markdown_note");
                     string doc = CtxStr(ctx, "documents_current");
                     string folder = CtxStr(ctx, "explorer_folder");
-                    string targetDir = note.Length > 0 ? Path.GetDirectoryName(note) : doc.Length > 0 ? Path.GetDirectoryName(doc) : folder;
+                    string page = CtxStr(ctx, "page");
+                    string targetDir = page == "documents" && doc.Length > 0 ? Path.GetDirectoryName(doc)
+                        : page == "markdown" && note.Length > 0 ? Path.GetDirectoryName(note)
+                        : page == "explorer" ? folder : "";
                     if (!string.IsNullOrEmpty(targetDir) && pane.Chat.Folder != targetDir)
                         try { if (Directory.Exists(targetDir)) pane.Chat.Folder = targetDir; } catch { }
                 }
