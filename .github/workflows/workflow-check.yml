@@ -1,0 +1,36 @@
+name: Verify completed workflows on Windows
+on:
+  push:
+    branches:
+      - codex/workflow-check
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - family: scheduler
+            suites: scheduled-jobs,hermes-memory,sqlite-vault,workflow-recorder,assistant-harness
+          - family: desktop
+            suites: reliability,regressions,forms,layout,document-close,leader-team,saved-work
+    name: Windows ${{matrix.family}}
+    runs-on: windows-2022
+    timeout-minutes: 5
+    env:
+      CHECKS: ${{matrix.suites}}
+    steps:
+      - uses: actions/checkout@v4
+      - shell: powershell
+        name: Compile and run regression fixtures
+        run: |
+          .\tools\test-build.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $failed = @()
+          foreach ($suite in $env:CHECKS.Split(',')) {
+              & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "tools\test-$suite.ps1"
+              if ($LASTEXITCODE -ne 0) { $failed += $suite }
+              else { Write-Host "Verified $suite (exit 0)" }
+          }
+          if ($failed.Count) { throw ("Windows suites failed " + ($failed -join ', ')) }
