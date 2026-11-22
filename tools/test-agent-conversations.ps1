@@ -59,9 +59,9 @@ try {
     Assert ($view.FindMessage('no-such-message',0) -eq '0 matches') 'Missing search result retained a selection'
     $view.JumpToVerdict()
     Assert ($view.GetType().GetField('foundMessage',$instance).GetValue($view).Text -eq 'fixture verdict') 'Verdict navigation missed the final answer'
-    $input = $pane.GetType().GetField('input',$instance).GetValue($pane); $input.Text = 'Existing draft'
+    $inputBox = $pane.GetType().GetField('input',$instance).GetValue($pane); $inputBox.Text = 'Existing draft'
     $pane.GetType().GetMethod('OnCollab',$instance).Invoke($pane,@('edit','Fixture question'))
-    Assert ($input.Text.StartsWith('Existing draft') -and $input.SelectedText -eq 'Fixture question') 'Editing an earlier question damaged the draft'
+    Assert ($inputBox.Text.StartsWith('Existing draft') -and $inputBox.SelectedText -eq 'Fixture question') 'Editing an earlier question damaged the draft'
     $chat.Sessions['first'] = 'old-session'
     $cut = 0
     for ($i = 0; $i -lt $chat.Messages.Count; $i++) { if ($chat.Messages[$i].Text -eq 'completed-first') { $cut = $i + 1; break } }
@@ -71,7 +71,7 @@ try {
     $ask = Record AgentMsg; $ask.Role = 'user'; $ask.Text = 'Follow-up question'; $branch.Messages.Add($ask)
     $prompt = $agentStore.GetMethod('PromptFor',$static).Invoke($null,@($branch,'first'))
     Assert ($prompt.Contains('completed-first') -and $prompt.Contains('Follow-up question') -and !$prompt.Contains('fixture verdict')) 'First branch turn received incorrect context'
-    $pane.SetChat($branch); Assert ($input.Text -eq '') 'Draft leaked to a branch'
-    $pane.SetChat($chat); Assert ($input.Text.Contains('Existing draft')) 'Switching chats lost the draft'
+    $pane.SetChat($branch); Assert ($inputBox.Text -eq '') 'Draft leaked to a branch'
+    $pane.SetChat($chat); Assert ($inputBox.Text.Contains('Existing draft')) 'Switching chats lost the draft'
 } finally { $pane.Dispose() }
 Write-Host 'AGENT CONVERSATIONS OK: search, draft editing, independent branch, partial council failure, fallback chair and verdict'
