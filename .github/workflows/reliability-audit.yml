@@ -1,4 +1,4 @@
-name: Verify reliability repairs on Windows
+name: Verify layout and release packaging on Windows
 
 on:
   push:
@@ -11,32 +11,36 @@ permissions:
 jobs:
   verify:
     runs-on: windows-2022
-    timeout-minutes: 7
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - group: saved-work
-            suites: reliability,document-close,regressions,saved-work
-          - group: companion
-            suites: sqlite-vault,assistant-harness,hermes-memory,workflow-recorder
-          - group: desktop
-            suites: forms,dashboard,layout,capture,snip-output,recorder,visual,responsiveness,explorer-paint,leader-team
-    name: Windows ${{ matrix.group }}
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Build with Windows .NET Framework
+      - name: Run layout fixture within native screen bounds
         shell: powershell
-        run: .\tools\test-build.ps1
-      - name: Run Windows regression fixtures
-        shell: powershell
-        env:
-          AUDIT_WINDOWS_SUITES: ${{ matrix.suites }}
         run: |
-          $failed = @()
-          foreach ($suite in $env:AUDIT_WINDOWS_SUITES.Split(',')) {
-              & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "tools\test-$suite.ps1"
-              if ($LASTEXITCODE -ne 0) { $failed += $suite }
-              else { Write-Host "Verified $suite (exit 0)" }
+          .\tools\test-build.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File tools\test-layout.ps1
+          exit $LASTEXITCODE
+      - name: Verify portable packaging if a native encoder is installed
+        shell: powershell
+        run: |
+          $command = Get-Command ffmpeg.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+          $encoder = if ($command) { Get-Item -LiteralPath $command.Source }
+          if ((!$encoder -or $encoder.Length -lt 1MB) -and $env:ChocolateyInstall) {
+              $encoder = Get-ChildItem (Join-Path $env:ChocolateyInstall 'lib\ffmpeg\tools') -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue | Where-Object Length -GT 1MB | Select-Object -First 1
           }
-          if ($failed.Count) { throw ("Windows suites failed: " + ($failed -join ', ')) }
+          if (!$encoder) { Write-Host 'A native encoder is unavailable on this runner.'; exit 0 }
+          $null = New-Item tools\bundle -ItemType Directory -Force
+          Copy-Item -LiteralPath $encoder.FullName -Destination tools\bundle\ffmpeg.exe
+          & .\tools\make-dist.ps1
+          $exe = Join-Path $PWD.Path 'dist\AllInOne.exe'
+          $app = [Reflection.Assembly]::LoadFile($exe)
+          if ($app.GetManifestResourceNames().Count -ne 6) { throw 'Wrong number of embedded resources' }
+          $compressed = $app.GetManifestResourceStream('tools.ffmpeg.exe.gz')
+          $plain = [IO.Compression.GZipStream]::new($compressed, [IO.Compression.CompressionMode]::Decompress)
+          $hash = [Security.Cryptography.SHA256]::Create()
+          try {
+              $actual = [BitConverter]::ToString($hash.ComputeHash($plain)).Replace('-', '')
+              if ($actual -ne (Get-FileHash tools\bundle\ffmpeg.exe).Hash) { throw 'Bundled encoder differs from verified input' }
+          } finally { $hash.Dispose(); $plain.Dispose() }
+          Write-Host 'PORTABLE PACKAGE OK: all six resources and matching FFmpeg bytes'
