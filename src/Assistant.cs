@@ -108,6 +108,7 @@ namespace StickyPro
             modeBar.Controls.Add(btnTeam);
             modeBar.Controls.Add(btnWorkspace);
             modeBar.Controls.Add(btnRec);
+            modeBar.Controls.Add(ModeBtn("Build last", "Build a reusable tool from the last saved recording", delegate { BuildLastRecording(); }));
 
             // Live Companion Status bar: shows current page awareness and updates live on AssistantHarness.Activity.
             statusBar = new Label
@@ -234,16 +235,38 @@ namespace StickyPro
             }
             else
             {
-                var res = WorkflowRecorder.Stop();
+                var result = WorkflowRecorder.Stop();
                 UpdateRecButton();
-                string recId = res != null && res.ContainsKey("id") ? Convert.ToString(res["id"], CultureInfo.InvariantCulture) : "";
-                string steps = res != null && res.ContainsKey("stepCount") ? Convert.ToString(res["stepCount"], CultureInfo.InvariantCulture) : "0";
-                if (pane != null && res != null && true.Equals(res["ok"]) && !string.IsNullOrEmpty(recId))
-                {
-                    pane.InsertText("Inspect my recorded workflow `" + recId + "` (" + steps + " steps) using `record_list(id=\"" + recId + "\")`, generalize the steps to native COM/SQL/CDP/UIA primitives following `skills/workflow-to-automation/SKILL.md`, and compile it into a reusable `SKILL.md` (`skill_manage`) and Dynamic Tool (`tool_create`).");
-                    pane.FocusInput();
-                }
+                if (true.Equals(result["ok"])) statusBar.Text = "Recording saved. Choose Build last to create a workflow.";
             }
+        }
+
+        void BuildLastRecording()
+        {
+            if (pane == null || pane.Busy || WorkflowRecorder.IsRecording)
+            {
+                statusBar.Text = "Finish the current activity before building a workflow.";
+                return;
+            }
+
+            var result = WorkflowRecorder.Get("latest");
+            object state, count, id;
+            if (!true.Equals(result["ok"]) || !result.TryGetValue("status", out state) || !Equals(state, "completed") ||
+                !result.TryGetValue("stepCount", out count) || Convert.ToInt32(count, CultureInfo.InvariantCulture) == 0 ||
+                !result.TryGetValue("id", out id))
+            {
+                statusBar.Text = "Record and save a workflow with at least one step first.";
+                return;
+            }
+
+            string recording = Convert.ToString(id, CultureInfo.InvariantCulture);
+            string prompt = "Build a reusable workflow from recording " + recording + ". " +
+                "Use record_list with this recording ID. Generalize the captured steps using the appropriate native tools. " +
+                "Save a named skill with skill_manage and an executable dynamic tool with tool_create. " +
+                "Verify the tool with disposable inputs. Report the tool name, required parameters, and exact results you verified. " +
+                "If a step cannot be verified or automated, report where it stopped. " +
+                "Show how to schedule the verified tool using Scheduled jobs.";
+            pane.Send(AddContext(prompt));
         }
 
         static void StyleModeBtn(Button b, bool active)

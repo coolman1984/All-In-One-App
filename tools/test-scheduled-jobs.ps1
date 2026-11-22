@@ -67,7 +67,7 @@ try {
     $provider = Join-Path $dir 'provider.ps1'
     [IO.File]::WriteAllText($provider, @'
 $prompt = [Console]::In.ReadToEnd()
-Start-Sleep -Milliseconds 550
+Start-Sleep -Milliseconds 1200
 if ($prompt -notmatch 'Fixture request' -or $prompt -notmatch 'Fixture skill step') { exit 2 }
 'Fixture provider completed both instructions.'
 '@)
@@ -75,7 +75,7 @@ if ($prompt -notmatch 'Fixture request' -or $prompt -notmatch 'Fixture skill ste
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($defs)) | Out-Null
     $fixtureProvider = @{ Id = 'fixture-provider'; Name = 'Fixture provider'; Exe = (Join-Path $PSHOME 'powershell.exe'); Format = 'text'; Stdin = $true
         Args = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $provider + '"') }
-    [IO.File]::WriteAllText($defs, $json.Serialize(@($fixtureProvider)))
+    [IO.File]::WriteAllText($defs, (ConvertTo-Json -InputObject @($fixtureProvider) -Depth 6 -Compress))
     $agents.GetMethod('ReloadDefs', $static).Invoke($null, @()) | Out-Null
     $null = Tool 'skill_manage' @{ action = 'save'; slug = 'cron-fixture'; content = "# Procedure`nFixture skill step" }
     $null = New-ScheduledJob 'assistant' @{ prompt = 'Fixture request'; skill = 'cron-fixture'; agent = 'fixture-provider'; folder = $dir }
@@ -104,7 +104,7 @@ if ($prompt -notmatch 'Fixture request' -or $prompt -notmatch 'Fixture skill ste
         if ($entry['id'] -eq 'tool') { $entry['run_status'] = 'queued' }
         if ($entry['id'] -eq 'assistant') { $entry['run_status'] = 'running'; $entry['run_output'] = '' }
     }
-    [IO.File]::WriteAllText($jobFile, $json.Serialize($list))
+    [IO.File]::WriteAllText($jobFile, (ConvertTo-Json -InputObject $list -Depth 14 -Compress))
     $cron.GetMethod('Start', $static).Invoke($null, @()) | Out-Null
     Assert ((Wait-ScheduledJob 'tool')['run_status'] -eq 'completed') 'Durable queued job was not processed after restart.'
     Assert ((Get-ScheduledJob 'assistant')['run_status'] -eq 'interrupted') 'An interrupted action was reset or replayed.'

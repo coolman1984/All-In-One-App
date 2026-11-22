@@ -37,6 +37,7 @@ $storeType.GetField('ImgDir', $static).SetValue($null, (Join-Path $workDir 'imag
 # Build Arabic UTF-8 word cleanly from Unicode code points (ASCII-safe PowerShell 5 script).
 $arabicWord = ([string][char]0x062A) + ([string][char]0x0642) + ([string][char]0x0631) + ([string][char]0x064A) + ([string][char]0x0631) # "taqrir" (report)
 
+$backupDir = $workDir + "-backup"
 try {
     # 1. WAL mode + schema creation + FTS detection on temp vault.db
     $journalMode = [string](Invoke-S $vaultType 'JournalMode' @())
@@ -174,12 +175,25 @@ try {
         Start-Sleep -Milliseconds 50
     }
     Assert $foundShip 'QueueExtract did not index shipments.csv in background.'
+
+    # Snapshot while the original connection and its WAL are still open.
+    Assert ([IO.File]::Exists((Join-Path $workDir 'vault.db-wal'))) 'Fixture did not hold a live WAL.'
+    $backupType = $asm.GetType('StickyPro.Backup', $true)
+    Invoke-S $backupType 'CopyData' @($workDir, $backupDir) | Out-Null
+    Assert ([IO.File]::Exists((Join-Path $backupDir 'vault.db'))) 'Backup did not include the live vault.'
+    Assert (-not [IO.File]::Exists((Join-Path $backupDir 'vault.db-wal'))) 'Backup copied a live WAL as a separate file.'
+    Invoke-S $vaultType 'MarkAlerted' @('after-snapshot', 'test') | Out-Null
+    $storeType.GetField('Dir', $static).SetValue($null, $backupDir)
+    $snapshotDocs = Invoke-S $vaultType 'ListDocs' @('shipments.csv', 10)
+    Assert ($snapshotDocs.Count -eq 1) 'A committed WAL row was missing from the independent backup.'
+    Assert (-not [bool](Invoke-S $vaultType 'HasAlerted' @('after-snapshot', $cooldown))) 'Writes after the snapshot appeared in the backup.'
 } finally {
     # 9. Close DB cleanly and verify temp directory deletes with ZERO file-lock errors!
     Invoke-S $vaultType 'Close' @() | Out-Null
     Start-Sleep -Milliseconds 50
     [IO.Directory]::Delete($workDir, $true)
+    if ([IO.Directory]::Exists($backupDir)) { [IO.Directory]::Delete($backupDir, $true) }
     Assert (-not [IO.Directory]::Exists($workDir)) 'Temp vault directory was not cleanly deleted.'
 }
 
-Write-Host ('SQLITE VAULT OK: WAL + ' + $ftsMode + ' + UTF-8 Arabic + cache hit + cross-report SQL JOIN + Decay/MMR session search + step_events ForkAt + alert_dedup + QueueExtract + clean Close')
+Write-Host ('SQLITE VAULT OK: WAL + ' + $ftsMode + ' + UTF-8 Arabic + cache hit + cross-report SQL JOIN + Decay/MMR session search + step_events ForkAt + alert_dedup + QueueExtract + live WAL snapshot + clean Close')
