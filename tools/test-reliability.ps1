@@ -147,6 +147,17 @@ Assert (-not [IO.File]::Exists((Join-Path $target 'removed.txt'))) 'Migration co
 Assert ([IO.File]::ReadAllText($location) -eq $target) 'Migration did not commit the new location.'
 Assert ([IO.File]::Exists((Join-Path $source 'notes.json'))) 'Migration removed the original data.'
 
+# A move scheduled under --data cannot redirect a normal startup, even for the same source directory.
+$overrideTarget = Join-Path $fixture 'override-target'
+$store.GetField('DirOverride', $static).SetValue($null, $source)
+Assert ($null -eq (Call 'Store' 'MoveDataTo' @($overrideTarget))) 'Could not schedule an explicit-profile move.'
+$store.GetField('DirOverride', $static).SetValue($null, $null)
+Assert ((Call 'Store' 'ApplyPendingMove' @($source)) -eq $source) 'Normal startup picked up an explicit-profile move.'
+$store.GetField('DirOverride', $static).SetValue($null, $source)
+Assert ((Call 'Store' 'ApplyPendingMove' @($source)) -eq $overrideTarget) 'Explicit-profile startup missed its scheduled move.'
+Assert ([IO.File]::ReadAllText($location) -eq $target) 'An explicit-profile move changed the global location.'
+$store.GetField('DirOverride', $static).SetValue($null, $null)
+
 # A locked primary with a readable older backup must never look like an empty or recovered profile.
 $settingsPath = Join-Path $source 'settings.json'
 [IO.File]::WriteAllText($settingsPath, '{"UserName":"newer"}')
