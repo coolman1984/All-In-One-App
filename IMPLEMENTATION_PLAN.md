@@ -245,7 +245,7 @@ Fixed saved-work hazards and workflow bugs found on `cbed099`. See the [review m
 
 ### Working source verification · November 22, 2026
 
-GitHub main at `46328ef` is the working source for the project checkout. The Windows build succeeded and 21 of 22 suites passed. A standalone Excel COM activation on the test host reproduced the live Office suite failure with `0x80080005`. Interactive Office validation remains open. See the [sync history](HISTORY.md#2026-11-22--github-main-sync-and-test-runner-fix).
+The project checkout pulled GitHub main through `29646ed`, including [browser automation](docs/BROWSER-AUTOMATION.md), Projects, and the [Team hub and signed updates](docs/TEAM.md). The Windows test build and all 24 suites passed on this checkout, including the live Office tests. The separate live browser and Team update checks remain open. See the [sync history](HISTORY.md#2026-11-22--pulled-all-github-main-updates).
 
 ---
 

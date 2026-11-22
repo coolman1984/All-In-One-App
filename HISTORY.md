@@ -2,6 +2,12 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-22 — Pulled all GitHub main updates
+
+- Fast-forwarded the project checkout by 15 commits, from `cbed099` to `29646ed`. The updates include browser automation, Projects and Team, signed releases, scheduled jobs, and saved-work fixes.
+- The Windows test build and all 24 suites in `tools/test-all.ps1` passed on `29646ed`, including live Excel, Word, and PowerPoint. The incoming diff has six trailing blank-line warnings.
+- The separate live browser and Team update checks remain open. The existing desktop executable was not rebuilt or replaced in this source sync.
+
 ## 2026-11-22 — GitHub main sync and test-runner fix
 
 - Asked to push, merge and sync with GitHub main. Fetched twelve upstream commits, pushed the Windows GitHub workflow documentation and agent-conversation test fix, and merged them into main at 6bc581e. Local main matched the live GitHub branch.
