@@ -625,3 +625,43 @@ Added local document writers and file cards, chat folders and archive views, dra
 
 Short, proven lessons. Read before working on the app; add a new one whenever something is learned, fixed or improved.
 Format: what happened -> cause (proven) -> rule.
+
+## 2026-11-22 08:57 - Rebuilt AllInOne.exe from GitHub main (d55c4cc)
+- build.ps1 succeeded (warnings only); previous exe backed up as AllInOne.before-2026-11-22-rebuild.exe. Smoke test: app starts and responds.
+
+
+## 2026-11-22 09:04 - Expandable, flexible side panels
+- Assistant: new expand/restore button in its header, Ctrl+Shift+J, and double-click on its divider make it fill the window and then go back to the side. Opening a page restores the side view. The drag limit is lifted, so it can be as wide as the window allows.
+- Every side divider (Markdown outline, tasks, prompts, bookmarks, snip OCR, nav): double-click expands it to half the area, double-click again restores it. The Markdown outline's 700 px width cap is lifted.
+- Verified: build passes, app starts and responds. The new controls were not clicked through by automation.
+
+
+## 2026-11-22 09:09 - Left/right resize for Agents chat panes and Markdown page
+- Agents: the gaps between chat panes now show a visible grip (line + dots) and are wider (12 px), so the existing drag-to-resize is easy to find. The Chats list got its own remembered divider (agents.history).
+- Markdown: the note tree got a remembered divider (md.tree), next to the outline divider.
+- All side dividers are wider (9 px) with bigger dots.
+- Verified: build passes, app starts and responds. Dragging was not automated.
+
+
+## 2026-11-22 09:18 - Multi-project harness: agents never mix projects
+- New src/Projects.cs: automatic project registry (agent chat folders, folder sets, terminal folders, recent folders that look like projects, and sibling repos next to them). Skips containers (GitHub, WORK), package folders, Downloads/Documents. Names match with spaces, dashes or underscores, plus the GitHub repo name. Everyday words (docs, agents, test...) match only by full path. When two folders share a name, the git repo wins.
+- Every agent run (chat, council, leader, MCP agent_ask, Assistant) gets a project scope block on a fresh session, and again whenever the message names a project other than the chat folder: the working project, the named project, the rules (stay in that folder, use its own CLAUDE.md/AGENTS.md, never mix), and the known projects. Headless Claude also gets --add-dir for the named project.
+- A new chat whose first message names one project starts in that project's folder.
+- New MCP tool projects_list (optional text -> the projects it names) for terminal agents and others.
+- Verified through the real MCP pipe: 110 projects; 'sticky-note build' -> GitHub\Sticky note only; 'excel agent ... GMES CLI' -> both; 'agents ... docs' -> none. Live agent turns with the scope block were not run.
+
+
+## 2026-11-22 11:23 - Team: chat, files, agents and one-click update distribution
+- New Team page (src/TeamNet.cs, Releases.cs, TeamServices.cs, TeamPage.cs; docs/TEAM.md). One shared folder (no server, no ports). Each PC writes only its own files: append-only messages per device, presence/update state per device, read receipts per device. Rooms: General, Updates & Releases, group, project, private. Offline outbox, duplicates ignored, time order, reactions, replies, edits, deletes, pins, mentions, notifications, search, resumable SHA-256 file transfer, problem reports into tasks.
+- Agents in rooms: each user shares chosen agents; @handle runs the agent on its owner's PC (off / read-only default / edit per room), loop guard of 6.
+- Updates: admin RSA-3072 key in the Windows key store, pinned by members; signed manifests and channels (dev / pilot / stable, rollout percent, pause, critical, replay protection). Build & Publish: compile check, team tests, optional full suite, build.ps1 -Out, --selftest, signed publish, announcement. Clients download with resume, verify, stage, install when idle/critical/on click via the new exe as updater (--apply-update) with backup, health signal and automatic rollback. Promotion refused while a pilot PC failed. Admin chat commands with confirmation.
+- portable.txt next to the exe disables the install offer.
+- Verified: tools/test-team.ps1 50/50 on temporary folders; test-regressions OK; tools/test-team-e2e.ps1 with the real exe: pipeline published in 36 s, a real app copy received a forced pilot release, installed, restarted, reported. Off-screen render of chat and Update center checked. Not tested: real S:\ share, two physical PCs, restricted PCs. Not built: secondary update server, voice messages, message encryption.
+- Incident during the first e2e run: the portable test copy showed the normal 'Install for your Windows account?' prompt, it was answered Yes, the copy installed itself (with its test-team data) into %LocalAppData%\Programs\All in One, and the updater then correctly updated that installed copy to the test build. Reverted reversibly (moved to build-test\e2e-cleanup-backup, registry exported, startup entry pointed back to the project exe). Countermeasure: portable.txt in the e2e copy plus a safety stop when the reported app path is outside the test folder.
+
+
+## 2026-11-22 12:05 - Team v2: secure Admin & User platform, remote assistance
+- New src/TeamSecurity.cs (device keys, signed default-deny policy, grants by user/group/device/room/project, room keys wrapped per allowed PC with rotation on revoke, AES-256+HMAC sealing, admin passphrase PBKDF2), src/TeamRemote.cs (consent-based screen view/control through the share, encrypted frames/input, signed request/accept/end, timeout, revoke mid-session, audit), src/TeamAdminUi.cs (approval dialog, red frame + banner + Stop, viewer window, Admin console: people & PCs, permissions, rooms, sessions, audit, settings).
+- TeamNet: messages sealed + device-signed, receivers verify sender, permission and key; presence signed; files encrypted; pending / suspended / revoked / blocked states; terminate closes the app; blocked stays disconnected. Team page: passphrase on create, waiting screen with device code, Get remote help, person menu, admin console button, features hidden by policy. Releases: admin actions need unlock; updates only for approved PCs. Policy repair from the last verified copy.
+- Verified: test-team 50/50, test-team-security 61/61, test-team-e2e (real exe: pipeline incl. security suite 69 s; approved real copy updated and reported), off-screen renders of chat, admin console and waiting screen. Not verified: real S:\ share, two physical PCs, real input injection on a second session.
+

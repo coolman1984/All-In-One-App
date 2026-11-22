@@ -91,7 +91,10 @@ namespace StickyPro
             // Orders fold away (remembered), like a VS Code section.
             var fold = new IconButton(OrdersOpen ? "\uE70D" : "\uE76C", 8f, "Show or hide the order buttons", tips, null) { Dock = DockStyle.Right, Width = Ui.S(30) };
             fold.Click += delegate { OrdersOpen = !OrdersOpen; fold.Text = OrdersOpen ? "\uE70D" : "\uE76C"; orders.Visible = OrdersOpen; };
-            head.Controls.Add(chats); head.Controls.Add(Gap()); head.Controls.Add(fold); head.Controls.Add(fresh); head.Controls.Add(Gap()); head.Controls.Add(close); head.Controls.Add(title);
+            // Expand to the whole window / restore to the side (also: double-click the divider, drag it to any width).
+            expand = new IconButton("", 9f, "Expand to full window / back to side panel (Ctrl+Shift+J)", tips, null) { Dock = DockStyle.Right, Width = Ui.S(30) };
+            expand.Click += delegate { main.SetAssistantWide(!main.AssistantWide); };
+            head.Controls.Add(chats); head.Controls.Add(Gap()); head.Controls.Add(fold); head.Controls.Add(expand); head.Controls.Add(fresh); head.Controls.Add(Gap()); head.Controls.Add(close); head.Controls.Add(title);
 
             // Compact Mode bar: Solo | Council | Leader | Team... | Workspace | Rec
             modeBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(0, Ui.S(2), 0, Ui.S(2)), Margin = new Padding(0) };
@@ -146,6 +149,8 @@ namespace StickyPro
             get { string v; return !Store.Settings.ViewStacks.TryGetValue("assistant.orders", out v) || v != "0"; }
             set { Store.Settings.ViewStacks["assistant.orders"] = value ? "1" : "0"; Store.MarkSettings(); }
         }
+        IconButton expand;
+        public void WideChanged(bool wide) { if (expand != null) expand.Text = wide ? "" : ""; }
         static Panel Gap() { return new Panel { Dock = DockStyle.Right, Width = Ui.S(4) }; }
         static Button Small(string text, EventHandler click) { var b = Ui.Btn(text, click); ((FluentButton)b).Glyph = null; b.Margin = new Padding(0, 0, Ui.S(4), Ui.S(2)); return b; }
 

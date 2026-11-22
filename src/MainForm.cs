@@ -36,7 +36,7 @@ namespace StickyPro
         AccountsPage accountsPage;
         NavItem navAccounts;
         AgentsPage agents;
-        readonly NavItem navAgents;
+        readonly NavItem navAgents, navTeam;
 
         Panel PageWith(string title, Control inner)
         {
@@ -82,9 +82,10 @@ namespace StickyPro
             content.Padding = Ui.Nexus ? new Padding(Ui.S(22), Ui.S(16), Ui.S(22), Ui.S(6)) : new Padding(Ui.S(12), Ui.S(10), Ui.S(12), Ui.S(4));
             Controls.Add(content);
             // The Assistant: one chat on the right of every page (Ctrl+J), created when first shown.
-            assistantHost = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("assistant", DockStyle.Right, Ui.S(420), Ui.S(1200)), Visible = false };
+            assistantHost = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("assistant", DockStyle.Right, Ui.S(420), Math.Max(Ui.S(2400), Screen.PrimaryScreen.WorkingArea.Width)), Visible = false };
             Controls.Add(assistantHost);
-            PaneGrip.Attach(assistantHost, "assistant", Ui.S(320));
+            var assistantGrip = PaneGrip.Attach(assistantHost, "assistant", Ui.S(320), false);
+            assistantGrip.DoubleClick += delegate { SetAssistantWide(!AssistantWide); };   // double-click the divider: expand / restore
             if (Store.Settings.AssistantOpen) Shown += delegate { SetAssistant(true); };
 
             status = new Label();
@@ -177,11 +178,13 @@ namespace StickyPro
             navAccounts.Click += delegate { ShowPage("accounts"); };
             navAgents = new NavItem("", "Agents");
             navAgents.Click += delegate { ShowPage("agents"); };
+            navTeam = new NavItem("", "Team");
+            navTeam.Click += delegate { ShowPage("team"); };
             // Sidebar pages: your names, order, favorites and hidden pages come from Settings (right-click a page).
             navList = navigation;
             AddNavPage("dashboard", navHome, "General"); AddNavPage("tasks", navTasks, "General"); AddNavPage("notes", navNotes, "General");
             AddNavPage("prompts", navPrompts, "General"); AddNavPage("clips", navClips, "General");
-            AddNavPage("agents", navAgents, "Tools"); AddNavPage("terminals", navTerminals, "Tools"); AddNavPage("explorer", navExplorer, "Tools"); AddNavPage("markdown", navMarkdown, "Tools"); AddNavPage("browser", navBrowser, "Tools"); AddNavPage("documents", navDocs, "Tools"); AddNavPage("accounts", navAccounts, "Tools");
+            AddNavPage("agents", navAgents, "Tools"); AddNavPage("team", navTeam, "Tools"); AddNavPage("terminals", navTerminals, "Tools"); AddNavPage("explorer", navExplorer, "Tools"); AddNavPage("markdown", navMarkdown, "Tools"); AddNavPage("browser", navBrowser, "Tools"); AddNavPage("documents", navDocs, "Tools"); AddNavPage("accounts", navAccounts, "Tools");
             AddNavPage("snip", navSnip, "Tools"); AddNavPage("chrome", navChrome, "Tools"); AddNavPage("power", navPower, "Tools");
             AddNavPage("system", navSystem, "System"); AddNavPage("cards", navCards, "System"); AddNavPage("activity", navActivity, "System"); AddNavPage("tagged", navTagged, "System");
             BuildNav();
@@ -391,6 +394,7 @@ namespace StickyPro
         public void ShowPage(string p)
         {
             if (string.IsNullOrEmpty(p)) p = "dashboard";
+            if (AssistantWide) SetAssistantWide(false);   // opening a page brings it back beside the Assistant
             string key = p.Split(':')[0];
             if (p != key && key != "system" && key != "chrome") return;
             if (key == "home") key = "dashboard";
@@ -421,6 +425,7 @@ namespace StickyPro
                 navKeys.Selected = target == "shortcuts";
                 navTerminals.Selected = target == "terminals";
                 navAgents.Selected = target == "agents";
+                navTeam.Selected = target == "team";
                 navMarkdown.Selected = target == "markdown";
                 navBrowser.Selected = target == "browser";
                 navDocs.Selected = target == "documents";
@@ -456,6 +461,7 @@ namespace StickyPro
                 case "shortcuts": control = shortcuts = new ShortcutsPage(); break;
                 case "terminals": control = terminals = new TerminalPage(); break;
                 case "agents": control = agents = new AgentsPage(); break;
+                case "team": control = new TeamPage(); break;
                 case "markdown": control = markdown = new MarkdownPage(); break;
                 case "browser": control = browser = new BrowserPage(); break;
                 case "documents": control = documents = new DocumentsPage(); break;
@@ -698,7 +704,7 @@ namespace StickyPro
             }
             return bmp;
         }
-        Panel assistantHost; AssistantPanel assistant;
+        Panel assistantHost; AssistantPanel assistant; int assistantSideWidth;
         // Zen mode (F11, Esc leaves): only the page; the menu, top bar, dock and status line step aside.
         bool zen;
         public bool Zen { get { return zen; } }
@@ -719,10 +725,25 @@ namespace StickyPro
         public void SetAssistant(bool show)
         {
             if (show && assistant == null) { assistant = new AssistantPanel(this) { Dock = DockStyle.Fill }; assistantHost.Controls.Add(assistant); }
+            if (!show && AssistantWide) SetAssistantWide(false);
             assistantHost.Visible = show;
             if (Store.Settings.AssistantOpen != show) { Store.Settings.AssistantOpen = show; Store.MarkSettings(); }
             if (topBar != null) topBar.Invalidate();
             if (show && assistant != null) assistant.FocusInput();
+        }
+        // Expanded Assistant: fills the whole work area (the page steps aside); restore brings back the side panel at its dragged width.
+        public bool AssistantWide { get { return assistantHost != null && assistantHost.Dock == DockStyle.Fill; } }
+        public void SetAssistantWide(bool wide)
+        {
+            if (assistantHost == null || wide == AssistantWide) return;
+            if (wide && !assistantHost.Visible) SetAssistant(true);
+            SuspendLayout();
+            if (wide) assistantSideWidth = assistantHost.Width;
+            content.Visible = !wide;
+            assistantHost.Dock = wide ? DockStyle.Fill : DockStyle.Right;
+            if (!wide && assistantSideWidth > 0) assistantHost.Width = assistantSideWidth;
+            ResumeLayout();
+            if (assistant != null) assistant.WideChanged(wide);
         }
         public void PageChangedForAssistant() { if (assistant != null) assistant.PageChanged(page); }
         public void InsertIntoNote(string text) { if (markdown != null && markdown.CurrentPath != null) { ShowPage("markdown"); markdown.AppendText(text); } }
@@ -777,6 +798,7 @@ namespace StickyPro
                 else if (e.KeyCode == Keys.D9) { ShowPage("tasks"); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.F && page != "explorer") { FocusSearch(); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.K || (e.KeyCode == Keys.P && e.Shift)) { GlobalSearch.Open(this); e.SuppressKeyPress = true; }   // Ctrl+Shift+P like VS Code
+                else if (e.KeyCode == Keys.J && e.Shift) { SetAssistantWide(!AssistantWide); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.J) { SetAssistant(!assistantHost.Visible); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.B && !e.Shift) { Store.Settings.PaneSizes["nav.collapsed"] = NavCollapsed ? 0 : 1; Store.MarkSettings(); AdaptNav(navPanel); e.SuppressKeyPress = true; }   // VS Code: side bar
                 else if (e.KeyCode == Keys.N && !e.Shift)

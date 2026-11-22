@@ -676,6 +676,9 @@ namespace StickyPro
             ActiveSessionKey = AgentAccounts.Session(SessionKey ?? d.Id, account);
             string session; chat.Sessions.TryGetValue(ActiveSessionKey, out session);
             string resume = string.IsNullOrEmpty(session) || string.IsNullOrEmpty(d.Resume) ? "" : d.Resume.Replace("{session}", Quote(session));
+            // Many projects, never mixed: tell the agent which project it works on and which one the message names.
+            prompt = Projects.ScopeBlock(chat, prompt, resume.Length == 0) + prompt;
+            var namedProject = Projects.Target(chat.Messages.Where(m => m.Role == "user").Select(m => m.Text).LastOrDefault() ?? "");
             if (d.Id == "codex" && Store.Settings.CodexManaged)
             {
                 // The company policy (enterprise requirements) allows only sandbox read-only / workspace-write and
@@ -730,6 +733,9 @@ namespace StickyPro
             var files = (Attach ?? new List<string>()).Where(File.Exists).ToList();
             if (d.Format == "claude" && files.Count > 0)   // headless Claude may read the attachments (outside the project folder)
                 foreach (var folder in files.Select(Path.GetDirectoryName).Distinct(StringComparer.OrdinalIgnoreCase)) args += " --add-dir " + Quote(folder);
+            // The message names another project than the chat folder: headless Claude may work in that folder too.
+            if (d.Format == "claude" && namedProject != null && !string.Equals(Projects.RootOf(chat.Folder), namedProject.Path, StringComparison.OrdinalIgnoreCase))
+                args += " --add-dir " + Quote(namedProject.Path);
             var images = files.Where(IsImage).ToList();
             if (d.Format == "codex" && images.Count > 0)   // real image input; "=" keeps the list from swallowing the "-" (stdin) argument
                 args = Regex.Replace(args, @"(^|\s)exec(\s|$)", m => m.Value.TrimEnd() + " " + Quote("--image=" + string.Join(",", images)) + " ", RegexOptions.None, TimeSpan.FromSeconds(1));
@@ -1116,6 +1122,8 @@ namespace StickyPro
     {
         AgentChat chat;
         public string Working;         // "Codex is working" while a turn runs
+        public Action<AgentMsg, ContextMenuStrip> CustomMenu;   // set by the Team page: replaces the right-click menu
+        public string EmptyText;                                  // set by the Team page: text of an empty room
         public long WorkingSince;
         public string LastTool;
         class Seg { public string FileName, Info; public string Text; public bool Code; public int H; public List<MdBlock> Md; }
@@ -1350,6 +1358,11 @@ namespace StickyPro
             if (chat.Messages.Count != measuredCount) Relayout(false);
             int oy = AutoScrollPosition.Y;
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter;
+            if (items.Count == 0 && Working == null && EmptyText != null)
+            {
+                TextRenderer.DrawText(g, EmptyText, Ui.Big, new Rectangle(0, ClientSize.Height / 2 - Ui.S(40), ClientSize.Width, Ui.S(60)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak);
+                return;
+            }
             if (items.Count == 0 && Working == null)
             {
                 var r = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
@@ -1476,6 +1489,7 @@ namespace StickyPro
             if (e.Button != MouseButtons.Right || chat == null) return;
             var it = At(e.Location);
             menu.Items.Clear();
+            if (CustomMenu != null) { CustomMenu(it != null ? it.M : null, menu); if (menu.Items.Count > 0) menu.Show(this, e.Location); return; }   // Team page: its own actions
             if (it != null)
             {
                 string text = it.M.Text;
@@ -2246,6 +2260,7 @@ namespace StickyPro
             var who = onlyAgent != null ? new List<string> { onlyAgent } : Responders(ref text);
             if (who.Count == 0) { App.I.Status("No agent is turned on to answer. Click an agent above the message box to turn it on."); return; }
             if (string.IsNullOrWhiteSpace(text)) return;
+            ProjectFolderFromMessage(c, text);
             if (c.Folder.Length == 0 || !Directory.Exists(c.Folder))
             {
                 var recent = MetaStore.Recent("folders", 1).FirstOrDefault();
@@ -2394,9 +2409,18 @@ namespace StickyPro
             if (f != null && !f.ContainsFocus) App.I.Balloon("Agents", (Chat.Title.Length > 0 ? Chat.Title : "Chat") + ": answered.");
         }
         // ---------- model council ----------
+        // A new chat that names one project ("fix the HERDR launcher") starts in that project's folder.
+        void ProjectFolderFromMessage(AgentChat c, string text)
+        {
+            if (!Projects.AutoFolder(c, text)) return;
+            MetaStore.Touch("folders", c.Folder);
+            if (App.I != null) App.I.Status("Project: " + Path.GetFileName(c.Folder) + " (" + c.Folder + ")");
+            RaiseChanged(); view.Invalidate();
+        }
         void EnsureChat(string text)
         {
             var c = Chat;
+            ProjectFolderFromMessage(c, text);
             if (c.Folder.Length == 0 || !Directory.Exists(c.Folder))
             {
                 var recent = MetaStore.Recent("folders", 1).FirstOrDefault();
@@ -3251,7 +3275,35 @@ namespace StickyPro
             Controls.Add(history);
             Controls.Add(bottom);
             Controls.Add(bar);
+            var hg = PaneGrip.Attach(history, "agents.history", Ui.S(160));
+            hg.SplitterMoving += delegate { historyGripDragging = true; };
+            hg.SplitterMoved += delegate { historyGripDragging = false; };
+            grid.Paint += PaintDividers;
             Ui.Theme(this);
+        }
+        bool historyGripDragging;
+
+        // Visible grip in every gap between panes (drag it to resize, double-click for equal sizes).
+        void PaintDividers(object s, PaintEventArgs e)
+        {
+            int[] w = grid.GetColumnWidths(), h = grid.GetRowHeights();
+            using (var b = new SolidBrush(Ui.Line))
+            {
+                int x = 0, top = grid.Padding.Top;
+                for (int i = 0; i < w.Length - 1; i++)
+                {
+                    x += w[i];
+                    e.Graphics.FillRectangle(b, x - 1, top + Ui.S(8), 2, grid.ClientSize.Height - top - Ui.S(16));
+                    for (int k = -2; k <= 2; k++) e.Graphics.FillEllipse(b, x - 2, grid.ClientSize.Height / 2 + k * Ui.S(7) - 2, 5, 5);
+                }
+                int y = top;
+                for (int i = 0; i < h.Length - 1; i++)
+                {
+                    y += h[i];
+                    e.Graphics.FillRectangle(b, Ui.S(8), y - 1, grid.ClientSize.Width - Ui.S(16), 2);
+                    for (int k = -2; k <= 2; k++) e.Graphics.FillEllipse(b, grid.ClientSize.Width / 2 + k * Ui.S(7) - 2, y - 2, 5, 5);
+                }
+            }
         }
 
         protected override void OnLayout(LayoutEventArgs e)
@@ -3260,8 +3312,9 @@ namespace StickyPro
             {
                 bool show = !layout.HistoryOff && ClientSize.Width >= Ui.S(1000);
                 if (history.Visible != show) history.Visible = show;
-                int w = ClientSize.Width >= Ui.S(1700) ? Ui.S(290) : Ui.S(250);
-                if (history.Width != w) history.Width = w;
+                // Width the user dragged to wins; otherwise the old size by window width.
+                int w = PaneGrip.Size("agents.history", DockStyle.Left, ClientSize.Width >= Ui.S(1700) ? Ui.S(290) : Ui.S(250), ClientSize.Width);
+                if (history.Width != w && !historyGripDragging) history.Width = w;
             }
             base.OnLayout(e);
         }
@@ -3315,7 +3368,7 @@ namespace StickyPro
             int count = LayoutPicker.Count(l);
             while (panes.Count < count)
             {
-                var p = new ChatPane(Blank(panes.Count)) { Margin = new Padding(Ui.S(4)) };
+                var p = new ChatPane(Blank(panes.Count)) { Margin = new Padding(Ui.S(6)) };   // 12 px gap = grab zone for the divider
                 p.Activated += SetActive;
                 p.Changed += delegate { UpdateInfo(); history.Invalidate(true); SaveLayout(); };   // SaveLayout is batched (timer)
                 panes.Add(p);
@@ -3388,6 +3441,7 @@ namespace StickyPro
                 grid.SuspendLayout();
                 for (int k = 0; k < sz.Length; k++) { if (dragCol >= 0) grid.ColumnStyles[k].Width = sz[k] * 100f / total; else grid.RowStyles[k].Height = sz[k] * 100f / total; }
                 grid.ResumeLayout(true);
+                grid.Invalidate();
                 return;
             }
             int c, r; Boundary(e.Location, out c, out r);

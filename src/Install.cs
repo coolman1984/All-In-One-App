@@ -68,6 +68,8 @@ namespace StickyPro
         public static bool OfferOnFirstRun()
         {
             if (IsInstalledCopy || IsDevCopy) return false;
+            // "portable.txt" next to the exe: always portable, never offer to install (team test copies, USB sticks).
+            if (File.Exists(Path.Combine(ExeDir, "portable.txt"))) return false;
             var r = MessageBox.Show(
                 "Install " + App.Name + " for your Windows account?\n\n" +
                 "It copies the app to your user folder, adds it to the Start menu and the Desktop and starts it with Windows. " +

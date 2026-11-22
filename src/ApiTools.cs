@@ -73,6 +73,8 @@ namespace StickyPro
                 new[] { "name|string|Set name", "folders|string|Folder paths, one per line or separated by ;", "favorite|boolean|Favorite" }, "name", "folders"));
             l.Add(T("folder_sets_list", "Folder sets", "Named groups of folders the user opens together (shared by Explorer, Terminals and Agents).", true,
                 new string[0]));
+            l.Add(T("projects_list", "Projects", "All the user's projects (name, aliases, folder), found from agent chats, terminals, folder sets and their sibling repos. Give 'text' to get the project(s) that text talks about, so work never mixes projects.", true,
+                new[] { "text|string|Optional: a message; returns only the projects it names" }));
             l.Add(T("agent_limits", "Agent usage limits", "5-hour and weekly usage limits of the agent CLIs (Claude Code, Codex; others report none), with reset times.", true,
                 new string[0]));
             l.Add(T("item_organize", "Organize an item", "Favorite, color, tag, note or rename any item of a scope (for folders the id is the full path).", false,
@@ -701,6 +703,12 @@ namespace StickyPro
                 }
                 case "folder_sets_list":
                     return J(FolderSets.Ordered().Select(x => new { name = x.Name, favorite = x.Fav, folders = x.Folders, note = x.Note, uses = x.Uses }));
+                case "projects_list":
+                {
+                    string text = S(a, "text");
+                    var list = string.IsNullOrWhiteSpace(text) ? Projects.All() : Projects.Mentioned(text);
+                    return J(list.Select(p => new { name = p.Name, aliases = p.Aliases, folder = p.Path }));
+                }
                 case "agent_limits":
                     return J(AgentLimits.ReadAll().Select(x => new { agent = x.Agent, account = x.Account, five_hour_pct = x.FiveHour, five_hour_resets = x.FiveResets.HasValue ? x.FiveResets.Value.ToString("s") : null, weekly_pct = x.Weekly, weekly_resets = x.WeekResets.HasValue ? x.WeekResets.Value.ToString("s") : null, note = x.Note }));
                 case "item_organize":

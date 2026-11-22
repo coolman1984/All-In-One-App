@@ -144,7 +144,7 @@ namespace StickyPro
             return Math.Max(Ui.S(60), Math.Min(v, Math.Max(Ui.S(60), available * 80 / 100)));
         }
 
-        public static Splitter Attach(Control panel, string key, int minSize = 0)
+        public static Splitter Attach(Control panel, string key, int minSize = 0, bool doubleClickExpand = true)
         {
             var parent = panel.Parent;
             if (parent == null) throw new InvalidOperationException("Add the panel to its parent before attaching a divider.");
@@ -156,7 +156,7 @@ namespace StickyPro
             {
                 bool side = panel.Dock == DockStyle.Left || panel.Dock == DockStyle.Right || Vertical(panel.Dock);
                 if (side && sp.Dock != panel.Dock) sp.Dock = panel.Dock;
-                if (Vertical(sp.Dock)) sp.Height = Ui.S(6); else sp.Width = Ui.S(6);
+                if (Vertical(sp.Dock)) sp.Height = Ui.S(9); else sp.Width = Ui.S(9);
                 sp.Visible = side && panel.Visible;
             };
             panel.DockChanged += sync; panel.VisibleChanged += sync; sync(panel, EventArgs.Empty);
@@ -176,12 +176,30 @@ namespace StickyPro
                 else if (panel.Dock == DockStyle.Left || panel.Dock == DockStyle.Right) { if (panel.Width > max) panel.Width = max; }
             };
             parent.Resize += clamp; panel.VisibleChanged += clamp; clamp(parent, EventArgs.Empty);
-            sp.SplitterMoved += delegate
+            Action save = delegate
             {
+                if (key == null) return;
                 if (Store.Settings.PaneSizes == null) Store.Settings.PaneSizes = new Dictionary<string, int>();
                 Store.Settings.PaneSizes[Key(key, panel.Dock)] = Vertical(panel.Dock) ? panel.Height : panel.Width;
                 Store.MarkSettings();
             };
+            sp.SplitterMoved += delegate { save(); };
+            // Double-click the divider: expand the panel to half the area, double-click again to restore.
+            if (doubleClickExpand)
+            {
+                int before = 0;
+                sp.DoubleClick += delegate
+                {
+                    bool vertical = Vertical(panel.Dock);
+                    int size = vertical ? panel.Height : panel.Width, area = vertical ? parent.ClientSize.Height : parent.ClientSize.Width;
+                    int target;
+                    if (size < area * 45 / 100) { before = size; target = area / 2; }
+                    else target = before > 0 ? before : Math.Max(sp.MinSize, area / 4);
+                    if (vertical) panel.Height = target; else panel.Width = target;
+                    clamp(parent, EventArgs.Empty);
+                    save();
+                };
+            }
             return sp;
         }
 
@@ -198,13 +216,13 @@ namespace StickyPro
                 bool vertical = Dock == DockStyle.Top || Dock == DockStyle.Bottom;
                 using (var b = new SolidBrush(hot ? Ui.Accent : Ui.Line))
                 {
-                    if (vertical) e.Graphics.FillRectangle(b, 0, Height / 2 - (hot ? 1 : 0), Width, hot ? 3 : 1);
-                    else e.Graphics.FillRectangle(b, Width / 2 - (hot ? 1 : 0), 0, hot ? 3 : 1, Height);
-                    // grip dots in the middle
+                    if (vertical) e.Graphics.FillRectangle(b, 0, Height / 2 - 1, Width, hot ? 3 : 2);
+                    else e.Graphics.FillRectangle(b, Width / 2 - 1, 0, hot ? 3 : 2, Height);
+                    // grip dots in the middle: big enough to find the handle at a glance
                     for (int i = -2; i <= 2; i++)
                     {
-                        if (vertical) e.Graphics.FillEllipse(b, Width / 2 + i * Ui.S(6) - 1, Height / 2 - 1, 3, 3);
-                        else e.Graphics.FillEllipse(b, Width / 2 - 1, Height / 2 + i * Ui.S(6) - 1, 3, 3);
+                        if (vertical) e.Graphics.FillEllipse(b, Width / 2 + i * Ui.S(7) - 2, Height / 2 - 2, 5, 5);
+                        else e.Graphics.FillEllipse(b, Width / 2 - 2, Height / 2 + i * Ui.S(7) - 2, 5, 5);
                     }
                 }
             }

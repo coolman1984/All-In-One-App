@@ -1,11 +1,13 @@
 # Builds "All in One" (AllInOne.exe) with the C# compiler that ships with Windows (.NET Framework 4.x).
 # No installs needed. Usage:  powershell -ExecutionPolicy Bypass -File build.ps1
 # Also creates the one-click launcher "All in One.lnk" in this folder.
+# -Out <path>: release build for Team > Build & Publish: writes only that exe (no app restart, no shortcut).
+param([string]$Out = '')
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $csc  = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
-$exe  = Join-Path $here 'AllInOne.exe'
+$exe  = if ($Out) { $Out } else { Join-Path $here 'AllInOne.exe' }
 $old  = Join-Path $here 'StickyNotesPro.exe'
 $ico  = Join-Path $here 'src\app.ico'
 $src  = Get-ChildItem (Join-Path $here 'src') -Filter *.cs | ForEach-Object { $_.FullName }
@@ -21,7 +23,7 @@ $refs += '/resource:' + (Join-Path (Split-Path $wv) 'markdown\marked.umd.js') + 
 $res = "/resource:$(Get-BundledFfmpeg $here),tools.ffmpeg.exe.gz"
 
 # Ask a running copy (new or old name) to save and exit so the exe can be replaced.
-foreach ($name in 'AllInOne', 'StickyNotesPro') {
+if (-not $Out) { foreach ($name in 'AllInOne', 'StickyNotesPro') {
     $path = if ($name -eq 'AllInOne') { $exe } else { $old }
     $running = Get-Process $name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $path }
     if ($running) {
@@ -31,7 +33,7 @@ foreach ($name in 'AllInOne', 'StickyNotesPro') {
             throw 'The running app could not exit. Save your work and close it before rebuilding.'
         }
     }
-}
+} }
 
 # Always regenerate the icon from the logo drawn in code, so exe, tray and windows match.
 $tmp = Join-Path $here 'icon_tool.tmp.exe'
@@ -44,6 +46,7 @@ try {
 
 & $csc /nologo /target:winexe /optimize+ /platform:x64 /out:$exe /win32icon:$ico $refs $res $src
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+if ($Out) { Write-Host "Built $exe"; exit 0 }
 if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
 
 # One-click launcher in the project root.

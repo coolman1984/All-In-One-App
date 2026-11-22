@@ -210,3 +210,15 @@ Format: what happened -> cause (proven) -> rule.
 - **The agent-conversation test hung on exit in Windows PowerShell 5.1.** It assigned a WinForms text box to the automatic variable `$input`. Use a distinct variable name and verify that the process exits after printing the success message.
 - **Headless test scripts calling `ApiTools.Dispatch` crashed with a `NullReferenceException` when `App.I` was not created.** `ApiTools.UI(...)` marshaled directly through `App.I.MainView.Invoke`. -> Guard `ApiTools.UI(...)` so it executes the callback directly on the caller thread when `App.I == null` or `App.I.MainView == null`, allowing all MCP tools to run both inside the live app and inside standalone PowerShell harnesses.
 - **Workflow recording and external app inspection do not need `UIAutomationClient.dll` `/r:` compiler flags.** Win32 `WH_MOUSE_LL`/`WH_KEYBOARD_LL` (active only while `WorkflowRecorder.IsRecording == true`) combined with `WindowFromPoint`, `GetAncestor`, `EnumWindows`/`EnumChildWindows`, `GetClassName`, `GetWindowText`, and `SendMessage(WM_GETTEXT)` inspect and control internal and external windows with zero extra assembly references and zero idle overhead.
+
+- Project-name matching: everyday folder names (docs, agents, test) give false matches, and the same name can exist in two places (repo + shared-drive copy). Keep a stop-word list, drop container folders, and rank duplicates (git > CLAUDE/AGENTS.md > local drive). (2026-11-22)
+
+
+- Any test that launches a real copy of AllInOne.exe outside the project folder must put portable.txt next to it: otherwise the first-run install prompt appears on the owner's desktop and one click installs the test copy over the user's install. Also assert the app path the copy reports. (2026-11-22)
+- A freshly written 89 MB exe is held by the antivirus scan for seconds: renames and moves of release files need retries (TeamClient.Retry); random-byte test files never show this. (2026-11-22)
+- Tests that load build-test\StickyNotesPro.test.exe must load a copy when anything rebuilds it during the run. Run reflection tests with Windows PowerShell 5.1, not pwsh 7 (System.Web.Extensions fails on .NET Core). (2026-11-22)
+
+
+- PowerShell test scripts: variable names are case-insensitive (a helper parameter \ hides the client \), commas bind tighter than + inside @(...), and Assert (x) -eq y 'msg' passes three arguments. Build reflection arguments explicitly for one-element arrays. (2026-11-22)
+- Without a server, 'central enforcement' must be cryptographic: signed policy checked by every receiver plus keys only for permitted devices, with key rotation on revoke. A rejected replayed policy also locks out the admin unless there is a repair path from the last verified copy. (2026-11-22)
+

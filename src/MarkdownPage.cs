@@ -275,7 +275,7 @@ namespace StickyPro
             tree = new TreeView { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, HideSelection = false, FullRowSelect = true, ShowLines = false, Indent = Ui.S(16), ItemHeight = Ui.S(24), Font = Ui.Base };
             tree.NodeMouseClick += (s, e) => { tree.SelectedNode = e.Node; if (e.Button == MouseButtons.Left && e.Node.Name == "file") Open((string)e.Node.Tag, true); else if (e.Button == MouseButtons.Right) NodeMenu(e.Node, e.Location); };
             tree.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter && tree.SelectedNode != null && tree.SelectedNode.Name == "file") Open((string)tree.SelectedNode.Tag, true); };
-            var left = new Panel { Dock = DockStyle.Left, Width = Ui.S(270), Padding = new Padding(0, Ui.S(4), Ui.S(8), 0) };
+            var left = new Panel { Dock = DockStyle.Left, Width = PaneGrip.Size("md.tree", DockStyle.Left, Ui.S(270), Math.Max(Ui.S(2400), Screen.PrimaryScreen.WorkingArea.Width)),Padding = new Padding(0, Ui.S(4), Ui.S(8), 0) };
             left.Controls.Add(tree); left.Controls.Add(new Panel { Dock = DockStyle.Top, Height = Ui.S(6) }); left.Controls.Add(filter);
 
             // ---- right: outline, backlinks, tags ----
@@ -286,7 +286,7 @@ namespace StickyPro
             backlinks.DoubleClick += delegate { var p = backlinks.SelectedItem as PathItem; if (p != null) Open(p.Path, true); };
             backlinks.Click += delegate { var p = backlinks.SelectedItem as PathItem; if (p != null) Open(p.Path, true); };
             tags.Click += delegate { if (tags.SelectedItem != null) FullSearch(((string)tags.SelectedItem).Split(' ')[0]); };
-            right = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("md.side", DockStyle.Right, Ui.S(260), Ui.S(700)), Padding = new Padding(Ui.S(6), Ui.S(2), 0, 0) };
+            right = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("md.side", DockStyle.Right, Ui.S(260), Math.Max(Ui.S(2400), Screen.PrimaryScreen.WorkingArea.Width)), Padding = new Padding(Ui.S(6), Ui.S(2), 0, 0) };
             mentions = SideList(); outgoing = SideList();
             mentions.Click += delegate { var p = mentions.SelectedItem as PathItem; if (p != null) Open(p.Path, true); };
             outgoing.Click += delegate { var p = outgoing.SelectedItem as PathItem; if (p != null) { if (File.Exists(p.Path)) Open(p.Path, true); else OnLink("wiki:" + p.Label); } };
@@ -384,6 +384,7 @@ namespace StickyPro
             Controls.Add(center); Controls.Add(right); Controls.Add(left); Controls.Add(bar);
             leftPane = left;
             PaneGrip.Attach(right, "md.side", Ui.S(220));
+            PaneGrip.Attach(left, "md.tree", Ui.S(160));
             if (right.Width < Ui.S(220)) right.Width = Ui.S(260);
             Ui.Theme(this);
             Ui.ThemeMenu(menu);
