@@ -15,7 +15,7 @@ jobs:
       - name: Capture the application
         shell: powershell
         run: |
-          .\tools\test-ui-sweep.ps1 -Out visual-evidence -Looks flow-light,atelier-dark -Sizes 1000x740,760x650 -SkipStress
+          .\tools\test-ui-sweep.ps1 -Out visual-evidence -Looks flow-light,atelier-dark -Sizes 1000x740,760x650 -SkipStress -Interactions
           Get-Content visual-evidence\report.md
       - uses: actions/upload-artifact@v4
         if: always()
@@ -25,5 +25,7 @@ jobs:
             visual-evidence/pages
             visual-evidence/sheet-*.png
             visual-evidence/report.md
+            visual-evidence/states
+            visual-evidence/controls.csv
           if-no-files-found: error
           retention-days: 10
