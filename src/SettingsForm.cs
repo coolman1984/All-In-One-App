@@ -59,9 +59,9 @@ namespace StickyPro
             Section(t, "Look");
             theme = new ComboBox(); theme.DropDownStyle = ComboBoxStyle.DropDownList; theme.Items.AddRange(new object[] { "Light", "Dark" });
             theme.SelectedIndex = Store.Settings.Dark ? 1 : 0;
-            Row(t, "Light or dark mode", theme);
+            Row(t, "Color mode", theme);
             design = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-            design.Items.AddRange(new object[] { "Flow (white sidebar, colourful dashboard)", "Atelier (warm drafting paper & signal vermilion / carbon obsidian)", "Nordic (sage mist & emerald / carbon pine)", "SerQ (navy sidebar, soft cards)", "Nexus (clean, light sidebar, cards)", "Classic (blue sidebar)", "Soft (charcoal sidebar, coral accent)" });
+            design.Items.AddRange(new object[] { "Flow", "Atelier", "Nordic", "SerQ", "Nexus", "Classic", "Soft" });
             int di = Array.IndexOf(designKeys, Store.Settings.Design);
             design.SelectedIndex = di >= 0 ? di : 0;
             Row(t, "Design", design);
@@ -90,13 +90,14 @@ namespace StickyPro
             int ui = uiFont.Items.IndexOf(Store.Settings.UiFont); uiFont.SelectedIndex = ui > 0 ? ui : 0;
             Row(t, "App font", uiFont);
             uiSize = new NumericUpDown { Minimum = 8, Maximum = 16, DecimalPlaces = 1, Increment = 0.5m, Value = (decimal)Math.Max(8f, Math.Min(16f, Store.Settings.UiFontSize)) };
-            Row(t, "App font size (the window reopens)", uiSize);
+            Row(t, "App font size", uiSize);
+            uiSize.AccessibleDescription = "The main window reopens after you save a font change.";
             headFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
             headFont.Items.Add("(same as the app font)");
             foreach (var n in new[] { "Segoe UI", "Segoe UI Semibold", "Segoe UI Variable Display", "Bahnschrift", "Calibri", "Cambria", "Georgia", "Arial", "Verdana", "Trebuchet MS", "Cascadia Code" })
                 if (Ui.Installed(n)) headFont.Items.Add(n);
             int hf = headFont.Items.IndexOf(Store.Settings.HeadingFont); headFont.SelectedIndex = hf > 0 ? hf : 0;
-            Row(t, "Heading font (titles, big numbers)", headFont);
+            Row(t, "Heading font", headFont);
             headScale = new NumericUpDown { Minimum = 85, Maximum = 140, Increment = 5, Value = (decimal)Math.Round(Math.Max(0.85f, Math.Min(1.4f, Store.Settings.HeadingScale)) * 100) };
             Row(t, "Heading size (%)", headScale);
             monoFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -104,7 +105,7 @@ namespace StickyPro
             foreach (var n in new[] { "Cascadia Mono", "Cascadia Code", "Consolas", "Lucida Console", "Courier New", "JetBrains Mono", "Fira Code", "Source Code Pro" })
                 if (Ui.Installed(n)) monoFont.Items.Add(n);
             int mf = monoFont.Items.IndexOf(Store.Settings.MonoFont); monoFont.SelectedIndex = mf > 0 ? mf : 0;
-            Row(t, "Code font (agent chats, code blocks)", monoFont);
+            Row(t, "Code font", monoFont);
             monoSize = new NumericUpDown { Minimum = 7, Maximum = 20, DecimalPlaces = 1, Increment = 0.5m, Value = (decimal)Math.Max(7f, Math.Min(20f, Store.Settings.MonoFontSize)) };
             Row(t, "Code font size", monoSize);
             var accentBar = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
@@ -130,7 +131,7 @@ namespace StickyPro
             corner.Items.AddRange(new object[] { "Design default", "Square", "Small", "Medium", "Large", "Extra round" });
             corner.SelectedIndex = Math.Max(0, Array.IndexOf(cornerValues, Store.Settings.CornerRadius));
             Row(t, "Corners", corner);
-            shadows = new CheckBox { Text = "Soft shadows under cards (Flow / SerQ designs)", AutoSize = true, Checked = Store.Settings.Shadows };
+            shadows = new CheckBox { Text = "Show shadows in Flow and SerQ", AutoSize = true, Checked = Store.Settings.Shadows };
             Row(t, "Shadows", shadows);
             dockVisible = new CheckBox { Text = "Show the quick launch bar on the right", AutoSize = true, Checked = Store.Settings.DockVisible };
             Row(t, "Quick launch", dockVisible);
@@ -231,7 +232,10 @@ namespace StickyPro
             }));
             Row(t, "Let any AI agent read and organize your notes, tasks, prompts, clips and folders, and ask the coding agents", mcpBar);
 
-            Section(t, "Shortcuts  (click a box, press the keys; Backspace = off)");
+            Section(t, "Shortcuts");
+            var shortcutHelp = new Label { Text = "Press a key combination in a box. Backspace clears it.", AutoSize = true };
+            t.Controls.Add(shortcutHelp);
+            t.SetColumnSpan(shortcutHelp, 2);
             foreach (var a in Hotkeys.Actions)
             {
                 var hb = new HotkeyBox();
@@ -245,7 +249,20 @@ namespace StickyPro
             var cancel = Ui.Btn("Cancel", null); cancel.DialogResult = DialogResult.Cancel;
             var reset = Ui.Btn("Default shortcuts", delegate { foreach (var a in Hotkeys.Actions) boxes[a[0]].Text = a[2]; });
             bar.Controls.Add(ok); bar.Controls.Add(cancel); bar.Controls.Add(reset);
+            var sections = t.Controls.OfType<Label>().Where(label => t.GetColumnSpan(label) == 2 && label.Font == Ui.Bold).ToArray();
+            var sectionPicker = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(220), AccessibleName = "Settings section" };
+            sectionPicker.Items.AddRange(sections.Select(label => (object)label.Text).ToArray());
+            sectionPicker.SelectedIndex = 0;
+            sectionPicker.SelectionChangeCommitted += delegate
+            {
+                if (sectionPicker.SelectedIndex < 0) return;
+                int y = sections[sectionPicker.SelectedIndex].Top - t.AutoScrollPosition.Y - t.Padding.Top;
+                t.AutoScrollPosition = new Point(0, Math.Max(0, y));
+            };
+            var sectionBar = LayoutKit.Actions(DockStyle.Top,
+                new Label { Text = "Jump to section", AutoSize = true, Margin = new Padding(0, Ui.S(6), Ui.S(10), 0) }, sectionPicker);
             Controls.Add(t);
+            Controls.Add(sectionBar);
             Controls.Add(bar);
             CancelButton = cancel;
             int layoutWidth = -1;

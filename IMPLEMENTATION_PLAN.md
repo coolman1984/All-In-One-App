@@ -259,6 +259,12 @@ The owner approved the [repair plan](docs/plans/app-cleanup-and-reliability.html
 
 ---
 
+### Windows visual audit · November 23, 2026
+
+The second pass covers dense layouts, narrow windows and secondary surfaces. It improves Shortcuts, Prompts, Tasks, Settings, Documents and Scheduled jobs. See the [capture command and coverage](docs/maintenance.md#full-ui-sweep-every-page-every-look-stress). Use the resulting inventory and images for manual spot checks. Production account, Office, protected-file and corporate-share checks need a representative Windows desktop.
+
+---
+
 ## 3. File Map (Modular, Low-Bloat Structure)
 
 | File | Type | Phase | Responsibility |

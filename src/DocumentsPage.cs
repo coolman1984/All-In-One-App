@@ -21,8 +21,7 @@ namespace StickyPro
         readonly Label info, empty;
         readonly Dictionary<string, OfficeView> views = new Dictionary<string, OfficeView>(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, OfficeEdit> edits = new Dictionary<string, OfficeEdit>(StringComparer.OrdinalIgnoreCase);
-        readonly Button modeBtn, saveBtn;
-        readonly List<Button> documentActions = new List<Button>();
+        readonly Button modeBtn, saveBtn, moreBtn;
         static bool EditMode { get { return Store.Settings.ViewerEdit; } }
         // A file opened with an explicit choice (Explorer: preview / edit) keeps it; others follow Edit mode.
         readonly Dictionary<string, bool> chosen = Store.Settings.ViewerTabModes;
@@ -38,7 +37,7 @@ namespace StickyPro
             bar.Controls.Add(Ui.Btn("Open...", delegate { Pick(); }, true));
             // Edit: the real Excel / Word / PowerPoint inside the tab (full ribbon, Ctrl+S). View: fast, read only.
             modeBtn = Ui.Btn(EditMode ? "Edit mode: on" : "Edit mode: off", delegate { SetMode(!EditMode); });
-            Tip(modeBtn, "On: Excel, Word and PowerPoint open inside the tab and you can edit and save. Off: a fast read-only view.");
+            Tip(modeBtn, "Edit Excel, Word and PowerPoint here. Visio and PDF open read-only.");
             bar.Controls.Add(modeBtn);
             saveBtn = Ui.Btn("Save", delegate
             {
@@ -52,12 +51,18 @@ namespace StickyPro
             Tip(saveBtn, "Save the file (Ctrl+S inside the document does the same)");
             bar.Controls.Add(saveBtn);
             saveBtn.Enabled = false;
-            AddDocumentAction(bar, Ui.Btn("Open in its app", delegate { if (current != null) try { Process.Start(new ProcessStartInfo(current) { UseShellExecute = true }); } catch (Exception ex) { info.Text = ex.Message; } }));
-            AddDocumentAction(bar, Ui.Btn("Show in Explorer", delegate { if (current != null) App.I.OpenInExplorerPage(Path.GetDirectoryName(current)); }));
-            AddDocumentAction(bar, Ui.Btn("Reload", delegate { if (current != null) { if (DropEdit(current, true)) { DropView(current); Show(current); } } }));
-            AddDocumentAction(bar, Ui.Btn("Copy path", delegate { if (current != null) App.I.CopyText(current); }));
-            var ask = Ui.Btn("Ask the Assistant", delegate { if (current != null) { if (!Store.Settings.AssistantOpen) App.I.ToggleAssistant(); } });
-            AddDocumentAction(bar, ask);
+            var actions = Ui.Menu();
+            actions.Items.Add("Open in its app", null, delegate { if (current != null) try { Process.Start(new ProcessStartInfo(current) { UseShellExecute = true }); } catch (Exception ex) { info.Text = ex.Message; } });
+            actions.Items.Add("Show folder in Explorer", null, delegate { if (current != null) App.I.OpenInExplorerPage(Path.GetDirectoryName(current)); });
+            actions.Items.Add("Reload", null, delegate { if (current != null && DropEdit(current, true)) { DropView(current); Show(current); } });
+            actions.Items.Add("Copy path", null, delegate { if (current != null) App.I.CopyText(current); });
+            actions.Items.Add("Ask the Assistant", null, delegate { if (current != null && !Store.Settings.AssistantOpen) App.I.ToggleAssistant(); });
+            Ui.ThemeMenu(actions);
+            moreBtn = Ui.Btn("More", delegate { actions.Show(moreBtn, new Point(0, moreBtn.Height)); });
+            moreBtn.AccessibleName = "More document actions";
+            moreBtn.ContextMenuStrip = actions;
+            moreBtn.Enabled = false;
+            bar.Controls.Add(moreBtn);
 
             tabs = new EditorTabs { Dock = DockStyle.Top, EmptyText = "No open documents  ·  Ctrl+O opens one" };
             tabs.SetAll(Store.Settings.ViewerTabs.Where(File.Exists));
@@ -75,7 +80,7 @@ namespace StickyPro
             empty = new Label
             {
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Muted, Font = Ui.Base,
-                Text = "Open or drop an Office document or PDF here.\r\n\r\nEdit mode lets you edit Excel, Word and PowerPoint files.\r\nVisio and PDF files open in preview.\r\n\r\nCtrl+W closes a tab. Ctrl+Tab switches tabs."
+                Text = "Open or drop an Office document or PDF here."
             };
             host.Controls.Add(empty);
             var center = new Panel { Dock = DockStyle.Fill, Padding = new Padding(Ui.S(4)) };
@@ -86,13 +91,6 @@ namespace StickyPro
             DragDrop += (s, e) => { var files = e.Data.GetData(DataFormats.FileDrop) as string[]; if (files != null) foreach (var f in files.Take(12)) Open(f); };
             Ui.Theme(this);
             host.BackColor = Ui.Card;
-        }
-
-        void AddDocumentAction(Control bar, Button button)
-        {
-            button.Enabled = false;
-            documentActions.Add(button);
-            bar.Controls.Add(button);
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -189,7 +187,7 @@ namespace StickyPro
         void Show(string path)
         {
             current = path;
-            foreach (var button in documentActions) button.Enabled = true;
+            moreBtn.Enabled = true;
             string editError = null;
             tabs.Show(path);
             info.ForeColor = Ui.Muted;
@@ -290,7 +288,7 @@ namespace StickyPro
         void ShowEmpty()
         {
             foreach (Control c in host.Controls) c.Visible = c == empty;
-            foreach (var button in documentActions) button.Enabled = false;
+            moreBtn.Enabled = false;
             saveBtn.Enabled = false;
             info.Text = "";
         }

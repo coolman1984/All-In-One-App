@@ -7,6 +7,9 @@ Format: what happened -> cause (proven) -> rule.
 
 - A zero-error sweep missed crowded Agents controls, a clipped Home alert and the Team page. The fixture checks control geometry against its own route list, so it cannot detect duplicate information or missing routes by itself. Compare the list against live navigation and inspect representative screenshots for clarity.
 
+- At narrow widths, an unselected prompt's hint could dock across the entire page and steal space from the list. Put the hint and editor in one fill host, then verify both selected and unselected states. Audit menu entry points and state changes in addition to first paint.
+- A task could enter the multi-selection panel while its actions still inherited the disabled state from an earlier empty selection. Set visibility from the selection count and exercise empty, single and multiple selections in order.
+
 ## Team and browser workflows
 
 - The old join flow saved membership before posting the signed request. A failed share write could leave the saved profile pointing at a team the PC never joined. Publish successfully first, then commit the local profile. Test both new and previously joined clients with a blocked request.

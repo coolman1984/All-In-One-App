@@ -92,6 +92,7 @@ namespace StickyPro
             status.Dock = DockStyle.Bottom;
             status.Height = Ui.S(26);
             status.TextAlign = ContentAlignment.MiddleLeft;
+            status.AutoEllipsis = true;
             status.Padding = new Padding(Ui.S(14), 0, 0, 0);
             status.ForeColor = Ui.Muted;
             status.Font = Ui.Small;
@@ -330,7 +331,8 @@ namespace StickyPro
         bool NavCollapsed { get { int v; return Store.Settings.PaneSizes.TryGetValue("nav.collapsed", out v) && v == 1; } }
         void AdaptNav(Panel nav)
         {
-            bool compact = Width < Ui.S(820) || NavCollapsed;
+            bool assistantBesidePage = assistantHost != null && assistantHost.Visible && !AssistantWide;
+            bool compact = Width < Ui.S(assistantBesidePage ? 1060 : 820) || NavCollapsed;
             nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
             PlaceToggles(nav);
         }
@@ -405,6 +407,7 @@ namespace StickyPro
             if (p.StartsWith("chrome:")) { chrome.SelectTab(p.Substring(7)); p = "chrome"; }
             if (p == "home") p = "dashboard";
             string target = p;
+            if (page != target) { statusTimer.Stop(); status.Text = ""; }
             Ui.Batch(content, () =>
             {
                 page = target;
@@ -442,7 +445,7 @@ namespace StickyPro
         {
             if (loadedPages.ContainsKey(key)) return;
             Control control;
-            Action<string> report = s => Status(s);
+            Action<string> report = s => { if (page == key) Status(s); };
             switch (key)
             {
                 case "dashboard": control = new DashboardPanel(); break;
@@ -727,6 +730,7 @@ namespace StickyPro
             if (show && assistant == null) { assistant = new AssistantPanel(this) { Dock = DockStyle.Fill }; assistantHost.Controls.Add(assistant); }
             if (!show && AssistantWide) SetAssistantWide(false);
             assistantHost.Visible = show;
+            if (navPanel != null) AdaptNav(navPanel);
             if (Store.Settings.AssistantOpen != show) { Store.Settings.AssistantOpen = show; Store.MarkSettings(); }
             if (topBar != null) topBar.Invalidate();
             if (show && assistant != null) assistant.FocusInput();
@@ -742,6 +746,7 @@ namespace StickyPro
             content.Visible = !wide;
             assistantHost.Dock = wide ? DockStyle.Fill : DockStyle.Right;
             if (!wide && assistantSideWidth > 0) assistantHost.Width = assistantSideWidth;
+            if (navPanel != null) AdaptNav(navPanel);
             ResumeLayout();
             if (assistant != null) assistant.WideChanged(wide);
         }
@@ -1131,7 +1136,12 @@ namespace StickyPro
             tbBody.KeyDown += ctrlEnter; tbTitle.KeyDown += ctrlEnter; tbTags.KeyDown += ctrlEnter;
             catTimer.Interval = 900;
             catTimer.Tick += delegate { catTimer.Stop(); RefreshCats(); Snippets.Update(); };
-            Controls.Add(editor);
+            var editorHost = new Panel { Dock = DockStyle.Fill };
+            editorHost.Controls.Add(editor);
+            editorHint = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = Ui.Muted, BackColor = Ui.Bg, Text = "Select a prompt to edit it." };
+            editorHost.Controls.Add(editorHint);
+            Controls.Add(editorHost);
 
             // ---- middle: search + list ----
             var mid = new Panel(); mid.Dock = DockStyle.Left; mid.Width = Ui.S(340); mid.Padding = new Padding(Ui.S(8), 0, Ui.S(8), 0);
@@ -1185,11 +1195,12 @@ namespace StickyPro
             io.Controls.Add(Ui.Btn("Import", delegate { Import(); }));
             io.Controls.Add(Ui.Btn("Export", delegate { Export(); }));
             mid.Controls.Add(io);
-            var head = MainForm.Heading("Prompts"); head.Dock = DockStyle.Top; head.AutoSize = false; head.Height = Ui.S(40);
-            left.Controls.Add(head);
             Controls.Add(left);
             PaneGrip.Attach(mid, "prompts.list", Ui.S(160));
             PaneGrip.Attach(left, "prompts.cats", Ui.S(110));
+            var heading = MainForm.Bar();
+            heading.Controls.Add(MainForm.Heading("Prompts"));
+            Controls.Add(heading);
 
             // The editor is a TableLayoutPanel with AutoSize rows: double-buffer it and batch the pane changes
             // into one layout pass, so live window resizing stays smooth.
@@ -1203,22 +1214,33 @@ namespace StickyPro
                     bool compact = Width < Ui.S(850);
                     if (left.Visible == compact) left.Visible = !compact;
                     if (compactCats.Visible != compact) compactCats.Visible = compact;
-                    if (!compact) { int lw = PaneGrip.Size("prompts.cats", DockStyle.Left, Ui.S(200), Width / 2); if (left.Width != lw) left.Width = lw; }
+                    if (!compact)
+                    {
+                        int lw = Math.Min(Width / 4, PaneGrip.Size("prompts.cats", DockStyle.Left, Ui.S(200), Width / 2));
+                        if (left.Width != lw) left.Width = lw;
+                    }
                     bool stacked = Width < Ui.S(600);
                     var md = stacked ? DockStyle.Top : DockStyle.Left;
                     if (mid.Dock != md) mid.Dock = md;
-                    if (stacked) mid.Height = PaneGrip.Size("prompts.list", DockStyle.Top, Ui.S(190), Height);
+                    if (stacked)
+                    {
+                        int room = Math.Max(Ui.S(80), Height - heading.Height);
+                        int limit = Math.Max(Ui.S(80), room * (cur == null ? 75 : 42) / 100);
+                        mid.Height = Math.Min(limit, PaneGrip.Size("prompts.list", DockStyle.Top, Math.Max(Ui.S(180), limit), room));
+                    }
                     else
                     {
                         // Wide windows: the prompt list grows (about a quarter of the page, 340 to 560 px) instead of a fixed strip.
                         int want = compact ? Math.Max(Ui.S(180), Math.Min(Ui.S(300), Width * 42 / 100)) : Math.Max(Ui.S(340), Math.Min(Ui.S(560), Width * 26 / 100));
-                        int mw = PaneGrip.Size("prompts.list", DockStyle.Left, want, Width - (compact ? 0 : left.Width));
+                        int room = Width - (compact ? 0 : left.Width);
+                        int mw = Math.Min(room / 2, PaneGrip.Size("prompts.list", DockStyle.Left, want, room));
                         if (mid.Width != mw) mid.Width = mw;
                     }
                 }
                 finally { ResumeLayout(before != left.Visible + "|" + left.Width + "|" + mid.Dock + "|" + mid.Width + "|" + mid.Height + "|" + compactCats.Visible); }
             };
             Resize += (s, e) => Ui.Debounce("prompts.layout", 90, () => layout(this, EventArgs.Empty));   // once after the resize settles
+            editor.VisibleChanged += layout;
             layout(this, EventArgs.Empty);
 
             LoadEditor(null);
@@ -1349,7 +1371,7 @@ namespace StickyPro
             if (list.SelectedItem == null && cur != null && !list.Items.Contains(cur)) LoadEditor(null);
         }
 
-        Label editorHint;
+        readonly Label editorHint;
         void LoadEditor(Prompt p)
         {
             if (p == cur && p != null) return;
@@ -1358,13 +1380,7 @@ namespace StickyPro
             loading = true;
             // No prompt chosen: a short hint instead of greyed-out fields (unreadable in dark mode).
             editor.Visible = p != null;
-            if (editorHint == null && editor.Parent != null)
-            {
-                editorHint = new Label { Dock = DockStyle.Top, Height = Ui.S(110), TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Muted, BackColor = Ui.Bg,
-                    Text = "Pick a prompt on the left\r\nor press New prompt." };
-                editor.Parent.Controls.Add(editorHint);
-            }
-            if (editorHint != null) editorHint.Visible = p == null;
+            editorHint.Visible = p == null;
             tbTitle.Text = p != null ? p.Title : "";
             cbCat.Text = p != null ? p.Category : "";
             tbTags.Text = p != null ? p.Tags : "";

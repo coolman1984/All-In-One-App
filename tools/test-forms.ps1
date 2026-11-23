@@ -1,4 +1,4 @@
-# Offscreen form construction and model regression checks only. No Show, Main,
+﻿# Offscreen form construction and model regression checks only. No Show, Main,
 # Store.Load, clipboard, Office, registry or application process is invoked.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
@@ -60,6 +60,29 @@ try {
     }
 } finally { $event.RemoveEventHandler($null, $handler); $page.Dispose() }
 
+$taskPage = [Activator]::CreateInstance($assembly.GetType('StickyPro.TasksPage'))
+try {
+    $type = $taskPage.GetType()
+    $cards = $type.GetField('cards', $instance).GetValue($taskPage)
+    $detail = $type.GetField('detail', $instance).GetValue($taskPage)
+    $multi = $type.GetField('multi', $instance).GetValue($taskPage)
+    $taskPage.Size = [Drawing.Size]::new(680, 570)
+    $taskPage.Visible = $true
+    $taskPage.CreateControl()
+    Assert (-not $detail.Visible) 'An empty task detail pane takes space away from the task list.'
+    foreach ($title in @('First task', 'Second task')) {
+        $entry = [Activator]::CreateInstance($assembly.GetType('StickyPro.TaskItem'))
+        $entry.Title = $title
+        [void]$cards.Items.Add($entry)
+    }
+    $cards.SetSelected(0, $true)
+    Assert ($detail.Visible) 'Selecting a task did not open its detail.'
+    $cards.SetSelected(1, $true)
+    Assert ($multi.Visible -and $multi.Enabled) 'Multi-selection task actions are unavailable.'
+    $cards.ClearSelected()
+    Assert (-not $detail.Visible) 'Clearing the selection did not release the task list space.'
+} finally { $taskPage.Dispose() }
+
 $definition = [Activator]::CreateInstance($assembly.GetType('StickyPro.CardDef'))
 $definition.Id = 'card-fixture'; $definition.W = 600; $definition.H = 500; $definition.X = 100; $definition.Y = 100
 $definition.Features.Add('notes'); $definition.Active = 'notes'
@@ -92,6 +115,8 @@ foreach ($scale in @([single]1, [single]1.5)) {
         $settings.PerformLayout()
         $table = $settings.Controls | Where-Object { $_ -is [Windows.Forms.TableLayoutPanel] } | Select-Object -First 1
         $table.PerformLayout()
+        $jump = $settings.Controls | ForEach-Object { $_.Controls } | Where-Object { $_.AccessibleName -eq 'Settings section' }
+        Assert ($jump.Items.Count -eq 8 -and $jump.Items[7] -eq 'Shortcuts') "Settings section navigation is incomplete at scale $scale."
         $awake = $settingsType.GetField('keepAwake', $instance).GetValue($settings)
         $checkSize = $awake.GetPreferredSize([Drawing.Size]::new($awake.Width, 0))
         Assert ($awake.Right -le $table.ClientSize.Width -and $awake.Height -ge $checkSize.Height) "Awake text clips at scale $scale."
@@ -99,6 +124,16 @@ foreach ($scale in @([single]1, [single]1.5)) {
         Assert ($theme.SelectedIndex -eq $preferences.Theme -and $theme.ItemHeight -ge $theme.Font.Height) "Color theme selection or row height changed at scale $scale."
     } finally { $settings.Dispose() }
 }
+
+$lookPicker = [Activator]::CreateInstance($assembly.GetType('StickyPro.LookPicker'), $true)
+try {
+    $lookType = $lookPicker.GetType()
+    $lookType.GetMethod('LayoutPresets', $instance).Invoke($lookPicker, @([Drawing.Size]::new(680, 480)))
+    $presets = $lookType.GetField('presets', $instance).GetValue($lookPicker)
+    $bottom = ($presets | ForEach-Object { $_.R.Bottom } | Measure-Object -Maximum).Maximum
+    Assert ($presets.Count -eq 14 -and $lookPicker.Width -le 680 -and $lookPicker.Height -le 480) 'Theme picker exceeds the monitor or lost a preset.'
+    Assert ($bottom -gt $lookPicker.ClientSize.Height -and $bottom -lt $lookPicker.AutoScrollMinSize.Height) 'Theme picker cannot scroll to every preset.'
+} finally { $lookPicker.Dispose() }
 
 $searchType = $assembly.GetType('StickyPro.GlobalSearch')
 $find = $searchType.GetMethod('Find', $static)

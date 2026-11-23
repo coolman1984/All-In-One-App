@@ -9,7 +9,7 @@ namespace StickyPro
 {
     sealed class CronWindow : Form
     {
-        readonly ListView jobs = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false };
+        readonly FastList jobs = new FastList { MultiSelect = false, FillIndex = 0 };
         readonly TextBox details = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
         readonly Timer refresh = new Timer { Interval = 1500 };
         readonly Label message = new Label { AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
@@ -19,6 +19,10 @@ namespace StickyPro
 
         public CronWindow()
         {
+            AutoScaleMode = AutoScaleMode.None;
+            BackColor = Ui.Bg;
+            ForeColor = Ui.Text;
+            Font = Ui.Base;
             Text = "Scheduled jobs";
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
@@ -47,6 +51,7 @@ namespace StickyPro
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.S(27)));
             jobs.Dock = details.Dock = message.Dock = DockStyle.Fill;
+            message.ForeColor = Ui.Muted;
             details.AccessibleName = "Selected job result";
             jobs.AccessibleName = "Scheduled jobs";
             layout.Controls.Add(actions, 0, 0);
@@ -102,7 +107,7 @@ namespace StickyPro
             edit.Enabled = toggle.Enabled = run.Enabled = remove.Enabled = available;
             retry.Enabled = available && (job.run_status == "failed" || job.run_status == "interrupted");
             toggle.Text = selected && !job.enabled ? "Enable" : "Disable";
-            if (!selected) { details.Text = ""; return; }
+            if (!selected) { details.Text = "Choose a job to see its last result, or select New job to schedule one."; return; }
             string action = !string.IsNullOrWhiteSpace(job.tool) ? "Tool: " + job.tool
                 : (!string.IsNullOrWhiteSpace(job.skill) ? "Skill: " + job.skill : "") + "\r\n" + job.prompt;
             string result = string.Join("\r\n", new[] { job.run_error, job.run_output }.Where(v => !string.IsNullOrWhiteSpace(v)));
@@ -159,7 +164,8 @@ namespace StickyPro
                 fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
                 var name = AddField(fields, "Name", job.name);
                 var schedule = AddField(fields, "Schedule", job.schedule);
-                schedule.AccessibleDescription = "every:15m, daily:08:00, or once with a local date and time";
+                schedule.AccessibleDescription = "Every 15 minutes, daily at 08:00, or once at a local date and time.";
+                AddHint(fields, "Examples: every:15m, daily:08:00, once:2026-12-15T08:00 (local time).");
                 var prompt = AddField(fields, "Assistant prompt", job.prompt, true);
                 var skill = AddField(fields, "Saved skill", job.skill);
                 var tool = AddField(fields, "Registered tool", job.tool);
@@ -167,10 +173,14 @@ namespace StickyPro
                 var agent = AddField(fields, "Assistant provider", job.agent);
                 var folder = AddField(fields, "Working folder", job.folder);
                 var check = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                check.Items.AddRange(new object[] { "none", "folder_changed", "sql_nonzero", "overdue_tasks" });
-                check.SelectedIndex = Math.Max(0, check.Items.IndexOf(job.precheck_type ?? ""));
-                AddRow(fields, "Pre-check", check);
-                var input = AddField(fields, "Pre-check input", job.precheck_arg);
+                var checks = new[] { "none", "folder_changed", "sql_nonzero", "overdue_tasks" };
+                check.Items.AddRange(new object[] { "Always", "Folder changed", "Query returns a nonzero number", "Tasks are overdue" });
+                check.SelectedIndex = Math.Max(0, Array.IndexOf(checks, job.precheck_type));
+                AddRow(fields, "Run when", check);
+                var input = AddField(fields, "Folder or query", job.precheck_arg);
+                EventHandler refreshInput = delegate { input.Enabled = check.SelectedIndex == 1 || check.SelectedIndex == 2; };
+                check.SelectedIndexChanged += refreshInput;
+                refreshInput(check, EventArgs.Empty);
                 var enabled = new CheckBox { Text = "Enabled", AutoSize = true, Checked = job.enabled };
                 var once = new CheckBox { Text = "Run once", AutoSize = true, Checked = job.one_shot };
                 var options = new FlowLayoutPanel { AutoSize = true };
@@ -188,7 +198,7 @@ namespace StickyPro
                             : new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(args.Text);
                         if (arguments == null) throw new ArgumentException("Tool arguments must be a JSON object.");
                         var result = CronEngine.Manage(existing == null ? "create" : "update",
-                            id, name.Text, schedule.Text, prompt.Text, skill.Text, Convert.ToString(check.SelectedItem), input.Text,
+                            id, name.Text, schedule.Text, prompt.Text, skill.Text, checks[check.SelectedIndex], input.Enabled ? input.Text : "",
                             enabled.Checked, once.Checked, tool: tool.Text, toolArgs: arguments, agent: agent.Text, folder: folder.Text);
                         id = Convert.ToString(((Dictionary<string, object>)result["job"])["id"]);
                         form.DialogResult = DialogResult.OK;
@@ -196,12 +206,23 @@ namespace StickyPro
                     catch (Exception ex) { MessageBox.Show(form, ex.Message, form.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
                 }, true);
                 bottom.Controls.Add(save);
-                bottom.Controls.Add(Ui.Btn("Cancel", delegate { form.DialogResult = DialogResult.Cancel; }));
+                var cancel = Ui.Btn("Cancel", null);
+                cancel.DialogResult = DialogResult.Cancel;
+                bottom.Controls.Add(cancel);
+                form.CancelButton = cancel;
                 form.Controls.Add(body);
                 form.Controls.Add(bottom);
                 Ui.Theme(form);
                 if (form.ShowDialog(this) == DialogResult.OK) { message.Text = ""; Reload(id); }
             }
+        }
+
+        static void AddHint(TableLayoutPanel fields, string text)
+        {
+            int row = fields.RowCount++;
+            fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            fields.Controls.Add(new Label { AutoSize = true, Text = text, ForeColor = Ui.Muted, Font = Ui.Small,
+                MaximumSize = Ui.S(325, 0), Margin = new Padding(3, 0, 3, Ui.S(7)) }, 1, row);
         }
 
         static TextBox AddField(TableLayoutPanel fields, string label, string value, bool multiline = false)

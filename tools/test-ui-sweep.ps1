@@ -2,12 +2,13 @@
 # every look (design x light/dark) and window size: opens every page, captures a screenshot, checks the layout
 # (controls cut off by their parent, button text that does not fit, empty pages), opens every right-click menu,
 # and records every exception. Then stresses: fast page switching, resize sweeps, search typing.
-# Output: <Out>\report.md, <Out>\sheet-*.png (contact sheets), <Out>\pages\*.png
+# Output: report.md, contact sheets and page images. -Interactions adds states/ and controls.csv.
 param(
     [string]$Data = '',                      # folder to copy as the app data (default: empty fixture)
     [string]$Out = '',
     [string]$AssemblyPath = '',
     [switch]$SkipStress,
+    [switch]$Interactions,
     [string[]]$Looks = @('flow-light', 'atelier-light', 'atelier-dark', 'nordic-light', 'nordic-dark', 'soft-light', 'soft-dark', 'serq-light', 'nexus-dark', 'classic-light'),
     [string[]]$Sizes = @('1100x700', '1500x900', '1920x1080'),
     [switch]$Quick                            # one look, one size
@@ -28,6 +29,7 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $Out) { $Out = Join-Path $root ('build-test\sweep-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $Out = [IO.Path]::GetFullPath($Out)
 New-Item -ItemType Directory -Force (Join-Path $Out 'pages') | Out-Null
+if ($Interactions) { New-Item -ItemType Directory -Force (Join-Path $Out 'states') | Out-Null }
 if ($Quick) { $Looks = @('soft-light'); $Sizes = @('1500x900') }
 
 if (-not $AssemblyPath) {
@@ -76,6 +78,7 @@ if (-not $Data) {
         @('Prompts','Prompt',@{Id='sweep-prompt';Title='Review release notes';Body='List the changes and verification for {{project}}.';Category='Writing';Tags='work';Modified=$now;Fav=$true}),
         @('Clips','Clip',@{Id='sweep-clip';Text='Fixture clipboard entry';Source='Test editor';Time=$now;Pinned=$true}),
         @('Tasks','TaskItem',@{Id='sweep-task';Title='Review the screenshots';Notes='Check spacing and keyboard actions.';Due=[datetime]::Today.Ticks;Priority=2;Modified=$now}),
+        @('Tasks','TaskItem',@{Id='sweep-task-2';Title='Share the release checklist';Due=[datetime]::Today.Ticks;Modified=$now}),
         @('Activity','ActivityRecord',@{Id='sweep-activity';Path=$md;Process='Text Editor';Event='Opened';Time=$now;Size=100}),
         @('Tagged','TaggedFile',@{Id='sweep-file';Path=$md;Category='Review';Added=$now}),
         @('Cards','CardDef',@{Id='sweep-card';Title='Work notes';Visible=$false})
@@ -90,6 +93,84 @@ $ui = $asm.GetType('StickyPro.Ui')
 $problems = New-Object System.Collections.Generic.List[string]
 $errors = New-Object System.Collections.Generic.List[string]
 $timings = New-Object System.Collections.Generic.List[string]
+$controls = New-Object System.Collections.Generic.List[object]
+$stateNumber = 0
+function Add-ControlRecord($route, $kind, $parent, $label, $enabled) {
+    $controls.Add([pscustomobject]@{
+        Route = $route; Kind = $kind; Parent = $parent; Label = $label; Enabled = $enabled
+    })
+}
+function Save-State($window, $name) {
+    $script:stateNumber++
+    $file = Join-Path $Out ('states\{0}-{1:000}.png' -f $name, $stateNumber)
+    $image = Shot $window $file
+    $image.Dispose()
+}
+function Inspect-Menu($menu, $route, $name, $parent) {
+    Save-State $menu ($name + '-menu')
+    foreach ($item in $menu.Items) {
+        if ($item -is [Windows.Forms.ToolStripSeparator] -or -not $item.Available) { continue }
+        Add-ControlRecord $route $item.GetType().Name $parent $item.Text $item.Enabled
+        if ($item -is [Windows.Forms.ToolStripDropDownItem] -and $item.HasDropDownItems -and $item.Enabled) {
+            try {
+                $item.ShowDropDown()
+                Pump 30
+                if ($item.DropDown.Visible) { Inspect-Menu $item.DropDown $route $name $item.Text }
+            } finally { $item.HideDropDown() }
+        }
+    }
+}
+function Inspect-Controls($node, $route, $name, $seenMenus) {
+    if (-not $node.Visible -or $node.Width -le 0 -or $node.Height -le 0) { return }
+    $kind = $node.GetType().Name
+    $label = if ($node.AccessibleName) { $node.AccessibleName } else { $node.Text }
+    if ($node.AccessibleRole -in 'PushButton','PageTab' -or $node -is [Windows.Forms.ButtonBase] -or $node -is [Windows.Forms.ComboBox] -or
+        $node -is [Windows.Forms.LinkLabel] -or $node -is [Windows.Forms.TabControl] -or
+        $node -is [Windows.Forms.ListControl] -or $node -is [Windows.Forms.ListView] -or
+        $node -is [Windows.Forms.TreeView] -or $node -is [Windows.Forms.DateTimePicker] -or
+        $node -is [Windows.Forms.NumericUpDown] -or $node -is [Windows.Forms.TextBoxBase]) {
+        # Do not copy editor contents or selections into the inventory.
+        if ($node -is [Windows.Forms.TextBoxBase] -and -not $node.AccessibleName) { $label = '' }
+        Add-ControlRecord $route $kind $node.Parent.GetType().Name $label $node.Enabled
+    }
+    if ($node -is [Windows.Forms.ToolStrip]) {
+        foreach ($item in $node.Items) {
+            if ($item -is [Windows.Forms.ToolStripSeparator] -or -not $item.Available) { continue }
+            Add-ControlRecord $route $item.GetType().Name $kind $item.Text $item.Enabled
+            if ($item -is [Windows.Forms.ToolStripDropDownItem] -and $item.HasDropDownItems -and $item.Enabled) {
+                try {
+                    $item.ShowDropDown()
+                    Pump 30
+                    if ($item.DropDown.Visible) { Inspect-Menu $item.DropDown $route $name $item.Text }
+                } finally { $item.HideDropDown() }
+            }
+        }
+    }
+    $menu = $node.ContextMenuStrip
+    if ($null -ne $menu -and $seenMenus.Add($menu)) {
+        try {
+            $menu.Show($node, [Drawing.Point]::new(2, 2))
+            Pump 30
+            if ($menu.Visible) { Inspect-Menu $menu $route $name $kind }
+        } finally { $menu.Close() }
+    }
+    foreach ($child in $node.Controls) { Inspect-Controls $child $route $name $seenMenus }
+}
+function Inspect-Window($window, $route, $name) {
+    $menus = New-Object 'Collections.Generic.HashSet[Windows.Forms.ContextMenuStrip]'
+    Inspect-Controls $window $route $name $menus
+}
+function Inspect-Dialog($typeName, $arguments, $name) {
+    $dialog = [Activator]::CreateInstance($asm.GetType("StickyPro.$typeName"), [Reflection.BindingFlags]'Instance,Public,NonPublic', $null, $arguments, $null)
+    try {
+        Offscreen $dialog
+        Pump 150
+        Save-State $dialog $name
+        Inspect-Window $dialog $typeName $name
+        Check-Layout $dialog $name
+    } finally { $dialog.Dispose() }
+}
+
 function Note($kind, $where, $what) { $problems.Add("| $kind | $where | $what |") }
 function Pump($ms) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -129,7 +210,7 @@ function Check-Layout($ctl, $where, [int]$depth = 0) {
             $need = [Windows.Forms.TextRenderer]::MeasureText($c.Text, $c.Font).Width
             if ($need -gt $c.Width + 4 -and $c.Width -lt 400) { Note 'text cut' $where ("label '{0}' needs {1}px, has {2}px" -f $c.Text.Substring(0, [Math]::Min(40, $c.Text.Length)), $need, $c.Width) }
         }
-        if ($c.ContextMenuStrip -ne $null) {
+        if (-not $Interactions -and $c.ContextMenuStrip -ne $null) {
             try { $c.ContextMenuStrip.Show($c, (New-Object Drawing.Point 2, 2)); Pump 30; $c.ContextMenuStrip.Close() }
             catch { $errors.Add("$where menu on $($c.GetType().Name): " + $_.Exception.InnerException.Message) }
         }
@@ -228,8 +309,103 @@ foreach ($look in $Looks) {
                 try { Check-Blank $bmp $where } finally { $bmp.Dispose() }
                 $thumbs += @{ File = $file; Name = $name }
                 Check-Layout $target $where
+                if ($Interactions -and $size -eq $Sizes[0]) {
+                    $stateName = "$look-$size-$name"
+                    Inspect-Window $target $p $stateName
+                    if ($p -eq 'settings') {
+                        $scroll = $target.Controls | Where-Object { $_ -is [Windows.Forms.TableLayoutPanel] -and $_.AutoScroll } | Select-Object -First 1
+                        if ($scroll) {
+                            $last = [Math]::Max(0, $scroll.DisplayRectangle.Height - $scroll.ClientSize.Height)
+                            $step = [Math]::Max(100, $scroll.ClientSize.Height - 75)
+                            for ($y = $step; $y -lt $last + $step -and $last -gt 0; $y += $step) {
+                                $scroll.AutoScrollPosition = [Drawing.Point]::new(0, [Math]::Min($y, $last))
+                                Pump 35
+                                Save-State $target ($stateName + '-scroll')
+                            }
+                        }
+                    }
+                    if ($p -in 'tasks', 'prompts') {
+                        $pageControl = $form.GetType().GetField('loadedPages', $private).GetValue($form)[$p]
+                        $listField = if ($p -eq 'tasks') { 'cards' } else { 'list' }
+                        $recordList = $pageControl.GetType().GetField($listField, $private).GetValue($pageControl)
+                        if ($recordList.Items.Count -gt 0) {
+                            try {
+                                $recordList.SelectedIndex = 0
+                                Pump 125
+                                Save-State $form ($stateName + '-selected')
+                                Inspect-Window $target ($p + '-selected') ($stateName + '-selected')
+                                if ($p -eq 'tasks' -and $recordList.Items.Count -gt 1) {
+                                    $recordList.SetSelected(1, $true)
+                                    Pump 85
+                                    Save-State $form ($stateName + '-multiple')
+                                    Inspect-Window $target 'tasks-multiple' ($stateName + '-multiple')
+                                }
+                            } finally { $recordList.ClearSelected(); Pump 125 }
+                        }
+                    }
+                    if ($p -eq 'markdown') {
+                        $markdown = $form.GetType().GetField('loadedPages', $private).GetValue($form)['markdown']
+                        $setMode = $markdown.GetType().GetMethod('SetMode', $private)
+                        $initialMode = if ($st.MdMode) { $st.MdMode } else { 'read' }
+                        try {
+                            foreach ($modeName in 'read', 'edit', 'split') {
+                                [void]$setMode.Invoke($markdown, @($modeName))
+                                Pump 100
+                                Save-State $form ($stateName + '-' + $modeName)
+                            }
+                        } finally { [void]$setMode.Invoke($markdown, @($initialMode)) }
+                    }
+                }
             } catch { $errors.Add("$where : " + $_.Exception.GetBaseException().ToString()) }
             finally { if ($target -ne $form) { $target.Dispose() } }
+        }
+        if ($Interactions -and $size -eq $Sizes[0]) {
+            $stateName = "$look-$size"
+            foreach ($dialogSpec in @(
+                @{ Type = 'CronWindow'; Args = [object[]]@(); Name = 'scheduled-jobs' },
+                @{ Type = 'SidebarDialog'; Args = [object[]]@($form); Name = 'sidebar-settings' },
+                @{ Type = 'QuickTaskForm'; Args = [object[]]@(); Name = 'quick-add-task' },
+                @{ Type = 'LookPicker'; Args = [object[]]@(); Name = 'theme-picker' }
+            )) {
+                try { Inspect-Dialog $dialogSpec.Type $dialogSpec.Args ($stateName + '-' + $dialogSpec.Name) }
+                catch { $errors.Add("$stateName $($dialogSpec.Type): " + $_.Exception.GetBaseException().ToString()) }
+            }
+            $card = [Activator]::CreateInstance($asm.GetType('StickyPro.CardDef'))
+            $card.Id = 'sweep-floating'
+            $card.Title = 'Sample notes'
+            $card.Features.Add('notes')
+            $card.Active = 'notes'
+            try {
+                Inspect-Dialog 'CardForm' ([object[]]@($card)) ($stateName + '-floating-card')
+            } catch { $errors.Add("$stateName CardForm: " + $_.Exception.GetBaseException().ToString()) }
+            $sampleImage = [Drawing.Bitmap]::new(440, 245)
+            $graphics = [Drawing.Graphics]::FromImage($sampleImage)
+            try {
+                $graphics.Clear([Drawing.Color]::WhiteSmoke)
+                $graphics.FillRectangle([Drawing.Brushes]::SteelBlue, 24, 24, 392, 46)
+                $graphics.DrawString('Sample screenshot', [Drawing.SystemFonts]::MessageBoxFont, [Drawing.Brushes]::White, 36, 40)
+            } finally { $graphics.Dispose() }
+            try {
+                Inspect-Dialog 'SnipEditor' ([object[]]@($sampleImage.PSObject.BaseObject, $null)) ($stateName + '-snip-editor')
+            } catch { $errors.Add("$stateName SnipEditor: " + $_.Exception.GetBaseException().ToString()) }
+            finally { $sampleImage.Dispose() }
+            try {
+                $form.ShowPage('dashboard')
+                $form.SetAssistant($true)
+                Pump 100
+                Save-State $form ($stateName + '-assistant-side')
+                Inspect-Window $form 'assistant-side' ($stateName + '-assistant-side')
+                $form.SetAssistantWide($true)
+                Pump 100
+                Save-State $form ($stateName + '-assistant-wide')
+                $assistant = $form.GetType().GetField('assistant', $private).GetValue($form)
+                foreach ($assistantMode in 'council', 'leader', 'solo') {
+                    $assistant.SetMode($assistantMode)
+                    Pump 60
+                    Save-State $form ($stateName + '-assistant-' + $assistantMode)
+                }
+            } catch { $errors.Add("$stateName assistant: " + $_.Exception.GetBaseException().ToString()) }
+            finally { $form.SetAssistant($false) }
         }
         # Use actual aspect ratios and label each route so omissions are visible.
         $tw = 400; $th = [int](400 * $h / $w) + 26
@@ -294,6 +470,12 @@ $r = New-Object Text.StringBuilder
 [void]$r.AppendLine("# UI sweep $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
 [void]$r.AppendLine("Looks: $($Looks -join ', ')  Sizes: $($Sizes -join ', ')  Data: $(if ($Data) { 'copy of ' + $Data } else { 'sample fixture' })")
 [void]$r.AppendLine("Routes: $($routes.Count) | Screenshots: $(@(Get-ChildItem (Join-Path $Out 'pages') -Filter *.png).Count)")
+if ($Interactions) {
+    $uniqueControls = @($controls | Sort-Object Route, Kind, Parent, Label, Enabled -Unique)
+    $uniqueControls | Export-Csv (Join-Path $Out 'controls.csv') -NoTypeInformation -Encoding UTF8
+    [void]$r.AppendLine("Additional states: $stateNumber | Distinct inventory entries: $($uniqueControls.Count)")
+    [void]$r.AppendLine("Secondary states were captured at the first size per look. Menu commands were inventoried without executing them. Custom-drawn hit targets and external windows are outside the control inventory.")
+}
 [void]$r.AppendLine("Browser shell and native Markdown preview captured in offline mode.")
 [void]$r.AppendLine("`n## Errors ($($errors.Count))"); foreach ($e in ($errors | Select-Object -Unique)) { [void]$r.AppendLine("- $e") }
 [void]$r.AppendLine("`n## Layout problems ($($problems.Count))`n| Kind | Where | What |`n|---|---|---|"); foreach ($p in ($problems | Select-Object -Unique)) { [void]$r.AppendLine($p) }
