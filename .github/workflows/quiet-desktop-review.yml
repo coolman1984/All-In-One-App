@@ -1,0 +1,29 @@
+name: Quiet desktop visual review
+on:
+  push:
+    branches: [codex/quiet-desktop-evidence]
+permissions:
+  contents: read
+jobs:
+  visual:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Capture all routes on Windows
+        shell: powershell
+        run: |
+          .\tools\test-ui-sweep.ps1 -Out visual-review -Looks flow-light,atelier-dark -Sizes 1000x740,760x650 -SkipStress
+          Get-Content visual-review\report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quiet-desktop-windows
+          path: |
+            visual-review/pages
+            visual-review/sheet-*.png
+            visual-review/report.md
+          if-no-files-found: error
+          retention-days: 14
