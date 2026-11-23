@@ -331,7 +331,8 @@ namespace StickyPro
         bool NavCollapsed { get { int v; return Store.Settings.PaneSizes.TryGetValue("nav.collapsed", out v) && v == 1; } }
         void AdaptNav(Panel nav)
         {
-            bool compact = Width < Ui.S(820) || NavCollapsed;
+            bool assistantBesidePage = assistantHost != null && assistantHost.Visible && !AssistantWide;
+            bool compact = Width < Ui.S(assistantBesidePage ? 1060 : 820) || NavCollapsed;
             nav.Width = compact ? Ui.S(64) : PaneGrip.Size("nav", DockStyle.Left, Ui.S(224), Width / 2);
             PlaceToggles(nav);
         }
@@ -729,6 +730,7 @@ namespace StickyPro
             if (show && assistant == null) { assistant = new AssistantPanel(this) { Dock = DockStyle.Fill }; assistantHost.Controls.Add(assistant); }
             if (!show && AssistantWide) SetAssistantWide(false);
             assistantHost.Visible = show;
+            if (navPanel != null) AdaptNav(navPanel);
             if (Store.Settings.AssistantOpen != show) { Store.Settings.AssistantOpen = show; Store.MarkSettings(); }
             if (topBar != null) topBar.Invalidate();
             if (show && assistant != null) assistant.FocusInput();
@@ -744,6 +746,7 @@ namespace StickyPro
             content.Visible = !wide;
             assistantHost.Dock = wide ? DockStyle.Fill : DockStyle.Right;
             if (!wide && assistantSideWidth > 0) assistantHost.Width = assistantSideWidth;
+            if (navPanel != null) AdaptNav(navPanel);
             ResumeLayout();
             if (assistant != null) assistant.WideChanged(wide);
         }

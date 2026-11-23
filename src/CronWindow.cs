@@ -9,7 +9,7 @@ namespace StickyPro
 {
     sealed class CronWindow : Form
     {
-        readonly ListView jobs = new ListView { View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false };
+        readonly FastList jobs = new FastList { MultiSelect = false, FillIndex = 0 };
         readonly TextBox details = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
         readonly Timer refresh = new Timer { Interval = 1500 };
         readonly Label message = new Label { AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
@@ -19,6 +19,10 @@ namespace StickyPro
 
         public CronWindow()
         {
+            AutoScaleMode = AutoScaleMode.None;
+            BackColor = Ui.Bg;
+            ForeColor = Ui.Text;
+            Font = Ui.Base;
             Text = "Scheduled jobs";
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
@@ -47,6 +51,7 @@ namespace StickyPro
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, Ui.S(27)));
             jobs.Dock = details.Dock = message.Dock = DockStyle.Fill;
+            message.ForeColor = Ui.Muted;
             details.AccessibleName = "Selected job result";
             jobs.AccessibleName = "Scheduled jobs";
             layout.Controls.Add(actions, 0, 0);
