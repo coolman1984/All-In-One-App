@@ -12,6 +12,20 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Obtain the pinned standalone recording dependency
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg.zip'
+          $unpacked = Join-Path $env:RUNNER_TEMP 'ffmpeg-dist'
+          curl.exe --fail --location --retry 2 'https://github.com/GyanD/codexffmpeg/releases/download/9.1/ffmpeg-9.1-essentials_build.zip' --output $archive
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg download failed.' }
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'b9bbbb3acece000cbeec994f856649354e52c773807841e78908374b24d658fd') { throw 'FFmpeg archive checksum mismatch.' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $unpacked
+          $binary = Get-ChildItem $unpacked -Recurse -File -Filter ffmpeg.exe | Select-Object -First 1
+          if (-not $binary) { throw 'FFmpeg executable missing from archive.' }
+          [void](New-Item -ItemType Directory -Path tools/bundle -Force)
+          Copy-Item -LiteralPath $binary.FullName -Destination tools/bundle/ffmpeg.exe
       - name: Build and check the portable executable
         shell: powershell
         run: |
