@@ -78,6 +78,7 @@ if (-not $Data) {
         @('Prompts','Prompt',@{Id='sweep-prompt';Title='Review release notes';Body='List the changes and verification for {{project}}.';Category='Writing';Tags='work';Modified=$now;Fav=$true}),
         @('Clips','Clip',@{Id='sweep-clip';Text='Fixture clipboard entry';Source='Test editor';Time=$now;Pinned=$true}),
         @('Tasks','TaskItem',@{Id='sweep-task';Title='Review the screenshots';Notes='Check spacing and keyboard actions.';Due=[datetime]::Today.Ticks;Priority=2;Modified=$now}),
+        @('Tasks','TaskItem',@{Id='sweep-task-2';Title='Share the release checklist';Due=[datetime]::Today.Ticks;Modified=$now}),
         @('Activity','ActivityRecord',@{Id='sweep-activity';Path=$md;Process='Text Editor';Event='Opened';Time=$now;Size=100}),
         @('Tagged','TaggedFile',@{Id='sweep-file';Path=$md;Category='Review';Added=$now}),
         @('Cards','CardDef',@{Id='sweep-card';Title='Work notes';Visible=$false})
@@ -123,9 +124,10 @@ function Inspect-Controls($node, $route, $name, $seenMenus) {
     if (-not $node.Visible -or $node.Width -le 0 -or $node.Height -le 0) { return }
     $kind = $node.GetType().Name
     $label = if ($node.AccessibleName) { $node.AccessibleName } else { $node.Text }
-    if ($node -is [Windows.Forms.ButtonBase] -or $node -is [Windows.Forms.ComboBox] -or
+    if ($node.AccessibleRole -in 'PushButton','PageTab' -or $node -is [Windows.Forms.ButtonBase] -or $node -is [Windows.Forms.ComboBox] -or
         $node -is [Windows.Forms.LinkLabel] -or $node -is [Windows.Forms.TabControl] -or
-        $node -is [Windows.Forms.ListView] -or $node -is [Windows.Forms.TreeView] -or
+        $node -is [Windows.Forms.ListControl] -or $node -is [Windows.Forms.ListView] -or
+        $node -is [Windows.Forms.TreeView] -or $node -is [Windows.Forms.DateTimePicker] -or
         $node -is [Windows.Forms.NumericUpDown] -or $node -is [Windows.Forms.TextBoxBase]) {
         # Do not copy editor contents or selections into the inventory.
         if ($node -is [Windows.Forms.TextBoxBase] -and -not $node.AccessibleName) { $label = '' }
@@ -322,6 +324,25 @@ foreach ($look in $Looks) {
                             }
                         }
                     }
+                    if ($p -in 'tasks', 'prompts') {
+                        $pageControl = $form.GetType().GetField('loadedPages', $private).GetValue($form)[$p]
+                        $listField = if ($p -eq 'tasks') { 'cards' } else { 'list' }
+                        $recordList = $pageControl.GetType().GetField($listField, $private).GetValue($pageControl)
+                        if ($recordList.Items.Count -gt 0) {
+                            try {
+                                $recordList.SelectedIndex = 0
+                                Pump 125
+                                Save-State $form ($stateName + '-selected')
+                                Inspect-Window $target ($p + '-selected') ($stateName + '-selected')
+                                if ($p -eq 'tasks' -and $recordList.Items.Count -gt 1) {
+                                    $recordList.SetSelected(1, $true)
+                                    Pump 85
+                                    Save-State $form ($stateName + '-multiple')
+                                    Inspect-Window $target 'tasks-multiple' ($stateName + '-multiple')
+                                }
+                            } finally { $recordList.ClearSelected(); Pump 125 }
+                        }
+                    }
                     if ($p -eq 'markdown') {
                         $markdown = $form.GetType().GetField('loadedPages', $private).GetValue($form)['markdown']
                         $setMode = $markdown.GetType().GetMethod('SetMode', $private)
@@ -342,11 +363,32 @@ foreach ($look in $Looks) {
             $stateName = "$look-$size"
             foreach ($dialogSpec in @(
                 @{ Type = 'CronWindow'; Args = [object[]]@(); Name = 'scheduled-jobs' },
-                @{ Type = 'SidebarDialog'; Args = [object[]]@($form); Name = 'sidebar-settings' }
+                @{ Type = 'SidebarDialog'; Args = [object[]]@($form); Name = 'sidebar-settings' },
+                @{ Type = 'QuickTaskForm'; Args = [object[]]@(); Name = 'quick-add-task' },
+                @{ Type = 'LookPicker'; Args = [object[]]@(); Name = 'theme-picker' }
             )) {
                 try { Inspect-Dialog $dialogSpec.Type $dialogSpec.Args ($stateName + '-' + $dialogSpec.Name) }
                 catch { $errors.Add("$stateName $($dialogSpec.Type): " + $_.Exception.GetBaseException().ToString()) }
             }
+            $card = [Activator]::CreateInstance($asm.GetType('StickyPro.CardDef'))
+            $card.Id = 'sweep-floating'
+            $card.Title = 'Sample notes'
+            $card.Features.Add('notes')
+            $card.Active = 'notes'
+            try {
+                Inspect-Dialog 'CardForm' ([object[]]@($card)) ($stateName + '-floating-card')
+            } catch { $errors.Add("$stateName CardForm: " + $_.Exception.GetBaseException().ToString()) }
+            $sampleImage = [Drawing.Bitmap]::new(440, 245)
+            $graphics = [Drawing.Graphics]::FromImage($sampleImage)
+            try {
+                $graphics.Clear([Drawing.Color]::WhiteSmoke)
+                $graphics.FillRectangle([Drawing.Brushes]::SteelBlue, 24, 24, 392, 46)
+                $graphics.DrawString('Sample screenshot', [Drawing.SystemFonts]::MessageBoxFont, [Drawing.Brushes]::White, 36, 40)
+            } finally { $graphics.Dispose() }
+            try {
+                Inspect-Dialog 'SnipEditor' ([object[]]@($sampleImage.PSObject.BaseObject, $null)) ($stateName + '-snip-editor')
+            } catch { $errors.Add("$stateName SnipEditor: " + $_.Exception.GetBaseException().ToString()) }
+            finally { $sampleImage.Dispose() }
             try {
                 $form.ShowPage('dashboard')
                 $form.SetAssistant($true)
@@ -356,6 +398,12 @@ foreach ($look in $Looks) {
                 $form.SetAssistantWide($true)
                 Pump 100
                 Save-State $form ($stateName + '-assistant-wide')
+                $assistant = $form.GetType().GetField('assistant', $private).GetValue($form)
+                foreach ($assistantMode in 'council', 'leader', 'solo') {
+                    $assistant.SetMode($assistantMode)
+                    Pump 60
+                    Save-State $form ($stateName + '-assistant-' + $assistantMode)
+                }
             } catch { $errors.Add("$stateName assistant: " + $_.Exception.GetBaseException().ToString()) }
             finally { $form.SetAssistant($false) }
         }

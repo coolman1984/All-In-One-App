@@ -300,10 +300,10 @@ namespace StickyPro
             var swrap = new Panel { Dock = DockStyle.Top, Height = search.PreferredHeight + Ui.S(10), Padding = new Padding(0, 0, 0, Ui.S(6)) };
             swrap.Controls.Add(search);
             mid.Controls.Add(swrap); mid.Controls.Add(qwrap);
-            Controls.Add(mid);
 
-            // ----- right detail -----
+            // ----- task editor -----
             detail = new Panel { Dock = DockStyle.Right, Width = PaneGrip.Size("tasks.detail", DockStyle.Right, Ui.S(340), Ui.S(1600)), Padding = new Padding(Ui.S(10), 0, 0, 0), AutoScroll = true };
+            detail.Visible = false;
             var f = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, AutoSizeMode = AutoSizeMode.GrowAndShrink };
             fieldsPanel = f;
             f.Visible = false;   // created on screen only when a task is opened (faster first open)
@@ -340,8 +340,7 @@ namespace StickyPro
             mb.Controls.Add(Ui.Btn("Move to list...", delegate { var n = Ui.Ask("Move to list", "List name", "Inbox", FindForm()); if (!string.IsNullOrEmpty(n)) foreach (var t in Selected()) { t.List = n.Trim(); Store.TouchTask(t); } }));
             multi.Controls.Add(mb); multi.Controls.Add(multiLabel);
             detail.Controls.Add(multi);
-            Controls.Add(detail);
-            PaneGrip.Attach(detail, "tasks.detail", Ui.S(220));
+            Controls.Add(new ResponsivePane(mid, detail, Ui.S(340), Ui.S(520), Ui.S(320), "tasks.detail"));
 
             // ----- left lists -----
             var left = new Panel { Dock = DockStyle.Left, Width = PaneGrip.Size("tasks.lists", DockStyle.Left, Ui.S(210), Ui.S(800)), Padding = new Padding(0, 0, Ui.S(8), 0) };
@@ -363,7 +362,7 @@ namespace StickyPro
             var bar = MainForm.Bar();
             bar.Controls.Add(MainForm.Heading("Tasks & reminders"));
             bar.Controls.Add(Ui.Btn("Scheduled jobs...", delegate { CronWindow.Open(FindForm()); }));
-            var hint = new Label { AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(0, Ui.S(9), 0, 0), Text = "Space = done · Del = delete · Ctrl+Alt+J adds a task from anywhere" };
+            var hint = new Label { AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(0, Ui.S(9), 0, 0), Text = "Space completes a task · Delete removes it" };
             bar.Controls.Add(hint);
             Controls.Add(bar);
 
@@ -388,7 +387,7 @@ namespace StickyPro
         TableLayoutPanel fieldsPanel;
         bool dirty;          // true only after the user edited a detail control (or SetRemind)
         bool reloadDetail;   // store changed: reload the detail from the model when not dirty
-        bool detailSized, fitting;
+        bool fitting;
 
         // Let the Notes box use the free height of the detail pane.
         void FitNotes()
@@ -411,11 +410,6 @@ namespace StickyPro
         protected override void OnVisibleChanged(EventArgs e)
         {
             base.OnVisibleChanged(e);
-            if (Visible && !detailSized && Width > Ui.S(300))
-            {
-                detailSized = true;
-                detail.Width = PaneGrip.Size("tasks.detail", DockStyle.Right, Math.Max(Ui.S(340), Width * 28 / 100), Width);
-            }
             if (Visible && Stale) RefreshAll();
         }
         public void FocusQuick() { quick.Focus(); }
@@ -565,8 +559,18 @@ namespace StickyPro
         void ShowDetail()
         {
             var sel = Selected();
-            if (sel.Count > 1) { SaveDetail(); editing = null; dirty = false; multi.Visible = true; multiLabel.Text = sel.Count + " tasks selected"; foreach (Control c in detail.Controls) if (c != multi) c.Visible = false; return; }
-            multi.Visible = false; foreach (Control c in detail.Controls) if (c != multi) c.Visible = true;
+            bool several = sel.Count > 1;
+            fieldsPanel.Visible = sel.Count == 1;
+            multi.Visible = several;
+            detail.Visible = sel.Count > 0;
+            if (several)
+            {
+                SaveDetail();
+                editing = null;
+                dirty = false;
+                multiLabel.Text = sel.Count + " tasks selected";
+                return;
+            }
             var t = sel.Count == 1 ? sel[0] : null;
             if (t == editing && t != null)
             {
@@ -581,24 +585,12 @@ namespace StickyPro
             FitNotes();
         }
 
-        Label emptyDetail; readonly List<Control> hiddenByEmpty = new List<Control>();
         void LoadDetail(TaskItem t)
         {
             loading = true;
             try
             {
-                bool has = t != null;
-                foreach (Control c in detail.Controls) c.Enabled = has;
-                // No task chosen: only a short hint, not a form of greyed-out fields.
-                if (emptyDetail == null)
-                {
-                    emptyDetail = new Label { Dock = DockStyle.Top, Height = Ui.S(120), TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Muted, BackColor = Ui.Bg, Font = Ui.Base,
-                        Text = "Select a task to see and edit it.\r\nCtrl+Alt+J adds a task from anywhere." };
-                    detail.Controls.Add(emptyDetail);
-                }
-                if (!has) { foreach (Control c in detail.Controls) if (c != emptyDetail && c.Visible) { hiddenByEmpty.Add(c); c.Visible = false; } }
-                else { foreach (var c in hiddenByEmpty) c.Visible = true; hiddenByEmpty.Clear(); if (!fieldsPanel.Visible && !multi.Visible) { fieldsPanel.Visible = true; FitNotes(); } }
-                emptyDetail.Visible = !has; emptyDetail.Enabled = true;                if (!has) { tTitle.Text = ""; tNotes.Text = ""; steps.Items.Clear(); return; }
+                if (t == null) { tTitle.Clear(); tNotes.Clear(); steps.Items.Clear(); return; }
                 tTitle.Text = t.Title; tNotes.Text = t.Notes.Replace("\r\n", "\n").Replace("\n", "\r\n");
                 cDue.Checked = t.Due > 0; cAllDay.Checked = !t.DueHasTime;
                 var due = t.Due > 0 ? new DateTime(t.Due) : DateTime.Today.AddHours(9);

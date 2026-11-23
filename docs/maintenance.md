@@ -43,10 +43,13 @@ Run before every release and after any UI change:
 powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/test-ui-sweep.ps1
 ```
 
-It captures 33 screens across five looks and three window sizes. The list includes Settings and the sub-tabs in System,
+It captures 34 routes across the selected looks and window sizes. The list includes Settings and the sub-tabs in System,
 Chrome, Power tools and Shortcuts. It saves PNGs and labeled contact sheets under `build-test\sweep-*`, checks the
 visible controls, opens attached context menus, and stresses 300 page switches, 280 resizes and 14 searches. Review
-`report.md` and the screenshots together. `-Quick` selects one look and size.
+`report.md` and the screenshots together. `-Quick` selects one look and size. Add `-Interactions` to save
+`states/` and `controls.csv` at the first size for each look. The inventory lists visible native controls and menu
+commands. The screenshots include opened menus, selected task and prompt details, Settings scroll positions,
+Markdown modes, Assistant modes and sampled dialogs. The sweep opens menus without invoking their commands.
 
 The sweep compiles an offline test executable and seeds sample notes, tasks, clipboard entries and files. It disables
 Chrome profile access, agent account status and the embedded browser in the fixture. Browser screenshots show the shell

@@ -2,6 +2,12 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-23 — Windows screen audit and compact layout repairs
+
+- Captured the 34 primary screens and sub-tabs in Flow light and Atelier dark at 1000×740 and 760×650. The baseline had eight clipped shortcut tab labels and six sparse-content warnings. The latter identified screens to inspect and did not establish runtime failures.
+- Reworked narrow Prompt and Task layouts, fixed unavailable multi-task actions, and cleared stale status messages when switching pages. Shortcut tabs now wrap and accept keyboard input. Settings can jump to a section. Documents groups secondary actions, and the scheduler explains the accepted time formats and run conditions.
+- Expanded the repeatable Windows capture to cover native controls, attached menus, modal windows and alternate states. Live Office, protected files, live accounts and corporate-share workflows remain acceptance checks.
+
 ## 2026-11-22 — Approved app cleanup and workflow repairs
 
 - Cleaned up Home, Agents, Assistant, Accounts, and Team. Added Team to the local page API and visual sweep. The test now checks live navigation against both inventories.
