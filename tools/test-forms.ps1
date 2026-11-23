@@ -1,4 +1,4 @@
-# Offscreen form construction and model regression checks only. No Show, Main,
+﻿# Offscreen form construction and model regression checks only. No Show, Main,
 # Store.Load, clipboard, Office, registry or application process is invoked.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
@@ -124,6 +124,16 @@ foreach ($scale in @([single]1, [single]1.5)) {
         Assert ($theme.SelectedIndex -eq $preferences.Theme -and $theme.ItemHeight -ge $theme.Font.Height) "Color theme selection or row height changed at scale $scale."
     } finally { $settings.Dispose() }
 }
+
+$lookPicker = [Activator]::CreateInstance($assembly.GetType('StickyPro.LookPicker'), $true)
+try {
+    $lookType = $lookPicker.GetType()
+    $lookType.GetMethod('LayoutPresets', $instance).Invoke($lookPicker, @([Drawing.Size]::new(680, 480)))
+    $presets = $lookType.GetField('presets', $instance).GetValue($lookPicker)
+    $bottom = ($presets | ForEach-Object { $_.R.Bottom } | Measure-Object -Maximum).Maximum
+    Assert ($presets.Count -eq 14 -and $lookPicker.Width -le 680 -and $lookPicker.Height -le 480) 'Theme picker exceeds the monitor or lost a preset.'
+    Assert ($bottom -gt $lookPicker.ClientSize.Height -and $bottom -lt $lookPicker.AutoScrollMinSize.Height) 'Theme picker cannot scroll to every preset.'
+} finally { $lookPicker.Dispose() }
 
 $searchType = $assembly.GetType('StickyPro.GlobalSearch')
 $find = $searchType.GetMethod('Find', $static)

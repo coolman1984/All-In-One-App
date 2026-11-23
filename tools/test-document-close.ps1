@@ -80,8 +80,12 @@ try {
 
     $save = $page.GetType().GetField('saveBtn', $private).GetValue($page)
     Assert (-not $save.Enabled) 'Save was enabled on the empty Documents page.'
-    $actions = $page.GetType().GetField('documentActions', $private).GetValue($page)
-    Assert (@($actions | Where-Object Enabled).Count -eq 0) 'Empty Documents page has enabled file actions.'
+    $more = $page.GetType().GetField('moreBtn', $private).GetValue($page)
+    Assert (-not $more.Enabled) 'Empty Documents page has enabled file actions.'
+    $availableActions = @($more.ContextMenuStrip.Items | ForEach-Object { $_.Text })
+    foreach ($action in 'Open in its app', 'Show folder in Explorer', 'Reload', 'Copy path', 'Ask the Assistant') {
+        Assert ($action -in $availableActions) "Missing document action: $action."
+    }
     $main.ShowPage('notes:unknown')
     Assert ($main.Page -eq 'dashboard') 'An invalid page suffix blanked the main window.'
     $main.ShowPage('system:uninstall')
