@@ -87,6 +87,7 @@ namespace StickyPro
             };
             var fresh = Ui.Btn("New", delegate { NewChat(); }); fresh.Dock = DockStyle.Right;
             var close = Ui.Btn("✕", delegate { main.SetAssistant(false); }); ((FluentButton)close).Glyph = null; close.Dock = DockStyle.Right; close.Width = Ui.S(36); close.AutoSize = false;
+            close.AccessibleName = "Hide the Assistant";
             tips.SetToolTip(close, "Hide (Ctrl+J)");
             // Orders fold away (remembered), like a VS Code section.
             var fold = new IconButton(OrdersOpen ? "\uE70D" : "\uE76C", 8f, "Show or hide the order buttons", tips, null) { Dock = DockStyle.Right, Width = Ui.S(30) };
@@ -150,7 +151,13 @@ namespace StickyPro
             set { Store.Settings.ViewStacks["assistant.orders"] = value ? "1" : "0"; Store.MarkSettings(); }
         }
         IconButton expand;
-        public void WideChanged(bool wide) { if (expand != null) expand.Text = wide ? "" : ""; }
+        public void WideChanged(bool wide)
+        {
+            if (expand == null) return;
+            expand.Text = wide ? "" : "";
+            expand.AccessibleName = wide ? "Restore the Assistant side panel" : "Expand the Assistant";
+            tips.SetToolTip(expand, expand.AccessibleName + " (Ctrl+Shift+J)");
+        }
         static Panel Gap() { return new Panel { Dock = DockStyle.Right, Width = Ui.S(4) }; }
         static Button Small(string text, EventHandler click) { var b = Ui.Btn(text, click); ((FluentButton)b).Glyph = null; b.Margin = new Padding(0, 0, Ui.S(4), Ui.S(2)); return b; }
 

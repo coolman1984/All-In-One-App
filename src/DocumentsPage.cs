@@ -62,7 +62,6 @@ namespace StickyPro
             moreBtn.AccessibleName = "More document actions";
             moreBtn.ContextMenuStrip = actions;
             moreBtn.Enabled = false;
-            moreBtn.Disposed += delegate { actions.Dispose(); };
             bar.Controls.Add(moreBtn);
 
             tabs = new EditorTabs { Dock = DockStyle.Top, EmptyText = "No open documents  ·  Ctrl+O opens one" };
