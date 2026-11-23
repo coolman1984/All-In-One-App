@@ -845,10 +845,8 @@ namespace StickyPro
 
         public static Label Heading(string text)
         {
-            var l = new PageHeading();
+            var l = new Label();
             l.Text = text;
-            l.Accent = PageHeading.ColorFor(text);
-            l.Padding = new Padding(Ui.S(14), 0, 0, 0);
             l.UseMnemonic = false;
             l.Font = Ui.Nexus ? Ui.Title : Ui.Big;
             l.ForeColor = Ui.Header; // PicPick-style blue page headers (dark text in Nexus)
@@ -2007,35 +2005,5 @@ namespace StickyPro
 namespace StickyPro
 {
     // Page title with a slim rounded bar in the page's own color (what the page is for), in light and dark mode.
-    class PageHeading : System.Windows.Forms.Label
-    {
-        public System.Drawing.Color Accent = System.Drawing.Color.Empty;
 
-        static readonly string[][] Map =
-        {
-            new[] { "agent", "#9B5CF6" }, new[] { "council", "#9B5CF6" }, new[] { "terminal", "#10B981" }, new[] { "explorer", "#F97316" },
-            new[] { "snip", "#EF4444" }, new[] { "record", "#EF4444" }, new[] { "chrome", "#3B82F6" }, new[] { "power", "#EAB308" },
-            new[] { "system", "#14B8A6" }, new[] { "task", "#6366F1" }, new[] { "note", "#F59E0B" }, new[] { "prompt", "#8B5CF6" },
-            new[] { "clip", "#06B6D4" }, new[] { "card", "#EC4899" }, new[] { "activity", "#64748B" }, new[] { "tag", "#84CC16" },
-            new[] { "home", "#3B82F6" }, new[] { "dashboard", "#3B82F6" }, new[] { "setting", "#94A3B8" }, new[] { "shortcut", "#94A3B8" },
-            new[] { "uninstall", "#F43F5E" }, new[] { "startup", "#14B8A6" }, new[] { "drive", "#0EA5E9" }
-        };
-
-        public static System.Drawing.Color ColorFor(string title)
-        {
-            string t = (title ?? "").ToLowerInvariant();
-            foreach (var m in Map) if (t.Contains(m[0])) return System.Drawing.ColorTranslator.FromHtml(m[1]);
-            return Ui.Accent;
-        }
-
-        protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            if (Accent.IsEmpty) return;
-            var g = e.Graphics; g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            int h = (int)(Font.Height * 0.72), w = Ui.S(5);
-            var r = new System.Drawing.Rectangle(Ui.S(2), (Height - h) / 2 + Ui.S(1), w, h);
-            using (var path = Ui.Round(r, w / 2)) using (var b = new System.Drawing.SolidBrush(Accent)) g.FillPath(b, path);
-        }
-    }
 }

@@ -5,6 +5,8 @@ Format: what happened -> cause (proven) -> rule.
 
 ## Whole-app visual checks
 
+- The compact-layout repair fixed clipped controls while leaving repeated pills and equal-weight actions on screen. Compare screenshots against the prior revision and inspect shared controls. Put live work first and reserve accent colors for actionable state.
+
 - A zero-error sweep missed crowded Agents controls, a clipped Home alert and the Team page. The fixture checks control geometry against its own route list, so it cannot detect duplicate information or missing routes by itself. Compare the list against live navigation and inspect representative screenshots for clarity.
 
 - At narrow widths, an unselected prompt's hint could dock across the entire page and steal space from the list. Put the hint and editor in one fill host, then verify both selected and unselected states. Audit menu entry points and state changes in addition to first paint.

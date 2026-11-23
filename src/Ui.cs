@@ -255,6 +255,16 @@ namespace StickyPro
             g.SmoothingMode = old;
         }
         public static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
+        public static Color TextOn(Color background)
+        {
+            double luminance = 0.2126 * LinearRgb(background.R) + 0.7152 * LinearRgb(background.G) + 0.0722 * LinearRgb(background.B);
+            return luminance > 0.179 ? Color.Black : Color.White;
+        }
+        static double LinearRgb(byte value)
+        {
+            double component = value / 255.0;
+            return component <= 0.04045 ? component / 12.92 : Math.Pow((component + 0.055) / 1.055, 2.4);
+        }
         static bool UseAtelierDefaultAccent { get { return Atelier && !CustomAccent.HasValue && (ThemeIndex == AtelierTheme || ThemeIndex == FlowTheme || ThemeIndex == 0); } }
         static bool UseNordicDefaultAccent { get { return Nordic && !CustomAccent.HasValue && (ThemeIndex == NordicTheme || ThemeIndex == FlowTheme || ThemeIndex == 0); } }
         static Color TB
@@ -300,23 +310,23 @@ namespace StickyPro
                 return H("#70A1FF");
             }
         }
-        public static Color Bg { get { return Atelier ? (Dark ? H("#0C0E13") : H("#F4F0E8")) : Nordic ? (Dark ? H("#0D1311") : H("#F2F5F3")) : Flow ? (Dark ? H("#0B1120") : H("#F5F7FC")) : Soft ? (Dark ? H("#121214") : H("#ECECEF")) : Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
-        public static Color Card { get { return Atelier ? (Dark ? H("#13161F") : H("#FCFAF5")) : Nordic ? (Dark ? H("#141D1A") : H("#FFFFFF")) : Flow ? (Dark ? H("#131B2E") : H("#FFFFFF")) : Soft ? (Dark ? H("#1C1C20") : H("#FFFFFF")) : Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
-        public static Color Field { get { return Atelier ? (Dark ? H("#13161F") : H("#FCFAF5")) : Nordic ? (Dark ? H("#141D1A") : H("#FFFFFF")) : Flow ? (Dark ? H("#182238") : H("#FFFFFF")) : Soft ? (Dark ? H("#212126") : H("#FFFFFF")) : Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
+        public static Color Bg { get { return Atelier ? (Dark ? H("#0C0E13") : H("#F4F0E8")) : Nordic ? (Dark ? H("#0D1311") : H("#F2F5F3")) : Flow ? (Dark ? H("#14171B") : H("#F4F5F6")) : Soft ? (Dark ? H("#121214") : H("#ECECEF")) : Navy ? (Dark ? H("#0C1120") : H("#EEF2F8")) : Nexus ? (Dark ? H("#0E1015") : H("#F5F6F9")) : Dark ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); } }
+        public static Color Card { get { return Atelier ? (Dark ? H("#13161F") : H("#FCFAF5")) : Nordic ? (Dark ? H("#141D1A") : H("#FFFFFF")) : Flow ? (Dark ? H("#1C2025") : H("#FFFFFF")) : Soft ? (Dark ? H("#1C1C20") : H("#FFFFFF")) : Navy ? (Dark ? H("#151C2E") : H("#FFFFFF")) : Nexus ? (Dark ? H("#171A21") : Color.White) : Dark ? Color.FromArgb(45, 45, 45) : Color.White; } }
+        public static Color Field { get { return Atelier ? (Dark ? H("#13161F") : H("#FCFAF5")) : Nordic ? (Dark ? H("#141D1A") : H("#FFFFFF")) : Flow ? (Dark ? H("#22272D") : H("#FFFFFF")) : Soft ? (Dark ? H("#212126") : H("#FFFFFF")) : Navy ? (Dark ? H("#18203A") : H("#FFFFFF")) : Nexus ? (Dark ? H("#1B1E26") : Color.White) : Dark ? Color.FromArgb(40, 40, 40) : Color.White; } }
         public static Color Nav { get { return Atelier ? (Dark ? H("#191D28") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(235, 235, 235); } }
         // Atelier / Nordic: elevated header/sidebar tone; Flow / Nexus: crisp white sidebar; SerQ / Soft: dark floating sidebar; Classic: solid colour sidebar.
-        public static Color Sidebar { get { return Atelier ? (Dark ? H("#191D28") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#0F172A") : H("#FFFFFF")) : Soft ? (Dark ? H("#0B0B0D") : H("#26262A")) : Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
-        public static Color SidebarSel { get { return Atelier ? (Dark ? Mix(TB, H("#191D28"), 0.76) : Mix(TB, H("#FCFAF5"), 0.85)) : Nordic ? (Dark ? Mix(TB, H("#1B2723"), 0.76) : Mix(TB, H("#FFFFFF"), 0.86)) : Flow ? (Dark ? Mix(TB, H("#0F172A"), 0.72) : Mix(TB, Color.White, 0.88)) : Soft ? (Dark ? H("#26262C") : H("#3A3A40")) : Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
+        public static Color Sidebar { get { return Atelier ? (Dark ? H("#191D28") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#171A1E") : H("#FFFFFF")) : Soft ? (Dark ? H("#0B0B0D") : H("#26262A")) : Navy ? (Dark ? H("#111936") : H("#1B2759")) : Nexus ? (Dark ? H("#13151B") : Color.White) : Dark ? Mix(TB, Color.Black, 0.5) : TB; } }
+        public static Color SidebarSel { get { return Atelier ? (Dark ? Mix(TB, H("#191D28"), 0.76) : Mix(TB, H("#FCFAF5"), 0.85)) : Nordic ? (Dark ? Mix(TB, H("#1B2723"), 0.76) : Mix(TB, H("#FFFFFF"), 0.86)) : Flow ? (Dark ? Mix(TB, H("#171A1E"), 0.72) : Mix(TB, Color.White, 0.88)) : Soft ? (Dark ? H("#26262C") : H("#3A3A40")) : Navy ? (Dark ? H("#22306A") : H("#2C3D86")) : Nexus ? (Dark ? H("#232733") : H("#F1F2F6")) : Dark ? Mix(TB, Color.Black, 0.7) : Mix(TB, Color.Black, 0.3); } }
         public static Color SidebarHover { get { return Atelier ? (Dark ? H("#212636") : H("#E7E0D3")) : Nordic ? (Dark ? H("#21302B") : H("#DCE5E0")) : Flow ? (Dark ? H("#162038") : H("#F4F7FE")) : Soft ? (Dark ? H("#18181B") : H("#303035")) : Navy ? (Dark ? H("#1A2550") : H("#233270")) : Nexus ? (Dark ? H("#1B1E26") : H("#F7F8FA")) : Dark ? Mix(TB, Color.Black, 0.38) : Mix(TB, Color.White, 0.12); } }
         public static Color SidebarText { get { return Atelier ? (Dark ? H("#F1EFE9") : H("#16181D")) : Nordic ? (Dark ? H("#ECF3F0") : H("#14211C")) : Flow ? (Dark ? H("#CBD5E1") : H("#475569")) : Soft ? (Dark ? H("#ECECEF") : H("#F3F3F5")) : Navy ? (Dark ? H("#E3E8F7") : H("#E8EDFB")) : Nexus ? (Dark ? H("#E7E9EE") : H("#1F2430")) : Color.White; } }
-        public static Color SidebarMuted { get { return Atelier ? (Dark ? H("#9499A6") : H("#5C5A54")) : Nordic ? (Dark ? H("#8DA39B") : H("#52635C")) : Flow ? (Dark ? H("#64748B") : H("#94A3B8")) : Soft ? (Dark ? H("#85858F") : H("#9B9BA3")) : Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
+        public static Color SidebarMuted { get { return Atelier ? (Dark ? H("#9499A6") : H("#5C5A54")) : Nordic ? (Dark ? H("#8DA39B") : H("#52635C")) : Flow ? (Dark ? H("#586574") : H("#647285")) : Soft ? (Dark ? H("#85858F") : H("#9B9BA3")) : Navy ? (Dark ? H("#8D99C2") : H("#9EAAD3")) : Nexus ? (Dark ? H("#7D8496") : H("#8A909E")) : Color.FromArgb(205, 255, 255, 255); } }
         public static Color Header { get { return Nexus ? Text : Dark ? Mix(TB, Color.White, 0.5) : TB; } }
-        public static Color Line { get { return Atelier ? (Dark ? H("#242938") : H("#DDD6C7")) : Nordic ? (Dark ? H("#253530") : H("#CFD9D3")) : Flow ? (Dark ? H("#222E47") : H("#E8EDF5")) : Soft ? (Dark ? H("#2B2B31") : H("#E3E3E7")) : Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
-        public static Color Text { get { return Atelier ? (Dark ? H("#F1EFE9") : H("#16181D")) : Nordic ? (Dark ? H("#ECF3F0") : H("#14211C")) : Flow ? (Dark ? H("#F1F5F9") : H("#0F172A")) : Soft ? (Dark ? H("#EEEEF1") : H("#17171A")) : Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
-        public static Color Muted { get { return Atelier ? (Dark ? H("#9499A6") : H("#5C5A54")) : Nordic ? (Dark ? H("#8DA39B") : H("#52635C")) : Flow ? (Dark ? H("#94A3B8") : H("#64748B")) : Soft ? (Dark ? H("#9A9AA4") : H("#6C6C75")) : Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
+        public static Color Line { get { return Atelier ? (Dark ? H("#242938") : H("#DDD6C7")) : Nordic ? (Dark ? H("#253530") : H("#CFD9D3")) : Flow ? (Dark ? H("#363C44") : H("#DCE0E4")) : Soft ? (Dark ? H("#2B2B31") : H("#E3E3E7")) : Navy ? (Dark ? H("#252D44") : H("#E5E9F2")) : Nexus ? (Dark ? H("#272B35") : H("#E7E9EE")) : Dark ? Color.FromArgb(72, 72, 72) : Color.FromArgb(222, 222, 222); } }
+        public static Color Text { get { return Atelier ? (Dark ? H("#F1EFE9") : H("#16181D")) : Nordic ? (Dark ? H("#ECF3F0") : H("#14211C")) : Flow ? (Dark ? H("#F1F5F9") : H("#171A1E")) : Soft ? (Dark ? H("#EEEEF1") : H("#17171A")) : Navy ? (Dark ? H("#EDF0F7") : H("#101828")) : Nexus ? (Dark ? H("#ECEEF3") : H("#111827")) : Dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(30, 30, 30); } }
+        public static Color Muted { get { return Atelier ? (Dark ? H("#9499A6") : H("#5C5A54")) : Nordic ? (Dark ? H("#8DA39B") : H("#52635C")) : Flow ? (Dark ? H("#647285") : H("#586574")) : Soft ? (Dark ? H("#9A9AA4") : H("#6C6C75")) : Navy ? (Dark ? H("#97A0B8") : H("#667085")) : Nexus ? (Dark ? H("#959CAD") : H("#6B7280")) : Dark ? Color.FromArgb(160, 160, 160) : Color.FromArgb(105, 105, 105); } }
         public static Color SelBg { get { return Atelier ? (Dark ? Mix(TB, Card, 0.74) : Mix(TB, Card, 0.86)) : Nordic ? (Dark ? Mix(TB, Card, 0.74) : Mix(TB, Card, 0.86)) : Flow ? (Dark ? Mix(TB, Card, 0.72) : Mix(TB, Color.White, 0.88)) : Nexus ? (Dark ? Mix(TB, Card, 0.80) : Mix(TB, Color.White, 0.9)) : Dark ? Color.FromArgb(38, 60, 88) : Color.FromArgb(224, 236, 250); } }
-        public static Color HoverBg { get { return Atelier ? (Dark ? H("#1C202E") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#1B2540") : H("#F3F6FC")) : Soft ? (Dark ? H("#25252A") : H("#F2F2F4")) : Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
-        public static Color PressBg { get { return Atelier ? (Dark ? H("#242938") : H("#E4DDD0")) : Nordic ? (Dark ? H("#253530") : H("#DAE3DE")) : Flow ? (Dark ? H("#233050") : H("#E6EEFA")) : Soft ? (Dark ? H("#2E2E34") : H("#E7E7EA")) : Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
+        public static Color HoverBg { get { return Atelier ? (Dark ? H("#1C202E") : H("#EFEAE0")) : Nordic ? (Dark ? H("#1B2723") : H("#E7ECE9")) : Flow ? (Dark ? H("#282E36") : H("#EDF0F3")) : Soft ? (Dark ? H("#25252A") : H("#F2F2F4")) : Navy ? (Dark ? H("#1C2438") : H("#F2F5FB")) : Nexus ? (Dark ? H("#20242D") : H("#F3F4F7")) : Dark ? Color.FromArgb(56, 56, 56) : Color.FromArgb(236, 236, 236); } }
+        public static Color PressBg { get { return Atelier ? (Dark ? H("#242938") : H("#E4DDD0")) : Nordic ? (Dark ? H("#253530") : H("#DAE3DE")) : Flow ? (Dark ? H("#303842") : H("#E4E9EE")) : Soft ? (Dark ? H("#2E2E34") : H("#E7E7EA")) : Navy ? (Dark ? H("#242D45") : H("#E8EDF7")) : Nexus ? (Dark ? H("#2A2F3A") : H("#E9EBF0")) : Dark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(225, 225, 225); } }
         public static Color AccentHover { get { return Mix(TB, Color.Black, 0.16); } }
         public static Color AccentPressed { get { return Mix(TB, Color.Black, 0.28); } }
         public static Color Success { get { return Nordic ? (Dark ? H("#20C997") : H("#0D8A64")) : Flow ? (Dark ? H("#34D399") : H("#16A36A")) : Dark ? Color.FromArgb(108, 203, 144) : Color.FromArgb(26, 127, 66); } }
@@ -1061,26 +1071,28 @@ namespace StickyPro
             g.Clear(Parent == null ? Ui.Bg : Parent.BackColor);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var under = Parent == null ? Ui.Bg : Parent.BackColor;
-            Color fill = !Enabled ? Ui.Mix(under, Ui.Text, 0.03)
+            Color fill = !Enabled ? under
                 : Primary ? (pressed ? Ui.AccentPressed : hover ? Ui.AccentHover : Ui.AccentFill)
-                : Ui.Mix(under, Ui.Text, pressed ? 0.15 : hover ? 0.10 : Ui.Dark ? 0.07 : 0.055);   // soft secondary button
+                : pressed ? Ui.PressBg : hover ? Ui.HoverBg : under;
             var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            using (var path = Ui.Round(r, Ui.S(Ui.Radius)))
+            using (var path = Ui.Round(r, Ui.S(4)))
             {
                 using (var b = new SolidBrush(fill)) g.FillPath(b, path);
-                if ((Focused && ShowFocusCues) || defaultButton) using (var p = new Pen(Ui.Accent)) g.DrawPath(p, path);
+                if ((Focused && ShowFocusCues) || defaultButton || !Primary)
+                    using (var pen = new Pen((Focused && ShowFocusCues) || defaultButton ? Ui.Accent : Ui.Line))
+                        g.DrawPath(pen, path);
             }
             var textRect = Rectangle.Inflate(ClientRectangle, -Ui.S(Ui.Space), -Ui.S(2));
             var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
             if (!UseMnemonic) flags |= TextFormatFlags.NoPrefix; else if (!ShowKeyboardCues) flags |= TextFormatFlags.HidePrefix;
-            var fore = !Enabled ? Ui.Muted : Primary ? Color.White : ForeColor;
+            var fore = !Enabled ? Ui.Muted : Primary ? Ui.TextOn(fill) : ForeColor;
             if (GlyphSpace > 0)
             {
                 // Icon + text centred together.
                 int textW = TextWidth();
                 int total = Math.Min(textRect.Width, GlyphSpace + textW);
                 int x = textRect.X + Math.Max(0, (textRect.Width - total) / 2);
-                TextRenderer.DrawText(g, Glyph, Ui.Icon(10.5f), new Rectangle(x, textRect.Y, Ui.S(18), textRect.Height), !Enabled ? Ui.Muted : Primary ? Color.White : Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, Glyph, Ui.Icon(10.5f), new Rectangle(x, textRect.Y, Ui.S(18), textRect.Height), Primary ? fore : Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
                 textRect = new Rectangle(x + GlyphSpace, textRect.Y, Math.Max(1, textRect.Right - x - GlyphSpace), textRect.Height);
                 flags = (flags & ~TextFormatFlags.HorizontalCenter) | TextFormatFlags.Left;
             }
@@ -1089,7 +1101,7 @@ namespace StickyPro
             {
                 var focus = Rectangle.Inflate(r, -Ui.S(3), -Ui.S(3));
                 using (var path = Ui.Round(focus, Ui.S(Ui.SpaceSmall)))
-                using (var pen = new Pen(Primary ? Color.White : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(pen, path);
+                using (var pen = new Pen(Primary ? fore : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(pen, path);
             }
         }
     }
@@ -1347,23 +1359,13 @@ namespace StickyPro
         public static void DrawCard(Graphics g, Rectangle bounds, CardInfo ci, bool sel, Color back)
         {
             using (var bg = new SolidBrush(back)) g.FillRectangle(bg, bounds);
-            var r = new Rectangle(bounds.X + Ui.S(6), bounds.Y + Ui.S(3), bounds.Width - Ui.S(13), bounds.Height - Ui.S(6));
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var path = Ui.Round(r, Ui.S(Ui.Nexus ? 10 : 6)))
-            {
-                using (var b = new SolidBrush(ci.Back)) g.FillPath(b, path);
-                if (ci.Strip != Color.Empty)
-                {
-                    using (var oldClip = g.Clip)
-                    {
-                        g.SetClip(path);
-                        using (var b = new SolidBrush(ci.Strip)) g.FillRectangle(b, r.X, r.Y, Ui.S(6), r.Height + 1);
-                        g.Clip = oldClip;
-                    }
-                }
-                using (var p = new Pen(sel ? Ui.Accent : Ui.Line, sel ? Ui.S(2) : 1)) g.DrawPath(p, path);
-            }
-            g.SmoothingMode = SmoothingMode.None;
+            var r = new Rectangle(bounds.X + Ui.S(2), bounds.Y, Math.Max(1, bounds.Width - Ui.S(4)), Math.Max(1, bounds.Height - 1));
+            using (var fill = new SolidBrush(sel ? Mix(ci.Back, AccentFill, Dark ? 0.14 : 0.10) : ci.Back))
+                g.FillRectangle(fill, r);
+            using (var border = new Pen(Line)) g.DrawLine(border, r.Left, r.Bottom, r.Right, r.Bottom);
+            if (sel || ci.Strip != Color.Empty)
+                using (var marker = new SolidBrush(sel ? Accent : ci.Strip))
+                    g.FillRectangle(marker, r.Left, r.Top + Ui.S(5), Ui.S(2), Math.Max(1, r.Height - Ui.S(10)));
             int x = r.X + Ui.S(14);
             if (ci.Thumb != null)
             {
@@ -1479,7 +1481,7 @@ namespace StickyPro
             TabStop = true;
             AccessibleRole = AccessibleRole.PageTab;
             Glyph = glyph; Text = text;
-            Height = Ui.Flow ? Ui.S(38) : Ui.Navy ? Ui.S(36) : Ui.Nexus ? Ui.S(40) : Ui.S(46);   // floating / Flow sidebars: all pages fit comfortably
+            Height = Ui.Nexus ? Math.Max(Ui.S(34), Ui.Base.Height + Ui.S(12)) : Ui.S(42);   // floating / Flow sidebars: all pages fit comfortably
             Dock = DockStyle.Top;
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -1513,15 +1515,12 @@ namespace StickyPro
             bool narrow = Width < Ui.S(100);
             var pill = new Rectangle(Ui.S(Ui.Navy ? 6 : 12), Ui.S(2), Width - Ui.S(Ui.Navy ? 12 : 24), Height - Ui.S(4));
             if (selected || hover || Focused)
-                using (var path = Ui.Round(pill, Ui.S(Ui.Navy || Ui.Flow ? 10 : 8)))
+                using (var path = Ui.Round(pill, Ui.S(3)))
                 {
                     using (var b = new SolidBrush(selected ? Ui.SidebarSel : Ui.SidebarHover)) g.FillPath(b, path);
-                    if (selected && Ui.Navy)
-                    {
-                        var mark = Ui.Soft ? Ui.Mix(Ui.AccentFill, Color.White, 0.15) : Color.FromArgb(120, 160, 255);
-                        using (var p = new Pen(Color.FromArgb(150, mark))) g.DrawPath(p, path);
-                        using (var b = new SolidBrush(mark)) g.FillRectangle(b, pill.Right - Ui.S(3), pill.Y + Ui.S(8), Ui.S(3), pill.Height - Ui.S(16));
-                    }
+                    if (selected)
+                        using (var b = new SolidBrush(Ui.Navy ? Ui.SidebarText : Ui.Accent))
+                            g.FillRectangle(b, pill.Left, pill.Y + Ui.S(7), Ui.S(2), pill.Height - Ui.S(14));
                     if (Focused && !selected) using (var p = new Pen(Ui.Navy ? Ui.SidebarMuted : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(p, path);
                 }
             var iconRect = narrow ? new Rectangle(0, 0, Width, Height) : new Rectangle(pill.X + Ui.S(10), 0, Ui.S(24), Height);
@@ -1548,7 +1547,7 @@ namespace StickyPro
     {
         public NavGroup(string text)
         {
-            Text = text.ToUpperInvariant(); Dock = DockStyle.Top; Height = Ui.S(34); TabStop = false;
+            Text = text; Dock = DockStyle.Top; Height = Ui.S(30); TabStop = false;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
         protected override void OnPaint(PaintEventArgs e)

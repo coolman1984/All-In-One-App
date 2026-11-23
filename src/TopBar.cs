@@ -107,6 +107,7 @@ namespace StickyPro
             var rec = C("rec"); rec.Value = facts.Recording; rec.Alert = facts.Recording == "Recording"; rec.Tint = Red;
             // Chips that would only say "0" or "Ready" are hidden: the bar shows what needs attention.
             foreach (var c in chips) { if (c.Key != "c" && c.Key != "d") c.Visible = true; if (c.Tip == null || c.Key == "urgent" || c.Key == "rec" || c.Key == "cpu") c.Tip = c.Label + ": " + c.Value; }
+            tasks.Visible = tasks.Alert;
             urgent.Visible = facts.Urgent > 0;
             rec.Visible = facts.Recording != "Ready";
             // Re-layout only when a chip text or visibility changed (layout measures text for every chip).
@@ -132,8 +133,8 @@ namespace StickyPro
         int MeasureChip(Chip c, bool small)
         {
             int text = TextRenderer.MeasureText(c.Value, Ui.Bold, Size.Empty, TextFormatFlags.NoPadding).Width;
-            if (!small) text = Math.Max(text, TextRenderer.MeasureText(c.Label, Ui.Small, Size.Empty, TextFormatFlags.NoPadding).Width);
-            return Ui.S(6) + Ui.S(26) + Ui.S(8) + text + Ui.S(14);
+            if (!small || Ui.Nexus) text = Math.Max(text, TextRenderer.MeasureText(c.Label, Ui.Small, Size.Empty, TextFormatFlags.NoPadding).Width);
+            return Ui.Nexus ? text + Ui.S(14) : Ui.S(6) + Ui.S(26) + Ui.S(8) + text + Ui.S(14);
         }
 
         void LayoutBar()
@@ -246,8 +247,7 @@ namespace StickyPro
             if (!searchRect.IsEmpty)
             {
                 bool hot = hover as string == "search";
-                if (!Ui.Flow) Ui.Shadow(g, searchRect, Ui.S(10));
-                using (var path = Ui.Round(searchRect, Ui.S(Ui.Flow ? 12 : 10)))
+                using (var path = Ui.Round(searchRect, Ui.S(4)))
                 {
                     using (var b = new SolidBrush(hot ? Ui.HoverBg : (Ui.Navy || Ui.Atelier || Ui.Nordic) ? Ui.Card : Ui.Bg)) g.FillPath(b, path);
                     using (var p = new Pen(hot ? Ui.Accent : Ui.Flow ? Ui.Mix(Ui.Line, Ui.Bg, 0.35) : Ui.Line)) g.DrawPath(p, path);
@@ -267,21 +267,17 @@ namespace StickyPro
             foreach (var c in chips) if (!c.Bounds.IsEmpty && c.Bounds.IntersectsWith(e.ClipRectangle)) DrawChipNexus(g, c);
             if (!moreRect.IsEmpty)
             {
-                using (var path = Ui.Round(moreRect, Ui.S(10)))
-                {
-                    using (var b = new SolidBrush(hover as string == "more" ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                    using (var p = new Pen(Ui.Line)) g.DrawPath(p, path);
-                }
-                TextRenderer.DrawText(g, "+" + hidden.Count, Ui.Bold, moreRect, Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                if (hover as string == "more") using (var b = new SolidBrush(Ui.HoverBg)) g.FillRectangle(b, moreRect);
+                TextRenderer.DrawText(g, "", Ui.Icon(12f), moreRect, Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
             }
             foreach (var t in toggles)
             {
                 if (!t.Visible) continue;
                 bool on = ToggleOn(t), hot = ReferenceEquals(hover, t);
                 var r = Rectangle.Inflate(t.Bounds, -1, -1);
-                using (var b = new SolidBrush(on ? Ui.Accent : hot ? Ui.HoverBg : Ui.Card)) g.FillEllipse(b, r);
-                if (!on) using (var p = new Pen(Ui.Line)) g.DrawEllipse(p, r);
-                var fore = on ? Color.White : Ui.Muted;
+                if (on || hot) using (var b = new SolidBrush(on ? Ui.SelBg : Ui.HoverBg)) g.FillRectangle(b, r);
+                if (on) using (var b = new SolidBrush(Ui.Accent)) g.FillRectangle(b, r.Left + Ui.S(8), r.Bottom - Ui.S(2), r.Width - Ui.S(16), Ui.S(2));
+                var fore = on ? Ui.Accent : Ui.Muted;
                 if (t.Key == "wifi" && WiFi.Busy) fore = Color.FromArgb(120, fore);
                 TextRenderer.DrawText(g, ToggleGlyph(t), Ui.Icon(12f), t.Bounds, fore, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             }
@@ -292,76 +288,17 @@ namespace StickyPro
             TextRenderer.DrawText(g, now.ToString("ddd d MMM"), Ui.Small, new Rectangle(clockRect.X, top.Bottom, clockRect.Width, Ui.S(18)), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
         }
 
-        static Color FlowChipAccent(string key)
-        {
-            if (Ui.Atelier)
-            {
-                switch (key)
-                {
-                    case "cpu": return Ui.Accent;
-                    case "ram": return Ui.SecondAccent;
-                    case "c": return Ui.SecondAccent;
-                    case "d": return Color.FromArgb(200, 125, 18);
-                    case "apps": return Ui.Accent;
-                    case "tasks": return Ui.Accent;
-                    default: return Color.FromArgb(220, 38, 38);
-                }
-            }
-            if (Ui.Nordic)
-            {
-                switch (key)
-                {
-                    case "cpu": return Ui.Accent;
-                    case "ram": return Ui.SecondAccent;
-                    case "c": return Ui.Accent;
-                    case "d": return Ui.SecondAccent;
-                    case "apps": return Color.FromArgb(217, 119, 6);
-                    case "tasks": return Ui.Accent;
-                    default: return Color.FromArgb(225, 29, 72);
-                }
-            }
-            switch (key)
-            {
-                case "cpu": return Color.FromArgb(47, 102, 246);
-                case "ram": return Color.FromArgb(139, 92, 246);
-                case "c": return Color.FromArgb(34, 197, 139);
-                case "d": return Color.FromArgb(14, 165, 233);
-                case "apps": return Color.FromArgb(245, 158, 45);
-                case "tasks": return Color.FromArgb(47, 102, 246);
-                default: return Color.FromArgb(239, 68, 68);
-            }
-        }
-
         void DrawChipNexus(Graphics g, Chip c)
         {
             var r = c.Bounds;
-            bool hot = ReferenceEquals(hover, c);
-            var chipTint = c.Alert ? c.Tint : Ui.Flow ? FlowChipAccent(c.Key) : Ui.Muted;
-            using (var path = Ui.Round(r, Ui.S(Ui.Flow ? 11 : 10)))
-            {
-                using (var b = new SolidBrush(hot ? Ui.HoverBg : (Ui.Atelier || Ui.Nordic) ? Ui.Card : Ui.Flow ? Ui.Bg : Ui.Card)) g.FillPath(b, path);
-                using (var p = new Pen(c.Alert ? Color.FromArgb(150, c.Tint) : hot ? Ui.Accent : Ui.Flow ? Ui.Line : Ui.Navy ? Ui.Mix(Ui.Line, Ui.Card, 0.4) : Ui.Line)) g.DrawPath(p, path);
-            }
-            int gd = Ui.S(26);
-            var gr = new Rectangle(r.X + Ui.S(6), r.Y + (r.Height - gd) / 2, gd, gd);
-            if (Ui.Flow)
-                using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 42 : 24, chipTint))) g.FillEllipse(b, gr);
-            TextRenderer.DrawText(g, c.Glyph, Ui.Icon(10.5f), gr, chipTint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            int tx = gr.Right + Ui.S(8), tw = Math.Max(1, r.Right - tx - Ui.S(10));
-            var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
-            if (compact)
-                TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y, tw, r.Height), Ui.Text, flags | TextFormatFlags.VerticalCenter);
-            else
-            {
-                TextRenderer.DrawText(g, c.Label, Ui.Small, new Rectangle(tx, r.Y + Ui.S(3), tw, Ui.S(15)), Ui.Muted, flags);
-                TextRenderer.DrawText(g, c.Value, Ui.Bold, new Rectangle(tx, r.Y + Ui.S(17), tw, Ui.S(18)), Ui.Text, flags);
-            }
-            if (c.Bar >= 0 && (c.Spark == null || c.Spark.Length < 2))
-            {
-                int bx = r.X + Ui.S(10), bwid = Math.Max(1, r.Width - Ui.S(20)), by = r.Bottom - Ui.S(4);
-                using (var b = new SolidBrush(Ui.Track)) g.FillRectangle(b, bx, by, bwid, Ui.S(2));
-                using (var b = new SolidBrush(c.Alert ? c.Tint : Ui.Flow ? chipTint : Ui.Accent)) g.FillRectangle(b, bx, by, (int)(bwid * Math.Min(1, c.Bar)), Ui.S(2));
-            }
+            if (ReferenceEquals(hover, c))
+                using (var b = new SolidBrush(Ui.HoverBg)) g.FillRectangle(b, r);
+            var flags = TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine
+                | TextFormatFlags.NoPadding | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
+            var label = new Rectangle(r.X, r.Y + Ui.S(1), r.Width, Ui.S(16));
+            var value = new Rectangle(r.X, label.Bottom, r.Width, Ui.S(18));
+            TextRenderer.DrawText(g, c.Label, Ui.Small, label, Ui.Muted, flags);
+            TextRenderer.DrawText(g, c.Value, Ui.Bold, value, c.Alert ? (c.Tint == Red ? Ui.Danger : Ui.Warning) : Ui.Text, flags);
         }
 
         void DrawPill(Graphics g, Rectangle r, Color fill, bool hot, string text, Font font)

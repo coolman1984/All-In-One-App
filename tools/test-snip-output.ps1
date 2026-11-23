@@ -50,5 +50,17 @@ try {
     $list = $panelType.GetField('list', $instance).GetValue($panel)
     Assert ($list.SelectionMode -eq [Windows.Forms.SelectionMode]::MultiExtended) 'Recent snips do not support multi-selection.'
     Assert (@($list.ContextMenuStrip.Items | Where-Object { $_.Text -eq 'Copy as path' }).Count -eq 1) 'Recent-snips Copy as path action is missing.'
+    $menus = @{}
+    foreach ($group in $panel.Controls) {
+        foreach ($action in $group.Controls) {
+            if ($action -is [Windows.Forms.Button] -and $action.ContextMenuStrip) {
+                $menus[$action.AccessibleName] = @($action.ContextMenuStrip.Items | Where-Object { $_ -is [Windows.Forms.ToolStripMenuItem] } | ForEach-Object { $_.Text })
+            }
+        }
+    }
+    foreach ($label in 'Window', 'Full screen', 'Fixed region', 'Scrolling window', 'Window control', 'Free-form', 'Repeat last capture') {
+        Assert ($label -in $menus['Capture mode']) "Capture menu lost $label."
+    }
+    Assert ($menus['Record'].Count -eq 3 -and $menus['Files'].Count -eq 2) 'Grouped capture actions are missing.'
 } finally { $panel.Dispose() }
 Write-Host 'SNIP OUTPUT OK: backward-compatible Image default, Box selected, editor and multi-select path actions'

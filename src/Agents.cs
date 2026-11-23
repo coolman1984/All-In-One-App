@@ -2787,13 +2787,9 @@ namespace StickyPro
                 if (x > Ui.S(10) && x + w > Width - Ui.S(10)) { x = Ui.S(10); y += Ui.S(28); }   // wrap: chips flow onto the next row
                 var r = new Rectangle(x, y, w, Ui.S(24));
                 bool isHot = hot == key;
-                using (var path = Ui.Round(r, Ui.S(12)))
-                {
-                    using (var b = new SolidBrush(isHot ? Ui.HoverBg : Ui.Card)) g.FillPath(b, path);
-                    using (var p = new Pen(isHot ? Ui.Accent : Ui.Line)) g.DrawPath(p, path);
-                }
+                if (isHot) using (var b = new SolidBrush(Ui.HoverBg)) g.FillRectangle(b, r);
                 int tx = r.X + Ui.S(9);
-                if (!dot.IsEmpty) { using (var b = new SolidBrush(dot)) g.FillEllipse(b, r.X + Ui.S(9), r.Y + Ui.S(8), Ui.S(8), Ui.S(8)); tx = r.X + Ui.S(22); }
+                if (!dot.IsEmpty) { using (var b = new SolidBrush(Ui.Muted)) g.FillEllipse(b, r.X + Ui.S(9), r.Y + Ui.S(10), Ui.S(5), Ui.S(5)); tx = r.X + Ui.S(22); }
                 else if (glyph != null) { TextRenderer.DrawText(g, glyph, Ui.Icon(9f), new Rectangle(r.X + Ui.S(6), r.Y, Ui.S(18), r.Height), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter); tx = r.X + Ui.S(24); }
                 TextRenderer.DrawText(g, text, Ui.Small, new Rectangle(tx, r.Y, r.Right - tx - Ui.S(6), r.Height), Ui.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
                 hots.Add(new Hot { R = r, Key = key });
@@ -2895,7 +2891,6 @@ namespace StickyPro
                 int n = 0, right = expR.X - Ui.S(8);
                 string sepText = c.Separate ? "Separate answers" : "Shared answers";
                 int sepW = TextRenderer.MeasureText(sepText, Ui.Small).Width + Ui.S(30);
-                int rowY = y;
                 if (c.Council)
                 {
                     foreach (var mb in c.Members)
@@ -2903,8 +2898,8 @@ namespace StickyPro
                         string label = (mb.Off ? "" : "✓ ") + mb.Label;
                         int w = Math.Min(Ui.S(260), TextRenderer.MeasureText(label, Ui.Small).Width + Ui.S(28));
                         if (x > Ui.S(54) && x + w > right) { x = Ui.S(54); y += Ui.S(28); }
-                        var r = new Rectangle(x, y, w, h); var col = AgentStore.ColorOf(mb.Agent);
-                        using (var p = Ui.Round(r, Ui.S(12))) { using (var b = new SolidBrush(mb.Off ? Ui.Bg : Color.FromArgb(Ui.Dark ? 70 : 40, col))) g.FillPath(b, p); using (var pen = new Pen(mb.Off ? Ui.Line : col)) g.DrawPath(pen, p); }
+                        var r = new Rectangle(x, y, w, h);
+                        DrawAnswerOption(g, r, !mb.Off, hot == "m:" + mb.Key);
                         TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(r.X + Ui.S(10), r.Y, r.Width - Ui.S(14), r.Height), mb.Off ? Ui.Muted : Ui.Text, flags);
                         hots.Add(new Hot { R = r, Key = "m:" + mb.Key });
                         x = r.Right + Ui.S(6);
@@ -2912,7 +2907,7 @@ namespace StickyPro
                     string rt = "Rounds: " + c.Rounds;
                     var rr = new Rectangle(x, y, TextRenderer.MeasureText(rt, Ui.Small).Width + Ui.S(20), h);
                     if (rr.Right > right) { x = Ui.S(54); y += Ui.S(28); rr.X = x; rr.Y = y; }
-                    using (var p = Ui.Round(rr, Ui.S(12))) { using (var b = new SolidBrush(hot == "rounds" ? Ui.HoverBg : Ui.Card)) g.FillPath(b, p); using (var pen = new Pen(Ui.Line)) g.DrawPath(pen, p); }
+                    using (var p = Ui.Round(rr, Ui.S(4))) { using (var b = new SolidBrush(hot == "rounds" ? Ui.HoverBg : Ui.Card)) g.FillPath(b, p); using (var pen = new Pen(Ui.Line)) g.DrawPath(pen, p); }
                     TextRenderer.DrawText(g, rt, Ui.Small, rr, Ui.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                     hots.Add(new Hot { R = rr, Key = "rounds" });
                     int needC = y + h + Ui.S(6);
@@ -2927,14 +2922,8 @@ namespace StickyPro
                     int w = Math.Min(Ui.S(170), TextRenderer.MeasureText(label, Ui.Small).Width + Ui.S(30));
                     if (x > Ui.S(54) && x + w > right) { x = Ui.S(54); y += Ui.S(28); }   // wrap
                     var r = new Rectangle(x, y, w, h);
-                    var col = AgentStore.ColorOf(a);
-                    using (var p = Ui.Round(r, Ui.S(12)))
-                    {
-                        using (var b = new SolidBrush(on ? Color.FromArgb(Ui.Dark ? 70 : 40, col) : Ui.Bg)) g.FillPath(b, p);
-                        using (var pen = new Pen(on ? col : (hot == "a:" + a ? Ui.Accent : Ui.Line), on ? 1.5f * Ui.Scale : 1f)) g.DrawPath(pen, p);
-                    }
-                    using (var b = new SolidBrush(on ? col : Ui.Muted)) g.FillEllipse(b, r.X + Ui.S(9), r.Y + Ui.S(8), Ui.S(8), Ui.S(8));
-                    TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(r.X + Ui.S(21), r.Y, r.Width - Ui.S(25), r.Height), on ? Ui.Text : Ui.Muted, flags);
+                    DrawAnswerOption(g, r, on, hot == "a:" + a);
+                    TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(r.X + Ui.S(10), r.Y, r.Width - Ui.S(16), r.Height), on ? Ui.Text : Ui.Muted, flags);
                     hots.Add(new Hot { R = r, Key = "a:" + a });
                     x = r.Right + Ui.S(6);
                 }
@@ -2942,17 +2931,18 @@ namespace StickyPro
                 {
                     if (x + Ui.S(4) + sepW > right) { x = Ui.S(50); y += Ui.S(28); }
                     var r = new Rectangle(x + Ui.S(4), y, sepW, h);
-                    using (var p = Ui.Round(r, Ui.S(12))) { using (var b = new SolidBrush(hot == "sep" ? Ui.HoverBg : Ui.Card)) g.FillPath(b, p); using (var pen = new Pen(Ui.Line)) g.DrawPath(pen, p); }
+                    using (var p = Ui.Round(r, Ui.S(4))) { using (var b = new SolidBrush(hot == "sep" ? Ui.HoverBg : Ui.Card)) g.FillPath(b, p); using (var pen = new Pen(Ui.Line)) g.DrawPath(pen, p); }
                     TextRenderer.DrawText(g, c.Separate ? "" : "", Ui.Icon(8.5f), new Rectangle(r.X + Ui.S(6), r.Y, Ui.S(16), r.Height), Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                     TextRenderer.DrawText(g, sepText, Ui.Small, new Rectangle(r.X + Ui.S(24), r.Y, r.Width - Ui.S(26), r.Height), Ui.Text, flags);
                     hots.Add(new Hot { R = r, Key = "sep" });
+                    x = r.Right + Ui.S(6);
                 }
                 {
                     string wt = c.Web ? "Web search: on" : "Web search";
                     int ww = TextRenderer.MeasureText(wt, Ui.Small).Width + Ui.S(30);
-                    if (x + Ui.S(8) + ww > right) { x = Ui.S(50); y += Ui.S(28); } else x += c.Agents.Count > 1 ? sepW + Ui.S(10) : Ui.S(4);
+                    if (x + Ui.S(8) + ww > right) { x = Ui.S(50); y += Ui.S(28); } else x += Ui.S(4);
                     var r = new Rectangle(x, y, ww, h);
-                    using (var p = Ui.Round(r, Ui.S(12))) { using (var b = new SolidBrush(c.Web ? Color.FromArgb(Ui.Dark ? 70 : 40, Ui.Accent) : (hot == "web" ? Ui.HoverBg : Ui.Card))) g.FillPath(b, p); using (var pen = new Pen(c.Web ? Ui.Accent : Ui.Line)) g.DrawPath(pen, p); }
+                    using (var p = Ui.Round(r, Ui.S(4))) { using (var b = new SolidBrush(c.Web ? Color.FromArgb(Ui.Dark ? 70 : 40, Ui.Accent) : (hot == "web" ? Ui.HoverBg : Ui.Card))) g.FillPath(b, p); using (var pen = new Pen(c.Web ? Ui.Accent : Ui.Line)) g.DrawPath(pen, p); }
                     TextRenderer.DrawText(g, "", Ui.Icon(8.5f), new Rectangle(r.X + Ui.S(6), r.Y, Ui.S(16), r.Height), c.Web ? Ui.Accent : Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                     TextRenderer.DrawText(g, wt, Ui.Small, new Rectangle(r.X + Ui.S(24), r.Y, r.Width - Ui.S(26), r.Height), Ui.Text, flags);
                     hots.Add(new Hot { R = r, Key = "web" });
@@ -2960,6 +2950,14 @@ namespace StickyPro
                 int need = y + h + Ui.S(6);
                 if (need != Height) BeginInvoke(new Action(() => { if (!IsDisposed) Height = need; }));
             }
+            static void DrawAnswerOption(Graphics g, Rectangle bounds, bool on, bool hot)
+            {
+                if (on || hot)
+                    using (var background = new SolidBrush(hot ? Ui.HoverBg : Ui.SelBg)) g.FillRectangle(background, bounds);
+                using (var line = new Pen(on ? Ui.Accent : Ui.Line))
+                    g.DrawLine(line, bounds.Left, bounds.Bottom - 1, bounds.Right - 1, bounds.Bottom - 1);
+            }
+
             string KeyAt(Point p) { var h = hots.LastOrDefault(x => x.R.Contains(p)); return h != null ? h.Key : null; }
             protected override void OnMouseMove(MouseEventArgs e)
             {
