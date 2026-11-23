@@ -21,8 +21,9 @@ namespace StickyPro
         public static void Open(Control from, Point screen)
         {
             if (current != null && !current.IsDisposed) { current.Close(); return; }
-            current = new LookPicker();
             var area = Screen.FromPoint(screen).WorkingArea;
+            current = new LookPicker();
+            current.LayoutPresets(area.Size);
             current.Location = new Point(Math.Max(area.Left, Math.Min(area.Right - current.Width, screen.X - current.Width / 2)), Math.Max(area.Top, Math.Min(area.Bottom - current.Height, screen.Y + Ui.S(6))));
             current.Show(from.FindForm());
         }
@@ -31,33 +32,23 @@ namespace StickyPro
         {
             FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; StartPosition = FormStartPosition.Manual; TopMost = true;
             DoubleBuffered = true; BackColor = Ui.Card; KeyPreview = true;
-            int tw = Ui.S(136), th = Ui.S(94), gap = Ui.S(10), pad = Ui.S(16), top = Ui.S(44);
-            for (int d = 0; d < Designs.Length; d++)
-                for (int dark = 0; dark < 2; dark++)
-                {
-                    string key = Designs[d][0];
-                    presets.Add(new Preset
-                    {
-                        Design = key, Name = Designs[d][1] + (dark == 1 ? " dark" : " light"), Dark = dark == 1,
-                        Theme = Ui.DefaultThemeFor(key),
-                        R = new Rectangle(pad + d * (tw + gap), top + dark * (th + Ui.S(30)), tw, th)
-                    });
-                }
-            int sy = top + 2 * (th + Ui.S(30)) + Ui.S(26), sz = Ui.S(26);
-            for (int i = 0; i < Ui.ThemeNames.Length; i++) swatches.Add(new KeyValuePair<int, Rectangle>(i, new Rectangle(pad + i * (sz + Ui.S(10)), sy, sz, sz)));
-            ClientSize = new Size(pad * 2 + Designs.Length * tw + (Designs.Length - 1) * gap, sy + sz + pad);
+            AutoScroll = true;
+            LayoutPresets(Screen.FromPoint(Cursor.Position).WorkingArea.Size);
+            Scroll += delegate { Invalidate(); };
             var tip = new ToolTip(); Disposed += delegate { tip.Dispose(); };
             MouseMove += (s, e) =>
             {
-                object h = presets.FirstOrDefault(p => p.R.Contains(e.Location));
-                if (h == null) { var sw = swatches.FirstOrDefault(x => x.Value.Contains(e.Location)); if (sw.Value.Width > 0) h = sw.Key; }
+                var at = ContentPoint(e.Location);
+                object h = presets.FirstOrDefault(p => PresetHit(p, at));
+                if (h == null) { var sw = swatches.FirstOrDefault(x => x.Value.Contains(at)); if (sw.Value.Width > 0) h = sw.Key; }
                 if (!Equals(h, hot)) { hot = h; Cursor = h != null ? Cursors.Hand : Cursors.Default; tip.SetToolTip(this, h is int ? Ui.ThemeNames[(int)h] : ""); Invalidate(); }
             };
             MouseLeave += delegate { hot = null; Invalidate(); };
             MouseClick += (s, e) =>
             {
-                var p = presets.FirstOrDefault(x => x.R.Contains(e.Location));
-                var sw = swatches.FirstOrDefault(x => x.Value.Contains(e.Location));
+                var at = ContentPoint(e.Location);
+                var p = presets.FirstOrDefault(x => PresetHit(x, at));
+                var sw = swatches.FirstOrDefault(x => x.Value.Contains(at));
                 if (p == null && sw.Value.Width == 0) return;
                 Close();
                 if (p != null) App.I.SetLook(p.Design, p.Theme, p.Dark);
@@ -66,6 +57,44 @@ namespace StickyPro
             KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) Close(); };
             Deactivate += delegate { if (!IsDisposed) Close(); };
             FormClosed += delegate { current = null; };
+        }
+
+        void LayoutPresets(Size available)
+        {
+            presets.Clear();
+            swatches.Clear();
+            int width = Ui.S(136), height = Ui.S(94), gap = Ui.S(10), pad = Ui.S(16), top = Ui.S(44);
+            int maxWidth = available.Width - SystemInformation.VerticalScrollBarWidth;
+            int columns = Math.Max(1, Math.Min(Designs.Length, (maxWidth - pad * 2 + gap) / (width + gap)));
+            int gridWidth = pad * 2 + columns * width + (columns - 1) * gap;
+            int rowHeight = height + Ui.S(32);
+            for (int d = 0; d < Designs.Length; d++)
+                for (int dark = 0; dark < 2; dark++)
+                {
+                    string key = Designs[d][0];
+                    presets.Add(new Preset
+                    {
+                        Design = key, Name = Designs[d][1] + (dark == 1 ? " dark" : " light"), Dark = dark == 1,
+                        Theme = Ui.DefaultThemeFor(key),
+                        R = new Rectangle(pad + (d % columns) * (width + gap), top + (d / columns * 2 + dark) * rowHeight, width, height)
+                    });
+                }
+            int swatchTop = top + ((Designs.Length + columns - 1) / columns) * 2 * rowHeight + Ui.S(25);
+            int swatchSize = Ui.S(26), swatchStep = swatchSize + gap;
+            int swatchColumns = Math.Max(1, (gridWidth - pad * 2 + gap) / swatchStep);
+            for (int i = 0; i < Ui.ThemeNames.Length; i++)
+                swatches.Add(new KeyValuePair<int, Rectangle>(i,
+                    new Rectangle(pad + i % swatchColumns * swatchStep, swatchTop + i / swatchColumns * swatchStep, swatchSize, swatchSize)));
+            int contentHeight = swatches.Last().Value.Bottom + pad;
+            ClientSize = new Size(Math.Min(available.Width, gridWidth + (contentHeight > available.Height ? SystemInformation.VerticalScrollBarWidth : 0)),
+                Math.Min(available.Height, contentHeight));
+            AutoScrollMinSize = new Size(gridWidth, contentHeight);
+        }
+
+        Point ContentPoint(Point point) { return new Point(point.X - AutoScrollPosition.X, point.Y - AutoScrollPosition.Y); }
+        static bool PresetHit(Preset preset, Point point)
+        {
+            return Rectangle.FromLTRB(preset.R.Left, preset.R.Top, preset.R.Right, preset.R.Bottom + Ui.S(27)).Contains(point);
         }
 
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ClassStyle |= 0x20000; /* CS_DROPSHADOW */ return cp; } }
@@ -87,8 +116,10 @@ namespace StickyPro
         {
             var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
             using (var p = new Pen(Ui.Line)) g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
-            TextRenderer.DrawText(g, "Look", Ui.Bold, new Point(Ui.S(16), Ui.S(14)), Ui.Text);
-            TextRenderer.DrawText(g, "One click switches. Esc closes.", Ui.Small, new Point(Ui.S(64), Ui.S(17)), Ui.Muted);
+            var scroll = AutoScrollPosition;
+            g.TranslateTransform(scroll.X, scroll.Y);
+            TextRenderer.DrawText(g, "Appearance", Ui.Bold, new Point(Ui.S(16), Ui.S(14)), Ui.Text,
+                TextFormatFlags.PreserveGraphicsTranslateTransform);
             foreach (var p in presets)
             {
                 var c = Read(p.Design, p.Theme, p.Dark);
@@ -137,9 +168,11 @@ namespace StickyPro
                     }
                     using (var pen = new Pen(now ? Ui.Accent : ReferenceEquals(hot, p) ? Ui.Mix(Ui.Line, Ui.Accent, 0.6) : Ui.Line, now ? Ui.S(2) : 1)) g.DrawPath(pen, path);
                 }
-                TextRenderer.DrawText(g, p.Name + (now ? "  (current)" : ""), now ? Ui.Bold : Ui.Base, new Point(r.X, r.Bottom + Ui.S(6)), now ? Ui.Accent : Ui.Text);
+                TextRenderer.DrawText(g, p.Name, now ? Ui.Bold : Ui.Base,
+                    new Rectangle(r.X, r.Bottom + Ui.S(6), r.Width, Ui.S(22)), now ? Ui.Accent : Ui.Text,
+                    TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis | TextFormatFlags.PreserveGraphicsTranslateTransform);
             }
-            if (swatches.Count > 0) TextRenderer.DrawText(g, "Accent colour", Ui.Small, new Point(swatches[0].Value.X, swatches[0].Value.Y - Ui.S(20)), Ui.Muted);
+            if (swatches.Count > 0) TextRenderer.DrawText(g, "Accent colour", Ui.Small, new Point(swatches[0].Value.X, swatches[0].Value.Y - Ui.S(20)), Ui.Muted, TextFormatFlags.PreserveGraphicsTranslateTransform);
             foreach (var sw in swatches)
             {
                 bool now = Store.Settings.Theme == sw.Key && string.IsNullOrEmpty(Store.Settings.AccentColor);
