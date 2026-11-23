@@ -585,8 +585,8 @@ namespace StickyPro
         {
             Dock = DockStyle.Fill; Visible = false;
             host = new Panel { Dock = DockStyle.Fill }; Controls.Add(host);
-            tabs = new TabStrip();
-            tabs.Add("App shortcuts (global)"); tabs.Add("My launch shortcuts"); tabs.Add("Keys inside the app"); tabs.Add("Windows shortcuts");
+            tabs = new TabStrip { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true };
+            tabs.Add("Global shortcuts"); tabs.Add("My launchers"); tabs.Add("In this app"); tabs.Add("Windows");
             tabs.Changed += i =>
             {
                 if (views[i] == null) { views[i] = i == 0 ? AppKeys() : i == 1 ? Launchers() : i == 2 ? Reference(InApp) : Reference(WindowsKeys); views[i].Dock = DockStyle.Fill; host.Controls.Add(views[i]); Ui.Theme(views[i]); }
@@ -603,23 +603,37 @@ namespace StickyPro
         Control AppKeys()
         {
             var p = new Panel();
-            // Constrained to a sensible width: the table does not stretch across a wide window.
-            var t = new TableLayoutPanel { Dock = DockStyle.Left, ColumnCount = 3, AutoScroll = true, Padding = new Padding(Ui.S(8)), Width = Ui.S(320 + 200 + 190 + 16 + 24) };
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(320))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(200))); t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Ui.S(190)));
+            var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, AutoScroll = true, Padding = new Padding(Ui.S(8)), MaximumSize = Ui.S(760, 0) };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26));
             var boxes = new Dictionary<string, HotkeyBox>();
             t.SuspendLayout();   // one layout pass for the whole table, not one per row
             foreach (var a in Hotkeys.Actions)
             {
                 var l = new Label { Text = a[1], AutoSize = true, Margin = new Padding(0, Ui.S(8), Ui.S(8), 0) };
-                var hb = new HotkeyBox { Text = Hotkeys.Get(a[0]), Width = Ui.S(190), Margin = new Padding(0, Ui.S(3), 0, Ui.S(3)) };
+                var hb = new HotkeyBox { Text = Hotkeys.Get(a[0]), Dock = DockStyle.Fill, AccessibleName = a[1], Margin = new Padding(0, Ui.S(3), 0, Ui.S(3)) };
                 boxes[a[0]] = hb;
                 var d = new Label { Text = "default " + a[2], AutoSize = true, ForeColor = Ui.Muted, Font = Ui.Small, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0) };
                 t.Controls.Add(l); t.Controls.Add(hb); t.Controls.Add(d);
             }
             t.ResumeLayout();
+            EventHandler fit = delegate
+            {
+                int width = Math.Max(1, t.ClientSize.Width - t.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth);
+                t.SuspendLayout();
+                try
+                {
+                    foreach (Label label in t.Controls.OfType<Label>())
+                        label.MaximumSize = new Size(Math.Max(1, width * (t.GetColumn(label) == 0 ? 44 : 26) / 100 - label.Margin.Horizontal), 0);
+                }
+                finally { t.ResumeLayout(); }
+            };
+            t.ClientSizeChanged += fit;
+            fit(t, EventArgs.Empty);
             p.Controls.Add(t);
             var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, Ui.S(4), 0, Ui.S(4)) };
-            var status = new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0), Text = "Click a box and press the keys. Backspace turns a shortcut off." };
+            var status = new WrapLabel { ForeColor = Ui.Muted, Margin = new Padding(Ui.S(8), Ui.S(9), 0, 0), Text = "Backspace clears a shortcut." };
             bar.Controls.Add(Ui.Btn("Save shortcuts", delegate
             {
                 var seen = new Dictionary<string, string>();

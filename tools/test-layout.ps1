@@ -47,10 +47,17 @@ try {
         $main.MaximumSize = [Drawing.Size]::Empty
         $main.Size = New-Object Drawing.Size($width, 900)
         if ($main.Width -ne $width) { throw "Main window cannot reflow at $width px." }
-        foreach ($page in @('dashboard', 'notes', 'prompts', 'clips', 'system', 'cards', 'snip', 'activity', 'tagged')) {
+        foreach ($page in @('dashboard', 'tasks', 'notes', 'prompts', 'clips', 'system', 'cards', 'snip', 'activity', 'tagged', 'shortcuts')) {
             $main.ShowPage($page)
             Layout-All $main
             Check-Actions $main ("Main/$page/$width")
+        }
+        $shortcuts = $main.GetType().GetField('loadedPages', $instance).GetValue($main)['shortcuts']
+        $tabBar = $shortcuts.GetType().GetField('tabs', $instance).GetValue($shortcuts)
+        foreach ($tab in $tabBar.Controls) {
+            if (-not $tab.TabStop -or $tab.Right -gt $tabBar.ClientSize.Width + 2 -or $tab.Bottom -gt $tabBar.ClientSize.Height + 2) {
+                throw "Shortcut tab is inaccessible or clipped at ${width}px: $($tab.Text)."
+            }
         }
     }
     if ($main.Visible) { throw 'Layout test displayed a window.' }

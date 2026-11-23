@@ -212,6 +212,29 @@ namespace StickyPro
     // Simple tab strip: underlined labels.
     class TabStrip : FlowLayoutPanel
     {
+        sealed class TabLabel : Label
+        {
+            public TabLabel()
+            {
+                SetStyle(ControlStyles.Selectable, true);
+                TabStop = true;
+                AccessibleRole = AccessibleRole.PageTab;
+            }
+
+            protected override void OnKeyDown(KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space)
+                {
+                    OnClick(EventArgs.Empty);
+                    e.SuppressKeyPress = true;
+                }
+                base.OnKeyDown(e);
+            }
+
+            protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+            protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+        }
+
         readonly List<Label> tabs = new List<Label>();
         public int Selected = -1;
         public event Action<int> Changed;
@@ -226,7 +249,7 @@ namespace StickyPro
 
         public void Add(string text)
         {
-            var l = new Label();
+            var l = new TabLabel();
             l.Text = text;
             l.UseMnemonic = false;
             l.AutoSize = true;
@@ -239,6 +262,8 @@ namespace StickyPro
             {
                 if (tabs.IndexOf(l) == Selected)
                     using (var b = new SolidBrush(Ui.Accent)) e.Graphics.FillRectangle(b, Ui.S(8), l.Height - Ui.S(3), l.Width - Ui.S(16), Ui.S(3));
+                if (l.Focused)
+                    ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(l.ClientRectangle, -Ui.S(3), -Ui.S(3)), Ui.Text, l.BackColor);
             };
             tabs.Add(l);
             Controls.Add(l);

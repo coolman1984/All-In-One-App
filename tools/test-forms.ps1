@@ -60,6 +60,29 @@ try {
     }
 } finally { $event.RemoveEventHandler($null, $handler); $page.Dispose() }
 
+$taskPage = [Activator]::CreateInstance($assembly.GetType('StickyPro.TasksPage'))
+try {
+    $type = $taskPage.GetType()
+    $cards = $type.GetField('cards', $instance).GetValue($taskPage)
+    $detail = $type.GetField('detail', $instance).GetValue($taskPage)
+    $multi = $type.GetField('multi', $instance).GetValue($taskPage)
+    $taskPage.Size = [Drawing.Size]::new(680, 570)
+    $taskPage.Visible = $true
+    $taskPage.CreateControl()
+    Assert (-not $detail.Visible) 'An empty task detail pane takes space away from the task list.'
+    foreach ($title in @('First task', 'Second task')) {
+        $entry = [Activator]::CreateInstance($assembly.GetType('StickyPro.TaskItem'))
+        $entry.Title = $title
+        [void]$cards.Items.Add($entry)
+    }
+    $cards.SetSelected(0, $true)
+    Assert ($detail.Visible) 'Selecting a task did not open its detail.'
+    $cards.SetSelected(1, $true)
+    Assert ($multi.Visible -and $multi.Enabled) 'Multi-selection task actions are unavailable.'
+    $cards.ClearSelected()
+    Assert (-not $detail.Visible) 'Clearing the selection did not release the task list space.'
+} finally { $taskPage.Dispose() }
+
 $definition = [Activator]::CreateInstance($assembly.GetType('StickyPro.CardDef'))
 $definition.Id = 'card-fixture'; $definition.W = 600; $definition.H = 500; $definition.X = 100; $definition.Y = 100
 $definition.Features.Add('notes'); $definition.Active = 'notes'
@@ -92,6 +115,8 @@ foreach ($scale in @([single]1, [single]1.5)) {
         $settings.PerformLayout()
         $table = $settings.Controls | Where-Object { $_ -is [Windows.Forms.TableLayoutPanel] } | Select-Object -First 1
         $table.PerformLayout()
+        $jump = $settings.Controls | ForEach-Object { $_.Controls } | Where-Object { $_.AccessibleName -eq 'Settings section' }
+        Assert ($jump.Items.Count -eq 8 -and $jump.Items[7] -eq 'Shortcuts') "Settings section navigation is incomplete at scale $scale."
         $awake = $settingsType.GetField('keepAwake', $instance).GetValue($settings)
         $checkSize = $awake.GetPreferredSize([Drawing.Size]::new($awake.Width, 0))
         Assert ($awake.Right -le $table.ClientSize.Width -and $awake.Height -ge $checkSize.Height) "Awake text clips at scale $scale."
