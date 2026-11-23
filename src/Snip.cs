@@ -1409,6 +1409,7 @@ $stream.Dispose()
         readonly ComboBox delay;
         readonly CheckBox micBox;
         readonly CardGrid list;
+        readonly Label empty;
         readonly Action<string> status;
         readonly Action onChanged;
         readonly Dictionary<string, Image> thumbs = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
@@ -1446,45 +1447,66 @@ $stream.Dispose()
             Ui.ThemeMenu(m);
             list.ContextMenuStrip = m;
             Controls.Add(list);
+            empty = new Label
+            {
+                Text = "Your screenshots and recordings will appear here.", Dock = DockStyle.Fill,
+                Font = Ui.Base, ForeColor = Ui.Muted, Padding = new Padding(0, Ui.S(12), 0, 0)
+            };
+            Controls.Add(empty);
 
-            var rec = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = Ui.S(0, 40), WrapContents = true };
-            rec.Controls.Add(Ui.Btn("●  Record area", delegate { App.I.StartRecord("rect"); }));
-            rec.Controls.Add(Ui.Btn("Record window", delegate { App.I.StartRecord("window"); }));
-            rec.Controls.Add(Ui.Btn("Record full screen", delegate { App.I.StartRecord("full"); }));
-            micBox = new CheckBox { Text = "Microphone", AutoSize = true, Checked = Store.Settings.RecordMic, Margin = new Padding(Ui.S(6), Ui.S(7), 0, 0) };
-            micBox.CheckedChanged += delegate { Store.Settings.RecordMic = micBox.Checked; Store.MarkSettings(); };
-            rec.Controls.Add(micBox);
-            Controls.Add(rec);
 
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 0, 0, Ui.S(4)) };
-            bar.Controls.Add(Ui.Btn("+  New snip", delegate { App.I.StartSnip("rect", Delay(), false); }, true));
-            bar.Controls.Add(Ui.Btn("Window", delegate { App.I.StartSnip("window", Delay(), false); }));
-            bar.Controls.Add(Ui.Btn("Full screen", delegate { App.I.StartSnip("full", Delay(), false); }));
-            bar.Controls.Add(Ui.Btn("Fixed Region", delegate { App.I.StartSnip("fixed", Delay(), false); }));
-            bar.Controls.Add(Ui.Btn("Fixed size...", delegate { CaptureCommands.FixedSize(true); }));
-            bar.Controls.Add(Ui.Btn("Scrolling Window", delegate { App.I.StartSnip("scroll", Delay(), false); }));
-            bar.Controls.Add(Ui.Btn("Window Control", delegate { App.I.StartSnip("control", Delay(), false); }));
-            bar.Controls.Add(Ui.Btn("Repeat Last Capture", delegate { App.I.StartSnip("repeat", 0, false); }));
-            bar.Controls.Add(Ui.Btn("Free-form", delegate { App.I.StartSnip("free", Delay(), false); }));
-            bar.Controls.Add(Ui.Btn("Text from screen", delegate { App.I.StartSnip("rect", Delay(), true); }));
-            delay = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(100), Margin = new Padding(0, Ui.S(4), Ui.S(6), 0) };
+            var recent = new Label
+            {
+                Text = "Recent captures", Dock = DockStyle.Top, Height = Ui.S(34), Font = Ui.Bold,
+                ForeColor = Ui.Text, TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false
+            };
+            Controls.Add(recent);
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(0, 0, 0, Ui.S(8)) };
+            bar.Controls.Add(Ui.Btn("New snip", delegate { App.I.StartSnip("rect", Delay(), false); }, true));
+            var capture = Ui.Menu();
+            foreach (var mode in new[] { new[] { "Window", "window" }, new[] { "Full screen", "full" },
+                new[] { "Fixed region", "fixed" }, new[] { "Scrolling window", "scroll" }, new[] { "Window control", "control" },
+                new[] { "Free-form", "free" } })
+            {
+                string key = mode[1];
+                capture.Items.Add(mode[0], null, delegate { App.I.StartSnip(key, Delay(), false); });
+            }
+            capture.Items.Add(new ToolStripSeparator());
+            capture.Items.Add("Set fixed size…", null, delegate { CaptureCommands.FixedSize(true); });
+            capture.Items.Add("Repeat last capture", null, delegate { App.I.StartSnip("repeat", 0, false); });
+            bar.Controls.Add(MenuButton("Capture mode", capture));
+            delay = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.S(100), Margin = new Padding(0, Ui.S(4), Ui.S(6), 0), AccessibleName = "Capture delay" };
             delay.Items.AddRange(new object[] { "No delay", "3 s delay", "5 s delay", "10 s delay" });
             delay.SelectedIndex = 0;
             bar.Controls.Add(delay);
-            bar.Controls.Add(Ui.Btn("Folder", delegate { try { Process.Start("explorer.exe", "\"" + Shot.SnipFolder + "\""); } catch { } }));
-            bar.Controls.Add(Ui.Btn("PWSH here", delegate { Term.Open(Shot.SnipFolder, ""); }));
-            Controls.Add(bar);
+            bar.Controls.Add(Ui.Btn("Text from screen", delegate { App.I.StartSnip("rect", Delay(), true); }));
 
-            var hint = new WrapLabel
-            {
-                Dock = DockStyle.Top, Height = Ui.S(22), Font = Ui.Small, ForeColor = Ui.Muted,
-                Text = Hotkeys.Get("snip") + " snip  ·  " + Hotkeys.Get("ocr") + " copy text from screen  ·  " + Hotkeys.Get("record") + " start / stop recording  ·  Recent snips and recordings:"
-            };
-            Controls.Add(hint);
+            var recording = Ui.Menu();
+            recording.Items.Add("Record area", null, delegate { App.I.StartRecord("rect"); });
+            recording.Items.Add("Record window", null, delegate { App.I.StartRecord("window"); });
+            recording.Items.Add("Record full screen", null, delegate { App.I.StartRecord("full"); });
+            bar.Controls.Add(MenuButton("Record", recording));
+            micBox = new CheckBox { Text = "Microphone", AutoSize = true, Checked = Store.Settings.RecordMic, Margin = new Padding(Ui.S(6), Ui.S(7), Ui.S(12), 0) };
+            micBox.CheckedChanged += delegate { Store.Settings.RecordMic = micBox.Checked; Store.MarkSettings(); };
+            bar.Controls.Add(micBox);
+            var files = Ui.Menu();
+            files.Items.Add("Open capture folder", null, delegate { try { Process.Start("explorer.exe", "\"" + Shot.SnipFolder + "\""); } catch { } });
+            files.Items.Add("PowerShell in capture folder", null, delegate { Term.Open(Shot.SnipFolder, ""); });
+            bar.Controls.Add(MenuButton("Files", files));
+            Controls.Add(bar);
 
             onChanged = () => { if (Live) Fill(); else stale = true; };
             Changed += onChanged;
             Ui.Theme(this);
+        }
+
+        static Button MenuButton(string text, ContextMenuStrip menu)
+        {
+            var button = Ui.Btn(text + "  ▾", null);
+            button.AccessibleName = text;
+            button.ContextMenuStrip = menu;
+            button.Click += delegate { menu.Show(button, new Point(0, button.Height)); };
+            return button;
         }
 
         int Delay() { return new[] { 0, 3, 5, 10 }[Math.Max(0, delay.SelectedIndex)]; }
@@ -1578,6 +1600,8 @@ $stream.Dispose()
             }
             var recent = files.GroupBy(f => f.FullName, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderByDescending(f => f.LastWriteTime).Take(80).ToList();
             list.SetItems(recent.Cast<object>());
+            empty.Visible = recent.Count == 0;
+            list.Visible = recent.Count > 0;
             if (selected != null) list.SelectedItem = recent.FirstOrDefault(f => string.Equals(f.FullName, selected.FullName, StringComparison.OrdinalIgnoreCase));
         }
 

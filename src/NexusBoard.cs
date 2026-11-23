@@ -192,54 +192,38 @@ namespace StickyPro
             if (btnNew.Width > 0) hots.Add(new Hot { R = btnNew, Key = "new", Run = () => QuickTaskForm.Open() });
             int y = header.Bottom + Ui.S(10);
 
-            // Keep daily activity and task counts together.
-            int kCols = w >= Ui.S(760) ? 4 : 2;
-            int kRows = 4 / kCols;
-            int kh = Ui.S(78);
-            int kw = (w - gap * (kCols - 1)) / kCols;
-            string[] kPages = { "tasks", "tasks", "clips", "activity" };
-            for (int i = 0; i < 4; i++)
+            weekCard = new Rectangle(0, y, w, Ui.S(280));
+            y = weekCard.Bottom + gap;
+            hots.Add(new Hot { R = LinkRect(weekCard, "Open tasks"), Key = "tasksall", Run = () => App.I.ShowMain("tasks") });
+
+            int columns = w >= Ui.S(560) ? 4 : 2;
+            int rowHeight = Ui.S(72);
+            string[] pages = { "tasks", "tasks", "clips", "activity" };
+            for (int i = 0; i < kpiCards.Length; i++)
             {
-                int col = i % kCols, row = i / kCols;
-                int x = col * (kw + gap);
-                int cardW = col == kCols - 1 ? w - x : kw;
-                kpiCards[i] = new Rectangle(x, y + row * (kh + gap), cardW, kh);
-                string page = kPages[i];
+                int col = i % columns, row = i / columns;
+                int left = col * w / columns, right = (col + 1) * w / columns;
+                kpiCards[i] = new Rectangle(left, y + row * rowHeight, right - left, rowHeight);
+                string page = pages[i];
                 hots.Add(new Hot { R = kpiCards[i], Key = "kpi" + i, Run = () => App.I.ShowMain(page) });
             }
-            y += kRows * kh + (kRows - 1) * gap + gap;
+            y += kpiCards.Length / columns * rowHeight + gap;
 
-            // Row 2: 3-Column Analytics Row (Storage Progress | Tasks Overview Donut | This Week)
-            int r2h = Ui.S(306);
-            if (w >= Ui.S(1020))
+            int storageHeight = Ui.S(80 + 54 * 4);
+            int storageWidth = w >= Ui.S(680) ? (w - gap) * 58 / 100 : w;
+            storage = new Rectangle(0, y, storageWidth, storageHeight);
+            if (storageWidth == w)
             {
-                int w1 = (w - 2 * gap) * 38 / 100;
-                int w2 = (w - 2 * gap) * 27 / 100;
-                int w3 = w - 2 * gap - w1 - w2;
-                storage = new Rectangle(0, y, w1, r2h);
-                donut = new Rectangle(storage.Right + gap, y, w2, r2h);
-                weekCard = new Rectangle(donut.Right + gap, y, w3, r2h);
-                y = storage.Bottom + gap;
-            }
-            else if (w >= Ui.S(680))
-            {
-                int w1 = (w - gap) * 56 / 100;
-                int w2 = w - gap - w1;
-                storage = new Rectangle(0, y, w1, r2h);
-                donut = new Rectangle(storage.Right + gap, y, w2, r2h);
-                y = storage.Bottom + gap;
-                weekCard = new Rectangle(0, y, w, Ui.S(254));
-                y = weekCard.Bottom + gap;
+                donut = new Rectangle(0, storage.Bottom + gap, w, Ui.S(210));
+                y = donut.Bottom + gap;
             }
             else
             {
-                storage = new Rectangle(0, y, w, r2h); y = storage.Bottom + gap;
-                donut = new Rectangle(0, y, w, Ui.S(270)); y = donut.Bottom + gap;
-                weekCard = new Rectangle(0, y, w, Ui.S(264)); y = weekCard.Bottom + gap;
+                donut = new Rectangle(storage.Right + gap, y, w - storageWidth - gap, storageHeight);
+                y = storage.Bottom + gap;
             }
-            hots.Add(new Hot { R = LinkRect(storage, "View All"), Key = "storageall", Run = () => App.I.ShowMain("system:drives") });
+            hots.Add(new Hot { R = LinkRect(storage, "Drives & cleanup"), Key = "storageall", Run = () => App.I.ShowMain("system:drives") });
             hots.Add(new Hot { R = new Rectangle(donut.X, donut.Y, donut.Width, Ui.S(54)), Key = "donuthead", Run = () => App.I.ShowMain("tasks") });
-            hots.Add(new Hot { R = LinkRect(weekCard, "View All"), Key = "tasksall", Run = () => App.I.ShowMain("tasks") });
 
             int wy = weekCard.Y + Ui.S(128), wrh = Ui.S(46);
             for (int i = 0; i < 3 && wy + wrh <= weekCard.Bottom - Ui.S(10); i++, wy += wrh)
@@ -490,7 +474,7 @@ namespace StickyPro
             if (btnNew.Width > 0)
             {
                 var r = btnNew;
-                using (var path = Ui.Round(r, Ui.S(10))) using (var b = new SolidBrush(IsHot("new") ? Ui.AccentHover : Ui.AccentFill)) g.FillPath(b, path);
+                using (var path = Ui.Round(r, Ui.S(4))) using (var b = new SolidBrush(IsHot("new") ? Ui.AccentHover : Ui.AccentFill)) g.FillPath(b, path);
                 BtnText(g, r, "\uE710", "New task", Color.White);
             }
             RoundButton(g, bell, "\uEA8F", "bell");
@@ -507,7 +491,12 @@ namespace StickyPro
         void KpiCardFlow(Graphics g, int i)
         {
             var r = kpiCards[i];
-            Card(g, r, IsHot("kpi" + i));
+            using (var fill = new SolidBrush(IsHot("kpi" + i) ? Ui.HoverBg : Ui.Card)) g.FillRectangle(fill, r);
+            using (var line = new Pen(Ui.Line))
+            {
+                g.DrawLine(line, r.Left, r.Top, r.Right, r.Top);
+                if (r.Right < header.Right) g.DrawLine(line, r.Right, r.Top + Ui.S(12), r.Right, r.Bottom - Ui.S(12));
+            }
 
             string label, value, detail;
             if (i == 0)
@@ -536,15 +525,15 @@ namespace StickyPro
             TextRenderer.DrawText(g, label, Ui.Small, new Rectangle(r.X + inset, r.Y + Ui.S(9), width, Ui.S(18)), Ui.Muted, L);
             TextRenderer.DrawText(g, value, Ui.Kpi, new Rectangle(r.X + inset, r.Y + Ui.S(26), width, Ui.S(29)), Ui.Text, L);
             if (detail.Length > 0)
-                TextRenderer.DrawText(g, detail, Ui.Small, new Rectangle(r.X + inset, r.Y + Ui.S(56), width, Ui.S(16)), i == 3 && todayValue[3] > 0 ? Ui.Danger : Ui.Muted, L);
+                TextRenderer.DrawText(g, detail, Ui.Small, new Rectangle(r.X + inset, r.Y + Ui.S(54), width, Ui.S(16)), i == 3 && todayValue[3] > 0 ? Ui.Danger : Ui.Muted, L);
         }
 
         void StorageFlow(Graphics g)
         {
             var c = storage;
             Card(g, c);
-            Title(g, c, "Storage", null, LinkRect(c, "View All").Width);
-            Link(g, c, "View All", "storageall");
+            Title(g, c, "Storage", null, LinkRect(c, "Drives & cleanup").Width);
+            Link(g, c, "Drives & cleanup", "storageall");
             if (drives.Count == 0)
             {
                 TextRenderer.DrawText(g, "No fixed drives found", Ui.Base, new Rectangle(c.X + Ui.S(20), c.Y + Ui.S(64), Math.Max(1, c.Width - Ui.S(40)), Ui.S(28)), Ui.Muted, L);
@@ -560,9 +549,7 @@ namespace StickyPro
                 Color accent = Usage(d.Used);
                 int ib = Ui.S(34);
                 var ir = new Rectangle(x, y + Ui.S(6), ib, ib);
-                using (var path = Ui.Round(ir, Ui.S(9)))
-                using (var b = new SolidBrush(Color.FromArgb(Ui.Dark ? 44 : 28, accent))) g.FillPath(b, path);
-                TextRenderer.DrawText(g, "\uEDA2", Ui.Icon(12f), ir, accent, C);
+                TextRenderer.DrawText(g, "\uEDA2", Ui.Icon(12f), ir, Ui.Muted, C);
 
                 int pct = (int)Math.Round(Math.Max(0, Math.Min(1, d.Used)) * 100);
                 string pctStr = pct + "%";
@@ -634,9 +621,10 @@ namespace StickyPro
         void WeekFlow(Graphics g)
         {
             var c = weekCard;
-            Card(g, c);
-            Title(g, c, "This Week", null, LinkRect(c, "View All").Width);
-            Link(g, c, "View All", "tasksall");
+            using (var fill = new SolidBrush(Ui.Card)) g.FillRectangle(fill, c);
+            using (var rule = new Pen(Ui.Line)) g.DrawLine(rule, c.Left, c.Top, c.Right, c.Top);
+            Title(g, c, "Upcoming tasks", null, LinkRect(c, "Open tasks").Width);
+            Link(g, c, "Open tasks", "tasksall");
 
             // 7-day strip (Mon..Sun)
             var todayDate = DateTime.Today;
@@ -654,10 +642,10 @@ namespace StickyPro
                 TextRenderer.DrawText(g, days[d], Ui.Small, new Rectangle(sx + d * colW, stripY, colW, Ui.S(16)), isToday ? Ui.Accent : Ui.Muted, C);
                 int cd = Ui.S(28);
                 var cr = new Rectangle(cx - cd / 2, stripY + Ui.S(20), cd, cd);
-                if (isToday) using (var b = new SolidBrush(Ui.AccentFill)) g.FillEllipse(b, cr);
-                TextRenderer.DrawText(g, dt.Day.ToString(), isToday ? Ui.Bold : Ui.Base, cr, isToday ? Color.White : Ui.Text, C);
+                if (isToday) using (var b = new SolidBrush(Ui.SelBg)) g.FillRectangle(b, cr);
+                TextRenderer.DrawText(g, dt.Day.ToString(), isToday ? Ui.Bold : Ui.Base, cr, isToday ? Ui.Accent : Ui.Text, C);
                 if (weekHasTask[d])
-                    using (var b = new SolidBrush(isToday ? FlowAmber : Ui.Accent)) g.FillEllipse(b, cx - Ui.S(2), cr.Bottom + Ui.S(4), Ui.S(5), Ui.S(5));
+                    using (var b = new SolidBrush(Ui.Accent)) g.FillEllipse(b, cx - Ui.S(2), cr.Bottom + Ui.S(4), Ui.S(5), Ui.S(5));
             }
             using (var p = new Pen(Ui.Line)) g.DrawLine(p, c.X + Ui.S(18), c.Y + Ui.S(116), c.Right - Ui.S(18), c.Y + Ui.S(116));
 
@@ -672,8 +660,8 @@ namespace StickyPro
                 var t = upNext[i]; var r = taskRows[i];
                 if (IsHot("task" + i)) using (var path = Ui.Round(r, Ui.S(9))) using (var b = new SolidBrush(Ui.HoverBg)) g.FillPath(b, path);
                 bool late = TaskParse.Overdue(t);
-                Color dotCol = late ? FlowRed : t.Priority == 2 ? FlowAmber : i == 0 ? Ui.AccentFill : FlowGreen;
-                using (var b = new SolidBrush(dotCol)) g.FillEllipse(b, r.X + Ui.S(6), r.Y + Ui.S(14), Ui.S(8), Ui.S(8));
+                if (late || t.Priority == 2)
+                    using (var b = new SolidBrush(late ? Ui.Danger : Ui.Warning)) g.FillRectangle(b, r.X + Ui.S(6), r.Y + Ui.S(11), Ui.S(2), Ui.S(16));
                 string due = t.Due > 0 ? TaskParse.DueText(t) : t.List;
                 int dw = Math.Min(r.Width / 3, TextRenderer.MeasureText(due, Ui.Small).Width + Ui.S(8));
                 int tx = r.X + Ui.S(22), tw = Math.Max(1, r.Right - Ui.S(8) - dw - Ui.S(6) - tx);

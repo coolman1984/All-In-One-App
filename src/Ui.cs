@@ -1061,14 +1061,16 @@ namespace StickyPro
             g.Clear(Parent == null ? Ui.Bg : Parent.BackColor);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var under = Parent == null ? Ui.Bg : Parent.BackColor;
-            Color fill = !Enabled ? Ui.Mix(under, Ui.Text, 0.03)
+            Color fill = !Enabled ? under
                 : Primary ? (pressed ? Ui.AccentPressed : hover ? Ui.AccentHover : Ui.AccentFill)
-                : Ui.Mix(under, Ui.Text, pressed ? 0.15 : hover ? 0.10 : Ui.Dark ? 0.07 : 0.055);   // soft secondary button
+                : pressed ? Ui.PressBg : hover ? Ui.HoverBg : under;
             var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            using (var path = Ui.Round(r, Ui.S(Ui.Radius)))
+            using (var path = Ui.Round(r, Ui.S(4)))
             {
                 using (var b = new SolidBrush(fill)) g.FillPath(b, path);
-                if ((Focused && ShowFocusCues) || defaultButton) using (var p = new Pen(Ui.Accent)) g.DrawPath(p, path);
+                if ((Focused && ShowFocusCues) || defaultButton || !Primary)
+                    using (var pen = new Pen((Focused && ShowFocusCues) || defaultButton ? Ui.Accent : Ui.Line))
+                        g.DrawPath(pen, path);
             }
             var textRect = Rectangle.Inflate(ClientRectangle, -Ui.S(Ui.Space), -Ui.S(2));
             var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
@@ -1080,7 +1082,7 @@ namespace StickyPro
                 int textW = TextWidth();
                 int total = Math.Min(textRect.Width, GlyphSpace + textW);
                 int x = textRect.X + Math.Max(0, (textRect.Width - total) / 2);
-                TextRenderer.DrawText(g, Glyph, Ui.Icon(10.5f), new Rectangle(x, textRect.Y, Ui.S(18), textRect.Height), !Enabled ? Ui.Muted : Primary ? Color.White : Ui.Accent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, Glyph, Ui.Icon(10.5f), new Rectangle(x, textRect.Y, Ui.S(18), textRect.Height), !Enabled ? Ui.Muted : Primary ? Color.White : Ui.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
                 textRect = new Rectangle(x + GlyphSpace, textRect.Y, Math.Max(1, textRect.Right - x - GlyphSpace), textRect.Height);
                 flags = (flags & ~TextFormatFlags.HorizontalCenter) | TextFormatFlags.Left;
             }
@@ -1347,23 +1349,13 @@ namespace StickyPro
         public static void DrawCard(Graphics g, Rectangle bounds, CardInfo ci, bool sel, Color back)
         {
             using (var bg = new SolidBrush(back)) g.FillRectangle(bg, bounds);
-            var r = new Rectangle(bounds.X + Ui.S(6), bounds.Y + Ui.S(3), bounds.Width - Ui.S(13), bounds.Height - Ui.S(6));
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var path = Ui.Round(r, Ui.S(Ui.Nexus ? 10 : 6)))
-            {
-                using (var b = new SolidBrush(ci.Back)) g.FillPath(b, path);
-                if (ci.Strip != Color.Empty)
-                {
-                    using (var oldClip = g.Clip)
-                    {
-                        g.SetClip(path);
-                        using (var b = new SolidBrush(ci.Strip)) g.FillRectangle(b, r.X, r.Y, Ui.S(6), r.Height + 1);
-                        g.Clip = oldClip;
-                    }
-                }
-                using (var p = new Pen(sel ? Ui.Accent : Ui.Line, sel ? Ui.S(2) : 1)) g.DrawPath(p, path);
-            }
-            g.SmoothingMode = SmoothingMode.None;
+            var r = new Rectangle(bounds.X + Ui.S(2), bounds.Y, Math.Max(1, bounds.Width - Ui.S(4)), Math.Max(1, bounds.Height - 1));
+            using (var fill = new SolidBrush(sel ? Mix(ci.Back, AccentFill, Dark ? 0.14 : 0.10) : ci.Back))
+                g.FillRectangle(fill, r);
+            using (var border = new Pen(Line)) g.DrawLine(border, r.Left, r.Bottom, r.Right, r.Bottom);
+            if (sel || ci.Strip != Color.Empty)
+                using (var marker = new SolidBrush(sel ? Accent : ci.Strip))
+                    g.FillRectangle(marker, r.Left, r.Top + Ui.S(5), Ui.S(2), Math.Max(1, r.Height - Ui.S(10)));
             int x = r.X + Ui.S(14);
             if (ci.Thumb != null)
             {
@@ -1479,7 +1471,7 @@ namespace StickyPro
             TabStop = true;
             AccessibleRole = AccessibleRole.PageTab;
             Glyph = glyph; Text = text;
-            Height = Ui.Flow ? Ui.S(38) : Ui.Navy ? Ui.S(36) : Ui.Nexus ? Ui.S(40) : Ui.S(46);   // floating / Flow sidebars: all pages fit comfortably
+            Height = Ui.Nexus ? Math.Max(Ui.S(34), Ui.Base.Height + Ui.S(12)) : Ui.S(42);   // floating / Flow sidebars: all pages fit comfortably
             Dock = DockStyle.Top;
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -1513,15 +1505,12 @@ namespace StickyPro
             bool narrow = Width < Ui.S(100);
             var pill = new Rectangle(Ui.S(Ui.Navy ? 6 : 12), Ui.S(2), Width - Ui.S(Ui.Navy ? 12 : 24), Height - Ui.S(4));
             if (selected || hover || Focused)
-                using (var path = Ui.Round(pill, Ui.S(Ui.Navy || Ui.Flow ? 10 : 8)))
+                using (var path = Ui.Round(pill, Ui.S(3)))
                 {
                     using (var b = new SolidBrush(selected ? Ui.SidebarSel : Ui.SidebarHover)) g.FillPath(b, path);
-                    if (selected && Ui.Navy)
-                    {
-                        var mark = Ui.Soft ? Ui.Mix(Ui.AccentFill, Color.White, 0.15) : Color.FromArgb(120, 160, 255);
-                        using (var p = new Pen(Color.FromArgb(150, mark))) g.DrawPath(p, path);
-                        using (var b = new SolidBrush(mark)) g.FillRectangle(b, pill.Right - Ui.S(3), pill.Y + Ui.S(8), Ui.S(3), pill.Height - Ui.S(16));
-                    }
+                    if (selected)
+                        using (var b = new SolidBrush(Ui.Navy ? Ui.SidebarText : Ui.Accent))
+                            g.FillRectangle(b, pill.Left, pill.Y + Ui.S(7), Ui.S(2), pill.Height - Ui.S(14));
                     if (Focused && !selected) using (var p = new Pen(Ui.Navy ? Ui.SidebarMuted : Ui.Accent) { DashStyle = DashStyle.Dot }) g.DrawPath(p, path);
                 }
             var iconRect = narrow ? new Rectangle(0, 0, Width, Height) : new Rectangle(pill.X + Ui.S(10), 0, Ui.S(24), Height);
@@ -1548,7 +1537,7 @@ namespace StickyPro
     {
         public NavGroup(string text)
         {
-            Text = text.ToUpperInvariant(); Dock = DockStyle.Top; Height = Ui.S(34); TabStop = false;
+            Text = text; Dock = DockStyle.Top; Height = Ui.S(30); TabStop = false;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
         protected override void OnPaint(PaintEventArgs e)
