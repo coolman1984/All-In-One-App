@@ -1,0 +1,36 @@
+name: Windows package verification
+on:
+  push:
+    branches: [codex/windows-audit-package]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and check the portable executable
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = (New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'portable-audit')).FullName
+          $exe = Join-Path $out 'AllInOne.exe'
+          .\build.ps1 -Out $exe
+          if ($LASTEXITCODE -ne 0) { throw 'Package build failed.' }
+          $test = Start-Process $exe -ArgumentList '--selftest' -Wait -PassThru
+          if ($test.ExitCode -ne 0) { throw 'Executable self-test failed.' }
+          $asm = [Reflection.Assembly]::ReflectionOnlyLoadFrom($exe)
+          $expected = 'ChatSlides.pptx','webview2.Microsoft.Web.WebView2.Core.dll','webview2.Microsoft.Web.WebView2.WinForms.dll','webview2.WebView2Loader.dll','md.marked.js','tools.ffmpeg.exe.gz'
+          foreach ($resource in $expected) { if ($resource -notin $asm.GetManifestResourceNames()) { throw "Missing resource $resource" } }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          "$hash  AllInOne.exe" | Set-Content (Join-Path $out 'SHA256.txt')
+          Write-Host "Windows package verified. SHA-256 $hash"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: All-In-One-Windows-portable
+          path: ${{ runner.temp }}/portable-audit/
+          if-no-files-found: error
+          retention-days: 14
