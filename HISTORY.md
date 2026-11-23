@@ -2,6 +2,11 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-23 — Synced the latest GitHub main
+
+- Fast-forwarded local `main` by 11 commits from `29646ed` to `1cadf5d` and verified the commit against the live GitHub ref. The updates cover Windows layouts, Team and browser repairs, and automatic pull request merges. The local recording stayed out of Git.
+- The native build succeeded and all 23 hosted-suite checks passed on `1cadf5d`. The restricted shell failed four fixtures. Document close, workflow recording, Team and Team security passed when rerun with normal Windows access. Live Office COM and release packaging were outside this check.
+
 ## 2026-11-23 — Quieter Windows desktop
 
 - The owner flagged the generic visual style after the compact-layout pass. The shared desktop now uses plain page titles, lower-emphasis buttons, cleaner navigation and list selection, and labeled telemetry instead of status pills. The default Flow palette uses neutral surfaces.

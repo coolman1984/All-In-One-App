@@ -209,6 +209,7 @@ Format: what happened -> cause (proven) -> rule.
 - `Environment.TickCount` turns negative after 24.9 days uptime -> use a Stopwatch for timeouts.
 
 ## Build / tests
+- The restricted Windows shell can block file operations in document-close and recorder fixtures and key creation in the Team fixtures. Rerun the failing isolated scripts with normal Windows access and record both outcomes against the same test build.
 - Verify the decompressed recorder resource against the intended executable. A successful build packed the package manager's forwarding executable. A successful recorder shutdown test exercises process lifecycle, while a portable acceptance test must produce and reopen a recording on a clean machine.
 - **Passing tests describe the artifact that ran.** Record the tested build or source ZIP, verify an extracted source tree, and smoke-test the exact release executable. Keep later workspace changes and provider tests with stand-ins distinct from shipped and live evidence.
 - **The capture test passed against an old executable in the workspace.** Use the current test-build filename and
