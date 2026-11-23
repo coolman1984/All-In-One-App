@@ -259,6 +259,10 @@ The owner approved the [repair plan](docs/plans/app-cleanup-and-reliability.html
 
 ---
 
+### Shared desktop design · November 23, 2026
+
+The follow-up uses neutral Flow surfaces, quiet shared controls and an agenda-first Home. Capture modes are grouped by purpose. Verify the design against the prior build in light and dark at regular and narrow window sizes.
+
 ### Windows visual audit · November 23, 2026
 
 The second pass covers dense layouts, narrow windows and secondary surfaces. It improves Shortcuts, Prompts, Tasks, Settings, Documents and Scheduled jobs. See the [capture command and coverage](docs/maintenance.md#full-ui-sweep-every-page-every-look-stress). Use the resulting inventory and images for manual spot checks. Production account, Office, protected-file and corporate-share checks need a representative Windows desktop.

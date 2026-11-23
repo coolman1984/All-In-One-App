@@ -2,6 +2,12 @@
 
 Newest first. One entry per task: date, what was asked, what was done, proof, what is still open.
 
+## 2026-11-23 — Quieter Windows desktop
+
+- The owner flagged the generic visual style after the compact-layout pass. The shared desktop now uses plain page titles, lower-emphasis buttons, cleaner navigation and list selection, and labeled telemetry instead of status pills. The default Flow palette uses neutral surfaces.
+- Home puts the next tasks ahead of storage and counts. The capture page groups modes, recordings and file actions, and explains the empty history. Agent controls use a compact selection style.
+- Compared Windows screenshots with the compact-layout baseline. Captures use fixture data and the offline browser shell.
+
 ## 2026-11-23 — Windows screen audit and compact layout repairs
 
 - Captured the 34 primary screens and sub-tabs in Flow light and Atelier dark at 1000×740 and 760×650. The baseline had eight clipped shortcut tab labels and six sparse-content warnings. The latter identified screens to inspect and did not establish runtime failures.

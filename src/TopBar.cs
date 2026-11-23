@@ -107,6 +107,7 @@ namespace StickyPro
             var rec = C("rec"); rec.Value = facts.Recording; rec.Alert = facts.Recording == "Recording"; rec.Tint = Red;
             // Chips that would only say "0" or "Ready" are hidden: the bar shows what needs attention.
             foreach (var c in chips) { if (c.Key != "c" && c.Key != "d") c.Visible = true; if (c.Tip == null || c.Key == "urgent" || c.Key == "rec" || c.Key == "cpu") c.Tip = c.Label + ": " + c.Value; }
+            tasks.Visible = tasks.Alert;
             urgent.Visible = facts.Urgent > 0;
             rec.Visible = facts.Recording != "Ready";
             // Re-layout only when a chip text or visibility changed (layout measures text for every chip).
