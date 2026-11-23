@@ -474,17 +474,11 @@ namespace StickyPro
             if (btnNew.Width > 0)
             {
                 var r = btnNew;
-                using (var path = Ui.Round(r, Ui.S(4))) using (var b = new SolidBrush(IsHot("new") ? Ui.AccentHover : Ui.AccentFill)) g.FillPath(b, path);
-                BtnText(g, r, "\uE710", "New task", Color.White);
+                var fill = IsHot("new") ? Ui.AccentHover : Ui.AccentFill;
+                using (var path = Ui.Round(r, Ui.S(4))) using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+                BtnText(g, r, "\uE710", "New task", Ui.TextOn(fill));
             }
             RoundButton(g, bell, "\uEA8F", "bell");
-            int badgeN = dueToday;
-            if (badgeN > 0)
-            {
-                var br = new Rectangle(bell.Right - Ui.S(15), bell.Y - Ui.S(3), Ui.S(18), Ui.S(18));
-                using (var b = new SolidBrush(Ui.Accent)) g.FillEllipse(b, br);
-                TextRenderer.DrawText(g, badgeN > 9 ? "9+" : badgeN.ToString(), BadgeFont, br, Color.White, C);
-            }
             RoundButton(g, gear, "\uE713", "gear");
         }
 
@@ -623,7 +617,7 @@ namespace StickyPro
             var c = weekCard;
             using (var fill = new SolidBrush(Ui.Card)) g.FillRectangle(fill, c);
             using (var rule = new Pen(Ui.Line)) g.DrawLine(rule, c.Left, c.Top, c.Right, c.Top);
-            Title(g, c, "Upcoming tasks", null, LinkRect(c, "Open tasks").Width);
+            Title(g, c, "Up next", null, LinkRect(c, "Open tasks").Width);
             Link(g, c, "Open tasks", "tasksall");
 
             // 7-day strip (Mon..Sun)
@@ -652,7 +646,7 @@ namespace StickyPro
             if (upNext.Count == 0)
             {
                 var er = new Rectangle(c.X + Ui.S(20), c.Y + Ui.S(134), Math.Max(1, c.Width - Ui.S(40)), Ui.S(54));
-                TextRenderer.DrawText(g, "No tasks planned yet. Click here or press Ctrl+Alt+J to add your first task.", Ui.Base, er, Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak);
+                TextRenderer.DrawText(g, "No open tasks. Select New task to add one.", Ui.Base, er, Ui.Muted, TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak);
                 return;
             }
             for (int i = 0; i < taskRows.Count && i < upNext.Count; i++)
